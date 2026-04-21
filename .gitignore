@@ -5,19 +5,16 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Data (user-generated, non-portable)
-data/assets/
-data/profile-assets/
-data/keys.enc
+# Data — ignore all direct children; negations below re-include committed ones.
+# IMPORTANT: uses /data/* (not /data/), because gitignore cannot re-include
+# descendants of a fully-ignored directory. /data/* ignores contents while
+# keeping /data/ itself descendable for negations.
+# Runtime-only (stays ignored): data/assets/, data/profile-assets/,
+# data/keys.enc, data/profiles/ (seeded via npm run seed:profiles).
+/data/*
 
-# Runtime profile state — canonical seeds live at scripts/seed-data/profiles/
-# (Session #6, Step 5). Populate via `npm run seed:profiles` on fresh clone.
-# Do NOT commit data/profiles/*.json — those mirror the canonical seeds
-# until CMS edits diverge them, and committing would pollute git diffs.
-/data/profiles/
-
-# Static extracted data (Phase 2) — committed, not generated
-!data/templates/
+# Static extracted data (Phase 2) — committed so fresh clones boot.
+!/data/templates/
 
 # Service accounts (never commit) — anchored: top-level keys/ only, do not match src/server/keys/
 /keys/
@@ -30,12 +27,13 @@ images-gen-art.db
 images-gen-art.db-wal
 images-gen-art.db-shm
 
-# Vendored source apps (cloned for extraction in Phase 2) — anchored to project root
+# Vendored source apps for Phase 2 extraction — anchored to project root
 /vendor/
-# Source apps awaiting Phase 2 extraction (move into /vendor/ then) — anchored to project root
+# Zombie Genart folders awaiting manual cleanup (Windows file-lock prevented
+# rename during Phase 2 Step 1; content already copied into /vendor/). Delete
+# these .gitignore lines once /Genart-1/ and /Genart-2/ are removed from disk.
 /Genart-1/
 /Genart-2/
-/Genart-3/
 
 # Env files
 .env
