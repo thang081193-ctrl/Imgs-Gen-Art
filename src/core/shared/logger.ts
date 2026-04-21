@@ -1,5 +1,8 @@
 // CONTRIBUTING Rule 9 — logger with built-in secret redaction.
-// Universal (client + server); client impl prints to console.warn/error; server wires to pino/etc post-Phase-1.
+// Universal module. Debug/info no-op unless LOG_LEVEL=debug (or explicit createLogger("debug")).
+// Routing: debug/info → console.debug, warn → console.warn, error → console.error.
+// Why distinct console.debug: console.warn is reserved for actual warnings; abusing it for
+// info-level output makes the warn channel noisy and semantically wrong.
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
@@ -39,18 +42,33 @@ export interface Logger {
   error(msg: string, fields?: Record<string, unknown>): void
 }
 
-function emit(level: LogLevel, minLevel: LogLevel, msg: string, fields?: Record<string, unknown>): void {
-  if (LEVEL_RANK[level] < LEVEL_RANK[minLevel]) return
+function formatLine(level: LogLevel, msg: string, fields?: Record<string, unknown>): string {
   const safeMsg = redact(msg)
   const safeFields = fields ? (redactDeep(fields) as Record<string, unknown>) : undefined
   const payload = safeFields ? { msg: safeMsg, ...safeFields } : { msg: safeMsg }
-  // Use console.warn/error only (Rule 9 allows these); debug/info go to console.warn with level tag.
-  const line = `[${level.toUpperCase()}] ${JSON.stringify(payload)}`
-  if (level === "error") console.error(line)
-  else console.warn(line)
+  return `[${level.toUpperCase()}] ${JSON.stringify(payload)}`
 }
 
-export function createLogger(minLevel: LogLevel = "info"): Logger {
+function emit(level: LogLevel, minLevel: LogLevel, msg: string, fields?: Record<string, unknown>): void {
+  if (LEVEL_RANK[level] < LEVEL_RANK[minLevel]) return
+  const line = formatLine(level, msg, fields)
+  if (level === "error") {
+    console.error(line)
+  } else if (level === "warn") {
+    console.warn(line)
+  } else {
+    // debug + info → console.debug (gated by minLevel already)
+    console.debug(line)
+  }
+}
+
+function resolveDefaultLevel(): LogLevel {
+  const raw = globalThis.process?.env?.LOG_LEVEL
+  if (raw === "debug" || raw === "info" || raw === "warn" || raw === "error") return raw
+  return "info"
+}
+
+export function createLogger(minLevel: LogLevel = resolveDefaultLevel()): Logger {
   return {
     debug: (m, f) => emit("debug", minLevel, m, f),
     info:  (m, f) => emit("info",  minLevel, m, f),
@@ -59,4 +77,4 @@ export function createLogger(minLevel: LogLevel = "info"): Logger {
   }
 }
 
-export const logger: Logger = createLogger("info")
+export const logger: Logger = createLogger()

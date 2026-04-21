@@ -8,6 +8,7 @@ export type ErrorCode =
   | "RUNTIME_VALIDATION_FAILED"
   | "NO_ACTIVE_KEY"
   | "PROVIDER_UNAVAILABLE"
+  | "PROVIDER_NOT_FOUND"
   | "NOT_REPLAYABLE"
   | "EDIT_REQUIRES_PROMPT"
   | "EXTRACTION_FAILED"
@@ -73,6 +74,24 @@ export class ProviderUnavailableError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super("PROVIDER_UNAVAILABLE", message, 410, details)
     this.name = "ProviderUnavailableError"
+  }
+}
+
+export interface ProviderNotFoundContext {
+  providerId: string
+  availableProviders: string[]
+}
+
+export class ProviderNotFoundError extends AppError {
+  constructor(context: ProviderNotFoundContext) {
+    const available = context.availableProviders.map((id) => `'${id}'`).join(", ")
+    super(
+      "PROVIDER_NOT_FOUND",
+      `Provider '${context.providerId}' not found. Available: [${available}]`,
+      404,
+      { ...context },
+    )
+    this.name = "ProviderNotFoundError"
   }
 }
 

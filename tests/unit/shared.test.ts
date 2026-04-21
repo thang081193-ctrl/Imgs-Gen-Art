@@ -71,17 +71,70 @@ describe("logger: secret redaction (Rule 9)", () => {
     expect(out).toContain("eyJ***.***.***")
   })
 
-  it("logger redacts in both msg and nested fields", () => {
+  it("logger redacts in msg and nested fields, and debug/info emit via console.debug when level=debug", () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {})
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
     const l = createLogger("debug")
     l.info("request with AIza1234567890abcdefghijklmnopqrstuv12345", {
       payload: { key: "AIza1234567890abcdefghijklmnopqrstuv12345" },
     })
-    expect(warnSpy).toHaveBeenCalled()
-    const firstCall = warnSpy.mock.calls[0]?.[0]
+
+    expect(debugSpy).toHaveBeenCalled()
+    expect(warnSpy).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
+
+    const firstCall = debugSpy.mock.calls[0]?.[0]
     expect(typeof firstCall).toBe("string")
     expect(firstCall as string).toContain("AIza***")
     expect(firstCall as string).not.toContain("AIza1234567890abcdefghijklmnopqrstuv12345")
+
+    debugSpy.mockRestore()
+    warnSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
+
+  it("default logger: debug + info no-op; warn → console.warn; error → console.error", () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    const l = createLogger("info") // default behavior — debug suppressed
+    l.debug("should not surface")
+    l.info("informational note")   // info >= info → emits via console.debug per routing rule
+    l.warn("heads up")
+    l.error("boom")
+
+    // debug() call is below minLevel → never emits
+    // info() call is at minLevel → emits via console.debug
+    expect(debugSpy).toHaveBeenCalledTimes(1)
+    expect(debugSpy.mock.calls[0]?.[0]).toContain("[INFO]")
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("[WARN]")
+
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    expect(errorSpy.mock.calls[0]?.[0]).toContain("[ERROR]")
+
+    debugSpy.mockRestore()
+    warnSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
+
+  it("minLevel=warn suppresses debug + info entirely", () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+    const l = createLogger("warn")
+    l.debug("nope")
+    l.info("nope")
+    l.warn("yes")
+
+    expect(debugSpy).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    debugSpy.mockRestore()
     warnSpy.mockRestore()
   })
 })

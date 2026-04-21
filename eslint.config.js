@@ -40,7 +40,10 @@ export default [
     },
     plugins: { "@typescript-eslint": tsPlugin },
     rules: {
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      // Rule 9 — ban `console.log` only; logger routes debug/info → console.debug,
+      // warn → console.warn, error → console.error. Direct console.{debug,warn,error}
+      // outside logger remains allowed but discouraged (prefer logger module).
+      "no-console": ["warn", { allow: ["debug", "warn", "error"] }],
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
     },

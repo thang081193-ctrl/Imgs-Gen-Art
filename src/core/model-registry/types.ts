@@ -14,8 +14,8 @@ export const LanguageCodeSchema = z.enum([
 ])
 export type LanguageCode = z.infer<typeof LanguageCodeSchema>
 
-// ProviderCapability shape (matches src/server/providers/types.ts ProviderCapability).
-// Duplicated here so client + server both reference the same universal shape.
+// ProviderCapability — canonical universal shape. Single source of truth for client + server.
+// (Server provider impls re-export from here; do not redefine elsewhere.)
 export interface ProviderCapability {
   supportsTextToImage: boolean
   supportsImageEditing: boolean
