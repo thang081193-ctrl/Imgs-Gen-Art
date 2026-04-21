@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 1, Week 1 — Foundation**
-Last updated: 2026-04-21 (Session #6, Opus 4.7 — Step 5 complete, 92/92 tests green)
+Current phase: **Phase 1, Week 1 — Foundation — COMPLETE ✅**
+Last updated: 2026-04-21 (Session #7, Opus 4.7 — Step 6 + Step 7 complete, 120/120 tests + vite build + dev smoke green)
 
 ## Summary
 
@@ -12,16 +12,173 @@ Last updated: 2026-04-21 (Session #6, Opus 4.7 — Step 5 complete, 92/92 tests 
 | 3 | `src/server/keys` Encrypted Key Storage | ✅ Session #2 — QA gate green (47 tests pass) |
 | 4 | `src/server/providers/mock` + Contract Test | ✅ Session #3 — QA gate green (62 tests pass) |
 | 5 | SQLite + Migrations + Profile Repo | ✅ Session #6 — QA gate green (92 tests pass) |
-| 6 | Hono Server Skeleton | ⏳ |
-| 7 | Vite Client Skeleton | ⏳ |
+| 6 | Hono Server Skeleton | ✅ Session #7 — QA gate green (120 tests pass, 13 files) |
+| 7 | Vite Client Skeleton | ✅ Session #7 — regression green, vite build green, dev smoke green |
 
-## What bro needs to do next (before Step 6)
+## Phase 1 Week 1 FINAL QA gate (Session #7)
 
-Step 5 regressed green (92 tests, 10 files, 0 lint/LOC violations).
-Next session starts Step 6 (Hono server skeleton on 127.0.0.1:5174) —
-run `npm run regression` once more to confirm env is still clean.
+```
+npm run regression:full
+  → lint: clean (16 source + 3 integration-test files)
+  → typecheck:server: 0 errors
+  → typecheck:client: 0 errors
+  → check-loc: 68 files, 0 violations
+  → test: 120/120 pass (10 unit + 3 integration) — 1.9s
 
-**If any fail** → paste output to next session; don't auto-fix without diagnosis.
+npm run build
+  → tsc server: clean
+  → vite client: 189KB bundle (60KB gzip) + 17KB CSS — 1.27s
+
+npm run dev (manual smoke)
+  → client 127.0.0.1:5173 serves index.html with React Refresh HMR
+  → server 127.0.0.1:5174 serves /api/health = { status: ok, version: 0.1.0, uptimeMs }
+  → proxy localhost:5173/api/* → 127.0.0.1:5174 works (/api/health + SSE echo tested)
+  → X-Request-Id header preserved through proxy
+  → Tailwind compile via PostCSS works (base utilities emitted)
+```
+
+**Phase 1 is DONE.** Phase 2 (extraction) is the next major milestone.
+
+## Completed in Session #7 (Step 7 — Vite Client Skeleton)
+
+### Decisions locked Session #7 (Step 7 alignment)
+1. **SSE hook shape** — fetch-based with AbortController (NOT `EventSource`). Reason: EventSource can't do POST/custom headers; Phase 3 workflow dispatcher needs POST trigger. Parser reads `ReadableStream`, splits on `\n\n`, captures `event:` + `data:` + optional `id:` fields. Hook exposes `{ events, status, error }` with `status: "idle" | "connecting" | "streaming" | "closed" | "error"`.
+2. **API client** — typed fetch wrapper `apiGet<T>/apiPost<T>` + `ApiError extends Error { code, status, details? }`. Matches server error response shape from Step 6 `error-handler.ts`. No Hono RPC (no new deps).
+3. **Client tests** — ZERO in Phase 1 (no `happy-dom`/`jsdom`/`@testing-library/react` deps). Acceptance = `typecheck:client` + vite build + manual browser smoke. Phase 5 CMS UI will add test harness when components carry real logic.
+4. **Router** — `useState<Page>` switcher (BOOTSTRAP mandate). `type Page = "home"` today; Phase 5 extends the union. No `react-router-dom`.
+5. **Dark mode** — `class` strategy (already locked Step 1 in `tailwind.config.ts`). Default dark via `body.bg-slate-950 text-slate-100` in `index.html`.
+
+### Files under `src/client/`
+- `main.tsx` — React 19 root. `createRoot` + `StrictMode`. Imports `./styles/index.css` so Vite+PostCSS pipeline injects Tailwind-compiled CSS.
+- `App.tsx` — page switcher shell. `const [page] = useState<Page>("home")` + exhaustive `switch`. Extension point documented inline.
+- `pages/Home.tsx` — landing page. Heading "Images Gen Art", sub "Local artwork generation platform — Phase 1 scaffold", `HealthBadge` (3 states: loading pulse-gray, error red-950, ok green-950 with version + uptime), footnote "Client: localhost:5173 · Server: 127.0.0.1:5174". Pure Tailwind literal classes (Rule 1 — no interpolation).
+- `api/client.ts` — `apiGet<T>` / `apiPost<T>` / `ApiError`. Parses `application/json` error body per server shape `{ code, message, details? }`; falls back to `{ code: "HTTP_ERROR", message: "HTTP 4xx" }` for non-JSON. AbortSignal threaded via `ApiOptions.signal`.
+- `api/hooks.ts` — `useApiHealth()` returns `ApiState<HealthData>` = `{ data, error, loading }`. One-shot fetch on mount, AbortController cleanup on unmount.
+- `utils/use-sse.ts` — `useSSE(url, { enabled? })` returns `{ events, status, error }`. Full fetch-based parser shipped (not stub). Decodes UTF-8 stream, splits on `\n\n`, parses `event:` + `data:` + `id:` lines. AbortController cleanup on unmount.
+- `styles/index.css` — `@tailwind base; @tailwind components; @tailwind utilities;` (3 lines).
+
+### QA gate result
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 68 files, 0 violations
+test: 120/120 (unchanged — Phase 1 client has no tests per Decision 3)
+build: tsc server clean + vite client 189KB bundle / 60KB gzip / 1.27s
+dev smoke: concurrent server + client boot, proxy passes /api/health + SSE echo
+```
+
+### LOC budget
+| Client file | LOC |
+|---|---|
+| `src/client/main.tsx` | 17 |
+| `src/client/App.tsx` | 17 |
+| `src/client/pages/Home.tsx` | 67 |
+| `src/client/api/client.ts` | 64 |
+| `src/client/api/hooks.ts` | 41 |
+| `src/client/utils/use-sse.ts` | 103 |
+| `src/client/styles/index.css` | 3 |
+| **Total (7 files)** | **312** |
+
+All files below 300 LOC hard cap. `use-sse.ts` (103) is the largest — contains both React hook + SSE parser; Phase 3 may extract parser if it grows.
+
+---
+
+## Completed in Session #7 (Step 6 — Hono Server Skeleton)
+
+### Decisions locked (approved by bro Session #7)
+1. **Route layout = flat** — `src/server/routes/<name>.ts`, promote to folder when > 250 LOC (soft cap).
+2. **API body schemas** — colocate `<name>.body.ts` (not yet exercised; Step 6 stubs all return 501).
+3. **Request logger** — thin Hono middleware adapter over `@/core/shared/logger` (redactor reused). No `hono/logger` (bypasses Rule 9 redaction).
+4. **Dev script** — unchanged (`npm run dev` concurrent). HMR verified via `tsx watch` during smoke.
+5. **Request ID** (REFINEMENT 1) — UUID v4 via `globalThis.crypto.randomUUID()`, stored on `c.set("requestId", id)`, echoed in `X-Request-Id` response header, included in every request + error log line.
+6. **SSE** — `streamSSE` from `hono/streaming`, path `/api/debug/sse-echo` (matches PLAN §6.4 `/api/debug/*` prefix for dev endpoints), 3 ticks × 200ms, abort propagation via `c.req.raw.signal.aborted` check.
+7. **dto-filter** — dev-mode only (skip when `NODE_ENV=production`), recursive JSON scan for banned keys (`file_path`, `filePath`, `service_account_path`, `serviceAccountPath`, `key_encrypted`, `keyEncrypted`), throws `AppError("INTERNAL", …)` with JSON-path `$.a.b[0].c` on leak.
+
+### Files under `src/server/middleware/`
+- `error-handler.ts` — Hono `onError` adapter. Maps `AppError.status` → HTTP status with body `{ code, message, details? }`. `ZodError` → 400 `BAD_REQUEST` with `details.issues`. Unknown errors → 500 `INTERNAL` (generic message, no stack leak). Logs at error level **only** when `status === 500` (501 stubs + 4xx stay silent — intentional, log noise reduction).
+- `logger.ts` — `requestLogger` middleware. Generates UUID, sets `c.set("requestId")`, writes `X-Request-Id` header, logs `{ requestId, method, path, status, durationMs }` via core logger.
+- `validator.ts` — `validateBody<T>(schema)` factory returns middleware. Parses JSON, runs `schema.parse`, stashes on `c.set("validatedBody")`. ZodError bubbles to errorHandler → 400. Invalid JSON body → `BadRequestError`. Not yet exercised (no POST routes in Step 6), wired for Phase 3.
+- `dto-filter.ts` — defense-in-depth JSON scanner. Reads `c.res.clone().json()` post-`next()`, finds banned keys recursively, throws on leak. Skipped for non-JSON Content-Type + production mode.
+
+### Files under `src/server/routes/`
+- `health.ts` — `createHealthRoute(version)` → `GET /` returns `{ status: "ok", version, uptimeMs }` (uptime via `process.uptime() * 1000`).
+- `providers.ts` — `createProvidersRoute()` → `GET /` returns `{ providers, models, registeredProviderIds }`. Providers = full `ALL_PROVIDERS` catalog (3); models = full `ALL_MODELS` with capability embedded (4); registeredProviderIds = runtime registry (Phase 1: `["mock"]`).
+- `debug.ts` — `createDebugRoute()` → `GET /sse-echo` streams 3 `tick` events via `streamSSE`, 200ms apart, respects abort.
+- `stubs.ts` — `createStubsRoute()` mounts 7 domains (`profiles`, `assets`, `keys`, `workflows`, `templates`, `profile-assets`, `workflow-runs`), all verbs + wildcards → `NotImplementedError` (501). Each domain will be replaced by a real route file as its phase lands.
+
+### Files under `src/server/`
+- `app.ts` — `createApp({ version })` factory. Order: `requestLogger` → `dtoFilter` → routes → `onError`. Pure (no I/O) so integration tests mount in-process via `app.fetch()`.
+- `index.ts` — boot entry. Reads version from `package.json` via fs, calls `openAssetDatabase()` (exits non-zero on `MigrationDriftError`), then `serve` on `127.0.0.1:5174` (hostname bind enforced — LAN would leak keys).
+
+### Errors (`src/core/shared/errors.ts`)
+- `"NOT_IMPLEMENTED"` added to `ErrorCode` union.
+- `NotImplementedError extends AppError` — status 501. Used by stub routes.
+
+### Integration tests (new `tests/integration/` folder)
+- `app.test.ts` (20) — health shape + version echo + uptimeMs; X-Request-Id UUID format; distinct IDs per call; providers catalog shape + capability provenance; all 7 stub domains × 2 verbs = 14 x 501; unknown route → 404 (Hono default).
+- `sse-echo.test.ts` (2) — **happy path** (3 events, correct Content-Type) + **abort propagation** (AbortController abort at 100ms, verify < 3 ticks received, verify `/api/health` still responsive after 300ms — no hung handler). Abort test is critical scaffolding for Phase 3 workflow dispatcher.
+- `dto-filter.test.ts` (6) — poison routes with banned keys at various depths (top, nested, array, deep object, snake + camel variants), all → 500 INTERNAL with JSON-path in message. Clean response passes through. Production mode skip verified (toggles `NODE_ENV=production` per test).
+
+### QA gate result
+```
+lint: clean
+check-loc: 61 files, 0 violations
+test:unit: 92/92 pass
+test:integration: 28/28 pass (3 files)
+total: 120/120 in ~2.0s
+smoke: server boots in <1s, /api/health 200 + X-Request-Id + correct body; /api/providers full catalog;
+       /api/debug/sse-echo 3 ticks emitted; /api/profiles 501 NOT_IMPLEMENTED; /api/unknown 404
+```
+
+## Deviations from BOOTSTRAP Step 6 (approved by bro Session #7)
+
+### Deviation 1 — 7 stub routes collapsed into single `stubs.ts` file
+**From:** BOOTSTRAP §Step 6 listed 7 individual files (`profiles.ts`, `assets.ts`, etc.)
+**To:** Single `src/server/routes/stubs.ts` with `createStubsRoute()` factory + `STUB_DOMAINS` array.
+**Rationale:** 7 near-identical 8-LOC files = pure boilerplate. Single factory keeps the stub list visible in one place, and each domain will be **replaced** (not edited) by a real route file when its phase lands. Test iterates the array → automatic coverage when domains are added/removed.
+
+### Deviation 2 — error-handler logs only status 500
+**From:** "catches `AppError`, returns …" (BOOTSTRAP §Step 6 implied log all errors)
+**To:** Log at `error` level only when `err.status === 500` (genuine internal failures). 501 stubs + 4xx stay silent.
+**Rationale:** 14 stub calls × `[ERROR]` log line = stderr noise in CI + local dev. 4xx/501 are known client-state, not server bugs. Phase 4 real provider errors (500 `ExtractionError`) will still log correctly.
+
+### Deviation 3 — Added `AppConfig` param vs free functions
+**From:** BOOTSTRAP implied `src/server/index.ts` boots directly.
+**To:** `createApp({ version })` factory in `app.ts`; `index.ts` wires version + DB + listener.
+**Rationale:** Integration tests mount app in-process without port binding. Cleaner separation of concerns (pure factory vs side-effectful boot).
+
+## Known pending items / notes from Session #7
+
+### 1. Pre-existing TypeScript errors — FIXED in same session
+
+Session #7 initially surfaced 4 TS strict-mode errors predating Step 6, all zero-runtime-impact but blocking `npm run build`. Bro approved in-session fix. All 4 resolved in ~15 min:
+
+- `src/core/shared/errors.ts:29` — conditional `if (details !== undefined)` guard to satisfy `exactOptionalPropertyTypes` (keeps key absent vs present-as-undefined).
+- `src/core/shared/id.ts:8` — removed unnecessary `as { crypto?: Crypto }` cast; `@types/node` already exposes `globalThis.crypto` without needing DOM lib.
+- `src/server/asset-store/migration-runner.ts:28` — `db: Database` → `db: Database.Database` (use inner class type from CJS namespace, matching `db.ts` pattern).
+- `src/core/dto/profile-dto.ts:20` — widened `competitors?: string[]` → `competitors?: string[] | undefined` to match Zod `.optional()` output. JSON.stringify still omits undefined keys → wire shape unchanged.
+
+**New regression coverage:** `typecheck` script added + wired into `npm run regression` and `npm run regression:full`:
+```
+"typecheck:server": "tsc -p tsconfig.server.json --noEmit",
+"typecheck:client": "tsc -p tsconfig.client.json --noEmit",
+"typecheck": "npm run typecheck:server && npm run typecheck:client",
+"regression": "npm run lint && npm run typecheck && npm run check-loc && npm run test:unit"
+```
+Future TS drift (Phase 2+) will fail CI before landing. Silent type erosion that built up across Sessions #1-6 cannot recur.
+
+### 2. `validator.ts` middleware has no coverage
+No POST routes in Step 6 → `validateBody` factory is wired but not exercised. First Phase 3 POST route (likely `/api/workflow-runs`) will add coverage. Unit test deferred.
+
+### 3. SSE abort test is timing-sensitive
+`sse-echo.test.ts` abort case uses `setTimeout(100ms)` + 300ms cleanup wait. Total test duration ~530ms. Stable on bro's Windows machine; could flake on very slow CI. If Phase 3 adds real dispatcher tests, reconfirm abort timing budget.
+
+### 4. Hono default 404 returns `text/plain`
+Unknown routes (`GET /api/unknown`) return `404 Not Found` as plain text, not JSON. Error handler only fires on thrown errors. Acceptable for Phase 1 (not a real error state); if Phase 3 requires JSON 404s, add a `app.notFound()` handler. Test codifies current behavior.
+
+### 5. Windows stdout line endings
+Integration test stderr shows `[ERROR]` JSON lines from dto-filter tests (expected — they verify leak detection triggers the logger). Not a bug; just noisy. Could suppress via `LOG_LEVEL=error` in vitest env for integration but current `LOG_LEVEL=warn` is correct for unit tests.
 
 ## Completed in Session #6 (Step 5 — SQLite + Migrations + Profile Repo)
 
@@ -251,32 +408,33 @@ test:unit: 47/47 pass (6 test files) — crypto suite ~442ms
 
 ## Next session resume instructions
 
+**Phase 1 Week 1 is DONE ✅.** Next major work is Phase 2 Extraction.
+
+### Session #8 kickoff checklist
 1. Read this file + `memory/MEMORY.md` + `memory/patterns.md` to recover state.
-2. Run `npm run regression` to confirm clean env (should be 92/92 green, 10 test files).
-3. Start **Step 6** (Hono server skeleton). Reference BOOTSTRAP.md §Step 6 + PLAN-v2.2.1.md §6.4 (API spec).
+2. Run `npm run regression:full` — must be 120/120 green, 0 TS errors, 0 lint/LOC violations.
+3. Run `npm run build` — must produce `dist/server/` + `dist/client/` clean.
+4. **Manual browser smoke** — `npm run dev`, open `http://localhost:5173` in Chrome/Edge, verify:
+   - Heading "Images Gen Art" + "Local artwork generation platform — Phase 1 scaffold"
+   - Green "Server ok · v0.1.0 · uptime Xs" badge renders
+   - Dark theme `bg-slate-950` applies
+   - Devtools Network tab: `/api/health` request proxied to `:5174`, returns 200 JSON
+5. Decide Phase 2 scope with bro before coding.
 
-### Step 6 deliverables (BOOTSTRAP.md:171-ish)
+### Phase 2 = Extraction (next major milestone)
 
-**Server entry + wiring (`src/server/`):**
-- `index.ts` — boots Hono app on `127.0.0.1:5174` (local-only, no auth). Calls `openAssetDatabase()` on boot; exits non-zero on migration failure.
-- `app.ts` — Hono app factory with middleware (error handler maps `AppError.status`, JSON body parser, request logger).
-- Routes: at minimum `/api/health`, `/api/providers` (list providers + capability registry), an SSE example endpoint per PLAN §6.4.
-- Error handler — catches `AppError`, returns `{ code, message, details? }` with correct HTTP status. Catches Zod errors → 400 BAD_REQUEST.
+Per PLAN §Phase 2: move `Genart-1/`, `Genart-2/`, `Genart-3/` folders from project root → `vendor/genart-{1,2,3}/` (gitignored), then extract reusable data/assets from them into the new structure.
 
-**Unit/integration tests:**
-- Hono app mounted in-process, assertions on JSON response shape + status codes. Use the mock provider registry only — no real SDK calls.
+### Open alignment questions for Phase 2 kickoff
+- **Extraction scope** — which Genart-{1,2,3} assets are worth extracting vs discarding? PLAN §Phase 2 has a list; bro confirm before scripts run.
+- **Data location** — `data/templates/*.json` (per patterns.md §File location policy) for static extracted data. Any deviations?
+- **Migration vs re-extract** — if an extracted asset is later improved upstream, is re-run of extraction idempotent (overwrite) or manual merge (leave extracted copy alone)?
+- **Test coverage for extraction scripts** — unit-test the parsers, or acceptance-test via "extract then regression passes"?
 
-### Step 6 gotchas to watch
-- **Local-only bind** — must be `127.0.0.1`, not `0.0.0.0`. This is a single-user local tool; wider bind exposes keys over LAN.
-- **SSE example** — PLAN §6.4 spec'd pattern; keep it tiny for scaffold (workflow dispatch is Phase 3).
-- **Error handler ordering** — install before route mounting so thrown `AppError`s from handlers flow correctly.
-- **Rule 11 via routes** — `/api/assets/...` + `/api/profile-assets/...` serve files by ID. Do NOT accept file-path params; route to repo-resolved internal path server-side.
-- **Boot migration** — if `MigrationDriftError` thrown during `openAssetDatabase()`, fail boot fast; do not start the HTTP listener.
+### Phase 1 deferred items (non-blocking for Phase 2)
+1. **`validator.ts` middleware** — wired in Step 6 but no caller + no unit test yet. First Phase 3 POST route (workflow-run trigger) will exercise it.
+2. **`toAssetDetailDto`** — deferred from Step 5. Needs ProfileDto-mapped replay snapshot. Unblocks on Phase 3.
+3. **Profile saver optimistic concurrency** — deferred to Phase 5 CMS per PLAN §6.4.
+4. **Client test harness** — no `happy-dom`/`@testing-library/react` yet. Phase 5 CMS lands with real component logic; add harness then.
 
-### Alignment questions likely for Session #7
-- **Route layout** — flat (`routes/providers.ts`) or nested (`routes/providers/index.ts`)? Pattern established in Step 6 cascades through Phase 3.
-- **API body schemas** — per patterns.md Schema Location Policy, colocate at `src/server/routes/<name>.body.ts`. Confirm on first body schema.
-- **Request logger shape** — use the existing `@/core/shared/logger` or add a Hono-specific middleware? Logger already redacts AIza/JWT patterns.
-- **Dev script** — `npm run dev` already concurrent (server + client). Verify `tsx watch` HMR works cleanly against Step 6 code.
-
-Predicted Session #7 length: 2h (lighter than Step 5; scaffolding + a few routes + tests).
+Predicted Session #8 length: 3-5h depending on Phase 2 scope.
