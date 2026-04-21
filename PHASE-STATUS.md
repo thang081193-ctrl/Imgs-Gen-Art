@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
 Current phase: **Phase 1, Week 1 — Foundation**
-Last updated: 2026-04-21 (Session #3, Opus 4.7 — Step 4 complete)
+Last updated: 2026-04-21 (Session #3, Opus 4.7 — Step 4 complete + gitignore bug fix)
 
 ## Summary
 
@@ -140,6 +140,33 @@ test:unit: 47/47 pass (6 test files) — crypto suite ~442ms
   - **Workflow input schemas** live at `src/workflows/<id>/input-schema.ts` per PLAN §4 folder tree (Phase 3).
   - **API body schemas** colocate with the route, e.g. `src/server/routes/<name>.body.ts` (Phase 1 Step 6).
   BOOTSTRAP.md will be corrected when we touch it; no code change needed now (files were never created).
+
+## Issues encountered
+
+### BUG — `.gitignore` pattern `keys/` shadowed `src/server/keys/` (Session #3)
+
+**Symptom:** After commit `01db530` (Phase 1 Step 3+4), `git ls-files src/server/keys/` returned empty. Test files under `tests/unit/` were committed but the 6 source files (`crypto.ts`, `dto-mapper.ts`, `index.ts`, `slot-manager.ts`, `store.ts`, `types.ts`) were not. The commit was incoherent — tests asserting behavior of code absent from the tree. Fresh clone would fail `npm run regression` on Step 3.
+
+**Root cause:** `.gitignore` line 18 had `keys/` (unanchored, single-segment pattern). Per gitignore spec, single-segment patterns with trailing slash match **any directory with that name anywhere in the tree**. The intended top-level `keys/` folder (encrypted key blobs at runtime per PLAN §4) and the implementation module at `src/server/keys/` shared the name, so the latter was silently ignored.
+
+**Fix (commit `7eb0b6d`):**
+- Anchored `keys/` → `/keys/` (only matches project-root `keys/`).
+- Defensive anchoring of the other single-segment top-level patterns: `vendor/` → `/vendor/`, `Genart-1..3/` → `/Genart-1..3/`. These are explicitly top-level per PLAN §4 so anchoring is the correct semantic.
+- Patterns with mid-pattern slash (`data/assets/`, `data/profile-assets/`, `.claude/settings.local.json`) are already anchored per gitignore spec — no change needed.
+- `node_modules/`, `dist/`, `.vscode/`, `.idea/`, `coverage/`, `.vitest-cache/`, `.DS_Store`, `Thumbs.db`, `*.log` — **intentionally unanchored**; nested matches are desired or harmless.
+- Re-added the 6 Step 3 files to git.
+
+**Audit rule for future sessions:** when adding a gitignore entry for a directory, decide:
+- **Top-level only** → prefix with `/` (e.g. `/keys/`).
+- **Anywhere** → leave unprefixed (e.g. `node_modules/`).
+- If the entry already has a mid-pattern slash it's auto-anchored — no prefix needed.
+
+**Verification run (Session #3):**
+- `git ls-files src/server/keys/` → 6 files tracked ✅
+- `git check-ignore -v keys/sa.json` → matches `/keys/` line 18 ✅ (intent preserved)
+- `git check-ignore -v src/server/keys/crypto.ts` → not ignored ✅
+- Fresh clone into `D:/tmp/test-step4-clone`: `git ls-files src/server/keys/` shows 6 files, `npm install` (18s, 363 pkgs), `npm run regression` → **62/62 tests pass in 7 files** ✅
+- Note: `D:/tmp/test-step4-clone` left on disk due to Windows esbuild-service file lock (`rm` returned EBUSY). Harmless; bro can delete when vitest processes release.
 
 ## Rejected / not done (intentionally)
 
