@@ -1,0 +1,51 @@
+{
+  "name": "images-gen-art",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Images Gen Art — local artwork generation platform consolidating Genart-1/2/3",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch --tsconfig tsconfig.server.json src/server/index.ts",
+    "dev:client": "vite",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "check-loc": "tsx scripts/check-loc.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "regression": "npm run lint && npm run check-loc && npm run test:unit",
+    "regression:full": "npm run lint && npm run check-loc && npm run test"
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "1.10.0",
+    "@google/genai": "1.5.0",
+    "@hono/node-server": "1.13.8",
+    "better-sqlite3": "11.7.2",
+    "hono": "4.7.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.12",
+    "@types/node": "22.10.5",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "@typescript-eslint/eslint-plugin": "8.20.0",
+    "@typescript-eslint/parser": "8.20.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "concurrently": "9.1.2",
+    "eslint": "9.18.0",
+    "postcss": "8.5.1",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vite": "6.0.7",
+    "vitest": "2.1.8"
+  }
+}
