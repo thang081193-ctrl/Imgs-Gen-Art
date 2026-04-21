@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.server.json && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "check-loc": "tsx scripts/check-loc.ts",
+    "seed:profiles": "tsx scripts/seed-profiles.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",

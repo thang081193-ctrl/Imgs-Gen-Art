@@ -12,6 +12,7 @@ export type ErrorCode =
   | "NOT_REPLAYABLE"
   | "EDIT_REQUIRES_PROMPT"
   | "EXTRACTION_FAILED"
+  | "MIGRATION_DRIFT"
   | "INTERNAL"
 
 export class AppError extends Error {
@@ -99,5 +100,23 @@ export class ExtractionError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super("EXTRACTION_FAILED", message, 500, details)
     this.name = "ExtractionError"
+  }
+}
+
+export interface MigrationDriftContext {
+  filename: string
+  expectedChecksum: string
+  actualChecksum: string
+}
+
+export class MigrationDriftError extends AppError {
+  constructor(context: MigrationDriftContext) {
+    super(
+      "MIGRATION_DRIFT",
+      `Migration '${context.filename}' checksum mismatch — applied file was edited after commit. Expected ${context.expectedChecksum.slice(0, 12)}…, got ${context.actualChecksum.slice(0, 12)}…`,
+      500,
+      { ...context },
+    )
+    this.name = "MigrationDriftError"
   }
 }

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "id": "plant-identifier",
+  "name": "Plant Identifier: AI Scanner",
+  "tagline": "Snap any plant, get instant identification",
+  "category": "utility",
+  "assets": {
+    "appLogoAssetId": null,
+    "storeBadgeAssetId": null,
+    "screenshotAssetIds": []
+  },
+  "visual": {
+    "primaryColor": "#16a34a",
+    "secondaryColor": "#22c55e",
+    "accentColor": "#f97316",
+    "tone": "warm",
+    "doList": [
+      "lush botanical photography",
+      "natural outdoor lighting",
+      "phone scanning plant in real garden/forest setting",
+      "curious everyday user persona (hiker, home gardener)",
+      "educational plant facts overlay"
+    ],
+    "dontList": [
+      "cartoon or stylized plants",
+      "lab or sterile environment",
+      "text-heavy scientific diagrams",
+      "fictional or fantasy flora",
+      "stock-photo-looking portraits"
+    ]
+  },
+  "positioning": {
+    "usp": "Identify any plant species in seconds using AI vision",
+    "targetPersona": "Nature enthusiasts, hikers, home gardeners, curious families",
+    "marketTier": "global",
+    "competitors": ["PlantNet", "PictureThis", "Seek by iNaturalist"]
+  },
+  "context": {
+    "features": [
+      "AI plant identification from photo",
+      "species info + care tips",
+      "offline recognition for common species",
+      "plant journal / collection tracking"
+    ],
+    "keyScenarios": [
+      "user holding phone over a plant in garden",
+      "split screen: plant photo left, ID result + facts right",
+      "family on hike pointing camera at wildflower"
+    ],
+    "forbiddenContent": [
+      "no medical plant usage claims",
+      "no foraging/edibility guidance",
+      "no scientific jargon in marketing"
+    ]
+  },
+  "createdAt": "2026-04-20T00:00:00Z",
+  "updatedAt": "2026-04-20T00:00:00Z"
+}

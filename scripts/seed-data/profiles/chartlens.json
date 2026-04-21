@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "id": "chartlens",
+  "name": "ChartLens: AI Analyzer",
+  "tagline": "Read any chart instantly with AI",
+  "category": "utility",
+  "assets": {
+    "appLogoAssetId": null,
+    "storeBadgeAssetId": null,
+    "screenshotAssetIds": []
+  },
+  "visual": {
+    "primaryColor": "#2563eb",
+    "secondaryColor": "#0ea5e9",
+    "accentColor": "#f59e0b",
+    "tone": "technical",
+    "doList": [
+      "clean data visualizations",
+      "modern mobile UI frame",
+      "educational framing",
+      "confident trader persona"
+    ],
+    "dontList": [
+      "explicit buy/sell signals",
+      "ticker symbols or stock names",
+      "cash stacks or profit imagery",
+      "dark moody backgrounds"
+    ]
+  },
+  "positioning": {
+    "usp": "Instantly understand any chart using AI-powered analysis",
+    "targetPersona": "Aspiring traders and investors, 25-45",
+    "marketTier": "global",
+    "competitors": ["TradingView mobile", "Investing.com"]
+  },
+  "context": {
+    "features": [
+      "AI chart reading",
+      "candlestick pattern detection",
+      "trend analysis",
+      "educational explanations"
+    ],
+    "keyScenarios": [
+      "user pointing phone at candlestick chart on laptop",
+      "split screen: chart left, AI analysis right"
+    ],
+    "forbiddenContent": [
+      "no financial advice framing — must stay educational",
+      "no real ticker symbols"
+    ]
+  },
+  "createdAt": "2026-04-20T00:00:00Z",
+  "updatedAt": "2026-04-20T00:00:00Z"
+}

@@ -9,6 +9,9 @@ export default defineConfig({
     exclude: ["node_modules", "dist", "vendor"],
     reporters: ["default"],
     pool: "threads",
+    env: {
+      LOG_LEVEL: "warn",
+    },
   },
   resolve: {
     alias: {

@@ -10,8 +10,13 @@ data/assets/
 data/profile-assets/
 data/keys.enc
 
-# Keep profile JSONs tracked; they are git-trackable per plan
-!data/profiles/
+# Runtime profile state — canonical seeds live at scripts/seed-data/profiles/
+# (Session #6, Step 5). Populate via `npm run seed:profiles` on fresh clone.
+# Do NOT commit data/profiles/*.json — those mirror the canonical seeds
+# until CMS edits diverge them, and committing would pollute git diffs.
+/data/profiles/
+
+# Static extracted data (Phase 2) — committed, not generated
 !data/templates/
 
 # Service accounts (never commit) — anchored: top-level keys/ only, do not match src/server/keys/

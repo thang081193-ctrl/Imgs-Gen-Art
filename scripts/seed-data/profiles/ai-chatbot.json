@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "ai-chatbot",
+  "name": "AI Chatbot: Smart Assistant",
+  "tagline": "Your helpful AI companion for any question",
+  "category": "productivity",
+  "assets": {
+    "appLogoAssetId": null,
+    "storeBadgeAssetId": null,
+    "screenshotAssetIds": []
+  },
+  "visual": {
+    "primaryColor": "#7c3aed",
+    "secondaryColor": "#a78bfa",
+    "accentColor": "#06b6d4",
+    "tone": "minimal",
+    "doList": [
+      "clean modern chat interface",
+      "abstract AI / neural network motifs",
+      "friendly assistant persona",
+      "light and dark mode compositions",
+      "diverse everyday users (student, professional, senior)"
+    ],
+    "dontList": [
+      "humanoid AI characters or faces",
+      "robot imagery",
+      "doomer / dystopian visuals",
+      "overcrowded UI screenshots",
+      "technical code or jargon on screen"
+    ]
+  },
+  "positioning": {
+    "usp": "Intelligent conversation assistant for everyday questions and tasks",
+    "targetPersona": "Students, professionals, seniors, anyone who asks Google questions",
+    "marketTier": "global",
+    "competitors": ["ChatGPT mobile", "Character.AI", "Replika"]
+  },
+  "context": {
+    "features": [
+      "natural conversation with AI",
+      "quick-answer mode",
+      "writing help (emails, essays)",
+      "language translation",
+      "voice input"
+    ],
+    "keyScenarios": [
+      "user typing question on phone with AI reply visible",
+      "student asking for homework explanation",
+      "senior getting help writing a message"
+    ],
+    "forbiddenContent": [
+      "no claim as human replacement or therapist",
+      "no roleplay / companion framing",
+      "no health / legal / financial advice positioning"
+    ]
+  },
+  "createdAt": "2026-04-20T00:00:00Z",
+  "updatedAt": "2026-04-20T00:00:00Z"
+}

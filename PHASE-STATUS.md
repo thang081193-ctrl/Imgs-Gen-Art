@@ -1,27 +1,101 @@
 # PHASE-STATUS — Images Gen Art
 
 Current phase: **Phase 1, Week 1 — Foundation**
-Last updated: 2026-04-21 (Session #3, Opus 4.7 — Step 4 complete + gitignore bug fix)
+Last updated: 2026-04-21 (Session #6, Opus 4.7 — Step 5 complete, 92/92 tests green)
 
 ## Summary
 
 | Step | Title | Status |
 |---|---|---|
-| 1 | Project Init + Toolchain | ✅ files written, QA gate not yet run |
-| 2 | `src/core` Universal Layer | ✅ files + tests written, QA gate not yet run |
+| 1 | Project Init + Toolchain | ✅ Session #1 |
+| 2 | `src/core` Universal Layer | ✅ Session #1 |
 | 3 | `src/server/keys` Encrypted Key Storage | ✅ Session #2 — QA gate green (47 tests pass) |
 | 4 | `src/server/providers/mock` + Contract Test | ✅ Session #3 — QA gate green (62 tests pass) |
-| 5 | SQLite + Migrations + Profile Repo | ⏳ |
+| 5 | SQLite + Migrations + Profile Repo | ✅ Session #6 — QA gate green (92 tests pass) |
 | 6 | Hono Server Skeleton | ⏳ |
 | 7 | Vite Client Skeleton | ⏳ |
 
-## What bro needs to do next (before Step 5)
+## What bro needs to do next (before Step 6)
 
-Step 4 regressed green (62 tests, 7 files, 0 lint/LOC violations).
-Next session starts Step 5 (SQLite + migrations + profile repo) —
-just run `npm run regression` once more to confirm env is still clean.
+Step 5 regressed green (92 tests, 10 files, 0 lint/LOC violations).
+Next session starts Step 6 (Hono server skeleton on 127.0.0.1:5174) —
+run `npm run regression` once more to confirm env is still clean.
 
 **If any fail** → paste output to next session; don't auto-fix without diagnosis.
+
+## Completed in Session #6 (Step 5 — SQLite + Migrations + Profile Repo)
+
+### Files under `src/server/asset-store/`
+- `schema.sql` — canonical reference (PLAN §5.3 verbatim). 3 tables: `assets` (28 cols, v2.2 nullable `replay_payload` + `language`), `batches` (v2.2 status/abortedAt), `profile_assets`. Indexes on profile/workflow/batch/variant_group/created_at.
+- `migration-runner.ts` — **Option B location** (moved from BOOTSTRAP-spec'd `scripts/migrations/runner.ts`; see deviation below). Creates `_migrations(filename, applied_at, checksum)` bookkeeping. SHA-256 drift detection: applied file checksum change → throws `MigrationDriftError` (fail-fast, Rule 12). Lexical file order. Per-file transaction.
+- `db.ts` — `openAssetDatabase({ path, readonly?, migrationsDir? })` → `{ db, migrations }`. WAL + FK pragmas. Auto-creates parent dir (skipped for `:memory:`). Default path `./data/images-gen-art.db` (deviation from PLAN §4 placeholder `artforge.db` — documented inline).
+- `types.ts` — `AssetInternal`, `AssetInsertInput`, `AssetListFilter`, `BatchInternal`, `BatchCreateInput`, `BatchStatus`. Snake-case DB row shapes stay local to repos; public shape is camelCase.
+- `asset-repo.ts` — factory `createAssetRepo(db)` returns `{ insert, findById, findByBatch, list }`. `list({ profileId?, workflowId?, limit, offset })` added proactively (Phase 3 DTO-no-paths audit will need it, stub-early per bro). Tags stored as JSON string, parsed on read.
+- `batch-repo.ts` — factory `createBatchRepo(db)` returns `{ create, findById }`. Phase-3 will extend with `complete/abort/updateProgress`.
+- `dto-mapper.ts` — `toAssetDto(asset)` strips `filePath`, emits `imageUrl: /api/assets/{id}/file`. `toAssetDetailDto` deferred to Phase 3 (needs ProfileDto-mapped replay snapshot).
+- `index.ts` — barrel.
+
+### Files under `src/server/profile-repo/`
+- `loader.ts` — `loadProfile(id)` reads `data/profiles/{id}.json`, Zod-validated. `tryLoadProfile` returns null if missing. Error messages never leak filesystem paths.
+- `saver.ts` — `saveProfile(profile, { dir?, touchUpdatedAt? })`. Zod re-validates input, bumps `updatedAt` by default, writes `{id}.json` with 2-space indent + trailing newline. Rule 14 version-bump policy doc'd inline (v1 today).
+- `snapshot.ts` — `freezeProfileForReplay(profile)` = `structuredClone`. Since v2.2 AppProfile already uses asset-IDs (not paths), no path-rewrite is needed; clone protects historical replay payloads from live-profile mutation.
+- `dto-mapper.ts` — `toProfileDto` + `toProfileSummaryDto`. Asset IDs resolve to `/api/profile-assets/{id}/file`. Rule 11 — no `appLogoAssetId` / internal paths surface.
+- `index.ts` — barrel.
+
+### Files under `scripts/`
+- `migrations/2026-04-20-initial.sql` — verbatim copy of `schema.sql` + "DO NOT EDIT" header. Edit → runner throws `MigrationDriftError`.
+- `seed-data/profiles/{chartlens,plant-identifier,ai-chatbot}.json` — canonical seeds (git-tracked). All 3 have `appLogoAssetId: null, storeBadgeAssetId: null, screenshotAssetIds: []` (Phase 5 CMS populates).
+- `seed-profiles.ts` — idempotent copier: `scripts/seed-data/profiles/*.json` → `data/profiles/` if target absent. Never overwrites runtime profiles. Wired as `npm run seed:profiles`.
+
+### Errors (`src/core/shared/errors.ts`)
+- `"MIGRATION_DRIFT"` added to `ErrorCode` union, status 500.
+- `MigrationDriftError extends AppError` — constructor takes `{ filename, expectedChecksum, actualChecksum }`, formatted message with 12-char checksum previews.
+
+### Tests
+- `tests/unit/migration-runner.test.ts` (7) — single-apply + row shape, idempotent re-run, drift detection (edit file after apply → `MigrationDriftError`), multi-file lexical ordering, non-.sql filter, `_migrations` column check, real `scripts/migrations/` apply end-to-end on `:memory:`.
+- `tests/unit/asset-store.test.ts` (11) — boot (WAL + FK pragmas on real file), schema tables exist, v2.2 nullable columns correct; `asset-repo` round-trip + findByBatch ordering + list filter/pagination + tags JSON roundtrip; `batch-repo` round-trip + null-on-missing; Rule 11 DTO strips `filePath` (no `./data/` in serialized JSON, `imageUrl` shape).
+- `tests/unit/dto-mapper.test.ts` extended (+5 profile tests) — asset-ID → URL mapping, no leakage of internal IDs/paths, visual/positioning/context pass-through, `ProfileSummaryDto` exact shape, null-logo case.
+- `tests/unit/app-profile.test.ts` (7) — reads canonical seeds at `scripts/seed-data/profiles/`, validates each against `AppProfileSchema`, checks version=1, null asset IDs, filename↔id match.
+
+### Config
+- `vitest.config.ts` — added `test.env.LOG_LEVEL = "warn"` to silence info logs in test output.
+- `package.json` — added `"seed:profiles": "tsx scripts/seed-profiles.ts"`.
+
+### QA gate result
+```
+lint: clean
+check-loc: 51 files, 0 violations
+test:unit: 92/92 pass (10 test files) — 1.13s total
+seed:profiles smoke: 3 copied fresh, 3 skipped on re-run (idempotent)
+```
+
+## Deviations from BOOTSTRAP Step 5 (approved by bro Session #6)
+
+### Deviation 1 — Migration runner location (Option B)
+**From:** `scripts/migrations/runner.ts` (BOOTSTRAP §Step 5)
+**To:** `src/server/asset-store/migration-runner.ts`
+**Rationale:** Runner is server library code (imported by `db.ts`), not a CLI entry point. Policy: logic lives in `src/server/`, SQL data files live in `scripts/migrations/`. SQL files unchanged at `scripts/migrations/*.sql`. ESLint src/server/** rules now apply to the runner.
+
+### Deviation 2 — Seed canonical location (Option B)
+**From:** `data/profiles/*.json` (BOOTSTRAP §Step 5 deliverables)
+**To:** `scripts/seed-data/profiles/*.json` (canonical, git-tracked) + `data/profiles/*.json` (runtime, gitignored, seeded via `npm run seed:profiles`)
+**Rationale:** `data/profiles/` holds runtime state (CMS-edited profiles, Phase 5). Committing seeds there would mix committed config with runtime state → git-diff noise once CMS starts writing. Separating canonical (`scripts/seed-data/`) vs runtime (`data/profiles/`) folders keeps git clean. Full policy in `memory/patterns.md` "File location policy".
+
+**Side-effect — gitignore correction:** pre-Session #6, `.gitignore` had `!data/profiles/` (un-ignore, legacy plan A assumption that seeds live there and are git-tracked). Under Option B that un-ignore became wrong: runtime profiles at `data/profiles/` must NOT be committed. Replaced with anchored `/data/profiles/` ignore. Verified with `git check-ignore` — seed canonicals at `scripts/seed-data/profiles/` stay tracked. Anchored per audit rule established in Session #3 (`keys/` bug).
+
+### Deviation 3 — DB default filename
+**From:** `artforge.db` (PLAN §4 placeholder)
+**To:** `./data/images-gen-art.db`
+**Rationale:** Matches renamed project. Legacy `artforge.db` remains gitignored for safety. Documented inline in `src/server/asset-store/db.ts`.
+
+## Known pending items / notes
+
+1. **`toAssetDetailDto`** — deferred to Phase 3. Needs `ProfileDto`-mapped replay snapshot (current stored payload embeds server-shape `AppProfile`). Not blocking Step 6.
+2. **Genart-1/2/3 folders** at project root — still untouched, Phase 2 extraction scope.
+3. **Profile saver — optimistic concurrency** not implemented (Phase 5 CMS scope per PLAN §6.4). Current saver is unconditional write.
+4. **Runtime `data/profiles/`** created by first `npm run seed:profiles` run. Fresh clones require it before Step 6 server will find seeds.
+
+
 
 ## Completed in Session #3 (Step 4 — Mock Provider + Contract)
 
@@ -178,53 +252,31 @@ test:unit: 47/47 pass (6 test files) — crypto suite ~442ms
 ## Next session resume instructions
 
 1. Read this file + `memory/MEMORY.md` + `memory/patterns.md` to recover state.
-2. Run `npm run regression` to confirm clean env (should be 62/62 green, 7 test files).
-3. Start **Step 5** (SQLite + Migrations + Profile Repo). Reference BOOTSTRAP.md §Step 5 + PLAN-v2.2.1.md §5.3 (DB schema) + Appendix A (seed profiles).
+2. Run `npm run regression` to confirm clean env (should be 92/92 green, 10 test files).
+3. Start **Step 6** (Hono server skeleton). Reference BOOTSTRAP.md §Step 6 + PLAN-v2.2.1.md §6.4 (API spec).
 
-### Step 5 deliverables (BOOTSTRAP.md:136-167)
+### Step 6 deliverables (BOOTSTRAP.md:171-ish)
 
-**Asset store (SQLite, `src/server/asset-store/`):**
-- `schema.sql` — per PLAN §5.3: `assets`, `batches`, `profile_assets` tables. Must include `batch_id`, `language`, nullable `replay_payload` columns.
-- `db.ts` — `better-sqlite3` connection, **WAL mode** (`PRAGMA journal_mode=WAL`), invokes migration runner at boot.
-- `asset-repo.ts` — CRUD **stubbed** for Phase 1 (full CRUD is Phase 3). Minimum: `insert`, `findById`, `findByBatch`.
-- `batch-repo.ts` — CRUD stubbed. Minimum: `create`, `findById`.
-- `dto-mapper.ts` — `toAssetDto()` **must strip `file_path`** (Rule 11 — no paths in API responses).
+**Server entry + wiring (`src/server/`):**
+- `index.ts` — boots Hono app on `127.0.0.1:5174` (local-only, no auth). Calls `openAssetDatabase()` on boot; exits non-zero on migration failure.
+- `app.ts` — Hono app factory with middleware (error handler maps `AppError.status`, JSON body parser, request logger).
+- Routes: at minimum `/api/health`, `/api/providers` (list providers + capability registry), an SSE example endpoint per PLAN §6.4.
+- Error handler — catches `AppError`, returns `{ code, message, details? }` with correct HTTP status. Catches Zod errors → 400 BAD_REQUEST.
 
-**Migrations (`scripts/migrations/`):**
-- `2026-04-20-initial.sql` — copy of schema.sql using `CREATE TABLE IF NOT EXISTS`.
-- `runner.ts` — tracks applied migrations in `_migrations` table (filename + applied_at), applies new ones in lexical order at boot. Idempotent.
+**Unit/integration tests:**
+- Hono app mounted in-process, assertions on JSON response shape + status codes. Use the mock provider registry only — no real SDK calls.
 
-**Profile repo (`src/server/profile-repo/`):**
-- `loader.ts` — reads `data/profiles/{id}.json`, returns parsed + Zod-validated `AppProfile`.
-- `saver.ts` — writes with **version bump** (Rule 14 + AppProfileSchema `z.literal(1)` discipline; bump + migration on schema change).
-- `dto-mapper.ts` — `toProfileDto()`, `toProfileSummaryDto()`.
-- `snapshot.ts` — `freezeProfileForReplay(profile)`: replaces profile-local asset paths with asset IDs (per PLAN replay semantics).
+### Step 6 gotchas to watch
+- **Local-only bind** — must be `127.0.0.1`, not `0.0.0.0`. This is a single-user local tool; wider bind exposes keys over LAN.
+- **SSE example** — PLAN §6.4 spec'd pattern; keep it tiny for scaffold (workflow dispatch is Phase 3).
+- **Error handler ordering** — install before route mounting so thrown `AppError`s from handlers flow correctly.
+- **Rule 11 via routes** — `/api/assets/...` + `/api/profile-assets/...` serve files by ID. Do NOT accept file-path params; route to repo-resolved internal path server-side.
+- **Boot migration** — if `MigrationDriftError` thrown during `openAssetDatabase()`, fail boot fast; do not start the HTTP listener.
 
-**Seeds (`data/profiles/`) — per PLAN Appendix A:**
-- `chartlens.json` — must include `appLogoAssetId` field (schema v1 requirement).
-- `plant-identifier.json`
-- `ai-chatbot.json`
-- `scripts/seed-profiles.ts` — idempotent: write file if missing, skip if present.
+### Alignment questions likely for Session #7
+- **Route layout** — flat (`routes/providers.ts`) or nested (`routes/providers/index.ts`)? Pattern established in Step 6 cascades through Phase 3.
+- **API body schemas** — per patterns.md Schema Location Policy, colocate at `src/server/routes/<name>.body.ts`. Confirm on first body schema.
+- **Request logger shape** — use the existing `@/core/shared/logger` or add a Hono-specific middleware? Logger already redacts AIza/JWT patterns.
+- **Dev script** — `npm run dev` already concurrent (server + client). Verify `tsx watch` HMR works cleanly against Step 6 code.
 
-**Unit tests:**
-- `tests/unit/app-profile.test.ts` — Zod validates all 3 seed profiles against `AppProfileSchema`.
-- `tests/unit/asset-store.test.ts` — migration runner applies 2026-04-20-initial, `_migrations` has 1 row, expected tables/columns exist (use `:memory:` or tmp file DB — do NOT hit `./data/images-gen-art.db`).
-- Extend `tests/unit/dto-mapper.test.ts` — add profile DTO tests (currently only key DTO tests there) + asset DTO stripping `file_path`.
-
-### Step 5 gotchas to watch
-- **DB filename** — prefer `images-gen-art.db` over legacy `artforge.db` (memory note). Both gitignored. Server default path should go to `./data/images-gen-art.db`.
-- **WAL files** — better-sqlite3 in WAL mode creates `*.db-wal` + `*.db-shm`. Ensure `.gitignore` covers these (it already globs `data/**`).
-- **Tests must use isolated DB** — `new Database(":memory:")` or temp file. Never touch the real `./data/*.db` in unit tests.
-- **Seed profile schema version** — `AppProfileSchema` is `z.literal(1)` right now. Seeds must write `version: 1`.
-- **Zod `exactOptionalPropertyTypes`** — when constructing seed JSON, omit optional fields (don't set to `undefined`); when mapping DTOs, conditionally assign rather than spread-undefined.
-- **Migration runner ordering** — read files with `readdirSync`, sort lexically, apply missing ones in sorted order. Store applied filename in `_migrations(filename TEXT PRIMARY KEY, applied_at TEXT)`.
-- **Rule 4 — SDKs only in server**: `better-sqlite3` is **only** importable from `src/server/**`. Do not touch in core/client.
-- **Rule 11 — no paths in DTOs**: `toAssetDto` strips `file_path` before returning. Keep internal shape (`Asset`) distinct from DTO (`AssetDto`); already defined in `src/core/dto/asset-dto.ts`.
-
-### Alignment questions likely to come up in Session #4
-- **`better-sqlite3` pinned version** — already in package.json (11.7.2 per memory); verify `npm install` has been run OR will be part of Step 5 setup.
-- **`data/` directory creation** — should seed-profiles.ts `mkdirSync({ recursive: true })` before writing, or rely on app boot to create?
-- **Schema §5.3 fine print** — re-read PLAN §5.3 carefully for column types (TEXT vs INTEGER for IDs, ISO strings for timestamps, JSON-as-TEXT for replay_payload). Don't invent columns; match PLAN exactly.
-- **Profile seed content — PLAN Appendix A** — bro will likely want Appendix A read verbatim and each seed to match; don't improvise content.
-
-Predicted Session #4 length: 3-4h of implementation + alignment pauses. Step 5 has the most files of any Phase 1 step.
+Predicted Session #7 length: 2h (lighter than Step 5; scaffolding + a few routes + tests).
