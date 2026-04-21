@@ -14,8 +14,8 @@ data/keys.enc
 !data/profiles/
 !data/templates/
 
-# Service accounts (never commit)
-keys/
+# Service accounts (never commit) — anchored: top-level keys/ only, do not match src/server/keys/
+/keys/
 
 # SQLite DB
 artforge.db
@@ -25,12 +25,12 @@ images-gen-art.db
 images-gen-art.db-wal
 images-gen-art.db-shm
 
-# Vendored source apps (cloned for extraction in Phase 2)
-vendor/
-# Source apps awaiting Phase 2 extraction (move into vendor/ then)
-Genart-1/
-Genart-2/
-Genart-3/
+# Vendored source apps (cloned for extraction in Phase 2) — anchored to project root
+/vendor/
+# Source apps awaiting Phase 2 extraction (move into /vendor/ then) — anchored to project root
+/Genart-1/
+/Genart-2/
+/Genart-3/
 
 # Env files
 .env
