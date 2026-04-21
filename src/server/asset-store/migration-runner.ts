@@ -25,7 +25,7 @@ export interface MigrationRunResult {
 }
 
 export function runPendingMigrations(
-  db: Database,
+  db: Database.Database,
   migrationsDir: string = DEFAULT_MIGRATIONS_DIR,
 ): MigrationRunResult {
   db.exec(`

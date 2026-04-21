@@ -3,6 +3,7 @@
 export type ErrorCode =
   | "BAD_REQUEST"
   | "NOT_FOUND"
+  | "NOT_IMPLEMENTED"
   | "VERSION_CONFLICT"
   | "INCOMPATIBLE_WORKFLOW_PROVIDER"
   | "RUNTIME_VALIDATION_FAILED"
@@ -25,7 +26,10 @@ export class AppError extends Error {
     this.name = "AppError"
     this.code = code
     this.status = status
-    this.details = details
+    // exactOptionalPropertyTypes: keep `details` key absent when undefined
+    // rather than present-as-undefined. JSON.stringify output is identical either
+    // way, but this satisfies the strict-TS invariant for readers.
+    if (details !== undefined) this.details = details
   }
 }
 
@@ -40,6 +44,13 @@ export class NotFoundError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super("NOT_FOUND", message, 404, details)
     this.name = "NotFoundError"
+  }
+}
+
+export class NotImplementedError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super("NOT_IMPLEMENTED", message, 501, details)
+    this.name = "NotImplementedError"
   }
 }
 

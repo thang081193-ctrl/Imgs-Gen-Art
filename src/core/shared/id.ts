@@ -4,8 +4,9 @@ const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 function randomBase62(length: number): string {
   const bytes = new Uint8Array(length)
-  // globalThis.crypto is available in Node 20+ and browsers
-  const c = (globalThis as { crypto?: Crypto }).crypto
+  // globalThis.crypto is available in Node 20+ and browsers. Node's
+  // @types/node exposes it via globalThis typing; no DOM lib needed.
+  const c = globalThis.crypto
   if (!c) throw new Error("crypto.getRandomValues unavailable")
   c.getRandomValues(bytes)
   let out = ""

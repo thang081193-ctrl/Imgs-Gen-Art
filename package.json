@@ -13,13 +13,16 @@
     "dev:client": "vite",
     "build": "tsc -p tsconfig.server.json && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
+    "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
+    "typecheck": "npm run typecheck:server && npm run typecheck:client",
     "check-loc": "tsx scripts/check-loc.ts",
     "seed:profiles": "tsx scripts/seed-profiles.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "regression": "npm run lint && npm run check-loc && npm run test:unit",
-    "regression:full": "npm run lint && npm run check-loc && npm run test"
+    "regression": "npm run lint && npm run typecheck && npm run check-loc && npm run test:unit",
+    "regression:full": "npm run lint && npm run typecheck && npm run check-loc && npm run test"
   },
   "dependencies": {
     "@google-cloud/vertexai": "1.10.0",

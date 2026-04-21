@@ -17,7 +17,10 @@ export interface ProfilePositioningDto {
   usp: string
   targetPersona: string
   marketTier: ProfileMarketTier
-  competitors?: string[]
+  // Zod `.optional()` emits `string[] | undefined`; widen here so strict
+  // exactOptionalPropertyTypes doesn't reject mapper spread. JSON.stringify
+  // omits undefined keys, so wire shape is unchanged.
+  competitors?: string[] | undefined
 }
 
 export interface ProfileContextDto {
