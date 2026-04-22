@@ -1,20 +1,20 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 2, Part 1 — `src/core/templates/` module + Zod schemas — COMPLETE ✅**
-Last updated: 2026-04-22 (Session #8, Opus 4.7 — templates module + 30 schema tests, 122/122 green. Extraction scripts deferred to Session #9.)
+Current phase: **Phase 2 — COMPLETE ✅** (extraction pipeline shipped, 6 JSONs generated, 163/163 regression green)
+Last updated: 2026-04-22 (Session #9, Opus 4.7 — extract scripts + 13 extraction tests + upstream tripwire. Awaiting bro commit.)
 
 ## Phase 2 Summary
 
 | Step | Title | Status |
 |---|---|---|
-| 1 | Move Genart-{1,2,3}/ → vendor/ + .gitignore for data/templates/ negation | ✅ Session #8 — genart-3 moved cleanly; genart-1/2 **copied** (Windows file-lock, zombies remain at root, bro manual cleanup pending) |
-| 2 | Vendor source shape mapping (6 extraction targets) | ✅ Session #8 — Explore agent report, see Session #8 notes |
-| 3 | `src/core/templates/` module (types + 6 parsers + barrel) | ✅ Session #8 — 8 files, 582 LOC, all under 300 cap |
+| 1 | Move Genart-{1,2,3}/ → vendor/ + .gitignore for data/templates/ negation | ✅ Session #8 (genart-3) / ✅ Session #9 (genart-1/2 zombies cleaned, .gitignore lines 35-36 removed) |
+| 2 | Vendor source shape mapping (6 extraction targets) | ✅ Session #8 |
+| 3 | `src/core/templates/` module (types + 6 parsers + barrel) | ✅ Session #8 — 8 files, 582 LOC |
 | 4 | Layer 1 schema tests (`templates-schemas.test.ts`) | ✅ Session #8 — 30 tests, 18ms |
-| 5 | 3 extract scripts + orchestrator (AST parse via ts-morph) | ⏳ Session #9 |
-| 6 | Run `extract:all` → produce 6 data/templates/*.json | ⏳ Session #9 |
-| 7 | Layer 2 acceptance test + determinism test + (optional) Layer 3 snapshot | ⏳ Session #9 |
-| 8 | Commit data/templates/*.json + final regression + PHASE-STATUS update | ⏳ Session #9 |
+| 5 | 3 extract scripts + orchestrator (AST parse via ts-morph) | ✅ Session #9 — 5 files, 180 LOC |
+| 6 | Run `extract:all` → produce 6 data/templates/*.json | ✅ Session #9 — 45ms total |
+| 7 | Layer 2 acceptance + determinism + Layer 3 snapshot tests | ✅ Session #9 — 3 files, 174 LOC, 13 tests |
+| 8 | regression:full + PHASE-STATUS close | ✅ Session #9 — 163/163 green |
 
 ## Phase 1 Summary (for reference)
 
@@ -27,6 +27,78 @@ Last updated: 2026-04-22 (Session #8, Opus 4.7 — templates module + 30 schema 
 | 5 | SQLite + Migrations + Profile Repo | ✅ Session #6 — QA gate green (92 tests pass) |
 | 6 | Hono Server Skeleton | ✅ Session #7 — QA gate green (120 tests pass, 13 files) |
 | 7 | Vite Client Skeleton | ✅ Session #7 — regression green, vite build green, dev smoke green |
+
+---
+
+## Completed in Session #9 (Phase 2 Part 2 — Extraction)
+
+### Kickoff cleanup
+
+- **Genart-1/2 zombie folders** — verified identical to `vendor/genart-{1,2}` via `diff -rq`, then `rm -rf` both. `.gitignore` lines 35-36 (`/Genart-1/`, `/Genart-2/`) removed. Zombies gone, session-8 known-issue #1 closed.
+- **ts-morph audit** — `npm audit fix --force` cleared all 10 ts-morph transitive vulns. Side-effects: 5 deps bumped (`hono 4.7.0→4.12.14`, `@hono/node-server 1.13.8→1.19.14`, `eslint 9.18.0→9.39.4`, `tsx 4.19.2→4.21.0`, `vitest 2.1.8→2.1.9`). All `^` markers added by fix were stripped back to exact pins (hard rule). 5 vulns remain (esbuild→vite→vitest dev-only chain, needs vitest@4 breaking upgrade) — **bro accepted defer** (dev-only, no prod runtime impact).
+
+### Decisions locked Session #9 (approved by bro)
+
+- **Q1 audit:** `npm audit fix --force`, remaining 5 dev-only vulns accepted.
+- **Q2 Layer 3 snapshot:** yes, implemented as `upstream-snapshot.test.ts` (6 pinned SHA-256 values).
+- **Q3 CLI filter:** all-or-nothing (no `--only=genart-X`).
+- **Q4 package.json scripts:** single `extract:all` only (no `:dry`, no per-target).
+- **Q5 zombies:** delete (done).
+
+### Files under `scripts/` (5 files, 180 LOC)
+
+- `scripts/extract-common.ts` (160) — shared helpers: `evalLiteralNode` (ts-morph AST → JS literal, supports strings/nums/bools/null/arrays/objects + `as`/parens/satisfies + `PropertyAccess` resolved via enumMap), `readEnumMap`, `readExportedConst`, `openSourceFile` (per-call Project isolation), `sortKeysDeep`, `writeJsonDeterministic` (sorted keys + 2-space + trailing \n).
+- `scripts/extract-genart-1.ts` (41) — reads 10 `_GROUPS` const arrays from `vendor/genart-1/types.ts`, passes to `parseArtworkGroups` (handles drop + merge), writes `data/templates/artwork-groups.json`.
+- `scripts/extract-genart-2.ts` (32) — reads `FeatureFocus` enum from `vendor/genart-2/types.ts`, `LAYOUTS` from `constants.ts` with enum-map context (resolves `FeatureFocus.RESTORE → "restore"`), writes `data/templates/ad-layouts.json` (29 layouts, 7 feature values).
+- `scripts/extract-genart-3.ts` (47) — reads 5 exports from `vendor/genart-3/constants.ts` (I18N, ART_STYLES, ZONE_BASE, COUNTRY_OVERRIDES, COPY_TEMPLATES), invokes 4 parsers, writes 4 JSONs.
+- `scripts/extract-all.ts` (21) — orchestrator, runs 3 extractors sequentially, fails fast. Wired as `npm run extract:all`.
+
+### Data produced (`data/templates/*.json`, 6 files, ~24KB total)
+
+| File | Size | Shape highlights |
+|---|---|---|
+| artwork-groups.json | 1.1KB | 8 categories (memory/cartoon/aiArt/festive/xmas/baby/avatar/allInOne). `sexyAnime` + `superSexy` dropped per D1. |
+| ad-layouts.json | 13KB | 29 layouts, features in valid FeatureFocus enum (7 string values). |
+| country-profiles.json | 4.4KB | 16 countries (VN/TH/ID/PH/SG/MY/KR/JP/US/GB/ES/FR/IT/DE/BR/MX) + 4 zones (SEA/EAST_ASIA/GLOBAL_WEST/LATAM). Preserved structure per D2. |
+| style-dna.json | 1.0KB | 3 styles: ANIME, GHIBLI, PIXAR. |
+| i18n.json | 1.6KB | 11 langs (includes `th` + `id` per D3). |
+| copy-templates.json | 3.0KB | 10 langs (no `id` — intentional per D3). Every entry has h[3] + s[3]. |
+
+### Tests (new `tests/extraction/` folder, 13 tests)
+
+- `tests/extraction/full-extract.test.ts` (92, 6 tests) — Layer 2 acceptance. Reads each JSON, validates against canonical schema, anchor checks: drop list, layout.id pairing + valid feature enum, VN.name = "Vietnam", GB.zone = "GLOBAL_WEST", `resolveCountry(VN).casting === zones.SEA.casting`, GHIBLI label match, 11 i18n langs, 10 copy langs with id excluded.
+- `tests/extraction/determinism.test.ts` (43, 1 test) — runs `extractGenart1/2/3` twice, hashes `data/templates/` (SHA-256 of sorted filenames + NUL-separated contents), asserts identical. 62ms total.
+- `tests/extraction/upstream-snapshot.test.ts` (39, 6 tests) — Layer 3 tripwire. Pinned SHA-256 per file; mismatch = either intentional vendor edit (update pin) or extract script regression (investigate). Compute-command documented inline.
+
+### QA gate result (Session #9 final)
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 68 source files, 0 violations (scripts/ not scanned by design)
+test: 163/163 pass (17 files) — 2.13s
+  prior: 122 unit + 28 integration = 150
+  new:   13 extraction (6 acceptance + 1 determinism + 6 snapshot)
+extract:all runtime: 45ms (3 extractors, 6 JSONs)
+```
+
+### Deviations from plan
+
+- **`openSourceFiles` helper → `openSourceFile` (single)** — initial helper returned `Record<string, SourceFile>`, but strict-mode index access yielded `SourceFile | undefined`, forcing ugly `!` assertions. Simplified to single-file helper (one Project per call — no shared state, trivially independent per extractor).
+- **ts-morph audit side-effects** — 4 deps outside ts-morph's transitive tree got bumped (hono/node-server minors, eslint minor, tsx minor, vitest patch). Not planned, but all patch/minor within semver-safe range; 150 prior tests still green after bump. Bro can revert if undesired.
+
+### Known pending items
+
+1. **5 dev-only vulnerabilities** (esbuild < 0.24.2 CORS issue, chained through vite + vite-node + @vitest/mocker + vitest 2.x). Fix requires vitest@2→@4 major bump. Deferred; not blocking Phase 3. Re-audit when touching test infra.
+2. **`data/templates/`** now tracked (gitignore negation `!/data/templates/` was already set Session #8). Untracked until bro `git add` + commit.
+3. **Phase 3 loader** — `src/server/templates/loader.ts` + `cache.ts` still deferred. Workflow runners consume via loader.
+
+## Next Session (#10) kickoff — Phase 3 entry point
+
+1. Read this file + `memory/MEMORY.md` + `memory/patterns.md` to recover state.
+2. Verify baseline — `npm run regression:full` must be 163/163 green.
+3. Verify 6 JSONs exist at `data/templates/` (run `npm run extract:all` if absent).
+4. Decide Phase 3 scope with bro: server loader + cache, workflow-runners, OR cms routes first.
 
 ---
 
