@@ -53,13 +53,21 @@ export async function* dispatch(
       batchId: params.batchId,
     }
 
+    // Post-abort grace window: after controller.signal fires, give the
+     // workflow up to POST_ABORT_GRACE more events to self-terminate
+     // (emit its own `aborted` / `complete` per Session #10 D2). Beyond
+     // that, defensive-return so an unresponsive workflow can't hold the
+     // HTTP stream open indefinitely. The provider's abort-throw typically
+     // surfaces as an `error` event first, then the workflow's abort-check
+     // in the next loop iter yields `aborted` — well within the window.
+    const POST_ABORT_GRACE = 5
+    let postAbortCount = 0
     for await (const event of pre.workflow.run(runParams)) {
       yield event
-      // If the workflow respects its own abort signal + emits aborted/complete,
-      // we simply stop iterating once it does. Defensive early-exit if an
-      // unresponsive workflow keeps yielding post-abort.
-      if (controller.signal.aborted && event.type !== "aborted") {
-        return
+      if (event.type === "aborted" || event.type === "complete") break
+      if (controller.signal.aborted) {
+        postAbortCount++
+        if (postAbortCount >= POST_ABORT_GRACE) return
       }
     }
   } finally {

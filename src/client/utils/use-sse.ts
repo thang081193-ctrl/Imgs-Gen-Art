@@ -1,11 +1,13 @@
-// Fetch-based SSE hook with AbortController cleanup. Phase 1 ships the
-// parser wired; Phase 3 workflow-runs UX will consume it. Chosen over
-// EventSource to support POST triggers + custom headers in Phase 3.
+// Fetch-based SSE hook with AbortController cleanup. Supports GET (default)
+// and POST with JSON body; `onEvent` fires per-event so callers can react
+// (extract batchId from `started`, etc.). `abort()` in the return value is
+// the imperative cancel path — wired to Workflow page's Cancel button which
+// also fires `DELETE /api/workflows/runs/:batchId` server-side.
 //
-// Wire format parsed: `event: <name>\ndata: <string>\n\n`. Multi-line
-// data is re-joined with newline per SSE spec. `id:` captured if present.
+// Wire format parsed: `event: <name>\ndata: <string>\n\n`. Multi-line data
+// is re-joined with newline per SSE spec. `id:` captured if present.
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export type SSEStatus = "idle" | "connecting" | "streaming" | "closed" | "error"
 
@@ -19,28 +21,48 @@ export interface SSEState {
   events: SSEEvent[]
   status: SSEStatus
   error: Error | null
+  abort: () => void
 }
 
 export interface UseSSEOptions {
   enabled?: boolean
+  method?: "GET" | "POST"
+  body?: unknown
+  onEvent?: (e: SSEEvent) => void
 }
 
 export function useSSE(url: string, opts: UseSSEOptions = {}): SSEState {
   const enabled = opts.enabled ?? true
+  const method = opts.method ?? "GET"
+
+  // Refs so body / onEvent updates don't re-trigger the effect; captured
+  // at start-time inside streamEvents.
+  const bodyRef = useRef<unknown>(opts.body)
+  const onEventRef = useRef<((e: SSEEvent) => void) | undefined>(opts.onEvent)
+  bodyRef.current = opts.body
+  onEventRef.current = opts.onEvent
+
+  const controllerRef = useRef<AbortController | null>(null)
+  const abort = useRef((): void => { controllerRef.current?.abort() }).current
+
   const [state, setState] = useState<SSEState>({
     events: [],
     status: "idle",
     error: null,
+    abort,
   })
 
   useEffect(() => {
     if (!enabled) return undefined
     const controller = new AbortController()
-    setState({ events: [], status: "connecting", error: null })
+    controllerRef.current = controller
+    setState({ events: [], status: "connecting", error: null, abort })
 
-    streamEvents(url, controller.signal, (event) => {
+    streamEvents(url, method, bodyRef.current, controller.signal, (event) => {
       if (controller.signal.aborted) return
+      onEventRef.current?.(event)
       setState((prev) => ({
+        ...prev,
         events: [...prev.events, event],
         status: "streaming",
         error: null,
@@ -57,21 +79,29 @@ export function useSSE(url: string, opts: UseSSEOptions = {}): SSEState {
       })
 
     return () => { controller.abort() }
-  }, [url, enabled])
+  }, [url, enabled, method, abort])
 
   return state
 }
 
 async function streamEvents(
   url: string,
+  method: "GET" | "POST",
+  body: unknown,
   signal: AbortSignal,
   onEvent: (e: SSEEvent) => void,
 ): Promise<void> {
-  const res = await fetch(url, {
-    headers: { Accept: "text/event-stream" },
-    signal,
-  })
-  if (!res.ok) throw new Error(`SSE HTTP ${res.status}`)
+  const headers: Record<string, string> = { Accept: "text/event-stream" }
+  const init: RequestInit = { method, headers, signal }
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json"
+    init.body = JSON.stringify(body ?? {})
+  }
+  const res = await fetch(url, init)
+  if (!res.ok) {
+    const detail = await readErrorDetail(res)
+    throw new Error(`SSE HTTP ${res.status}${detail}`)
+  }
   if (!res.body) throw new Error("No SSE body stream")
 
   const reader = res.body.getReader()
@@ -89,6 +119,17 @@ async function streamEvents(
       const parsed = parseEvent(raw)
       if (parsed !== null) onEvent(parsed)
     }
+  }
+}
+
+async function readErrorDetail(res: Response): Promise<string> {
+  const ct = res.headers.get("content-type") ?? ""
+  if (!ct.includes("application/json")) return ""
+  try {
+    const payload = (await res.json()) as { message?: string }
+    return payload.message !== undefined ? `: ${payload.message}` : ""
+  } catch {
+    return ""
   }
 }
 

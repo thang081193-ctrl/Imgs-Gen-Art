@@ -1,23 +1,44 @@
-// Phase 1 landing. Fetches /api/health on mount, renders status badge +
-// version echo. No workflow UI yet — Phase 5 CMS + gallery will own this
-// page later; this is scaffolding to prove the proxy + CSS + hooks work.
+// Landing page. Fetches /api/health on mount, renders status badge + CTAs
+// linking to Workflow + Gallery pages. Phase 5 CMS will extend with more
+// primary-nav hero sections.
 
 import type { ReactElement } from "react"
 import { useApiHealth, type ApiState, type HealthData } from "@/client/api/hooks"
+import type { NavParams, Page } from "@/client/navigator"
 
-export function Home(): ReactElement {
+export interface HomeProps {
+  onNav: (page: Page, params?: NavParams) => void
+}
+
+export function Home({ onNav }: HomeProps): ReactElement {
   const health = useApiHealth()
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8">
+    <main className="flex flex-col items-center justify-center p-8 min-h-[calc(100vh-60px)]">
       <div className="max-w-2xl w-full space-y-6">
         <h1 className="text-5xl font-bold tracking-tight text-slate-100">
           Images Gen Art
         </h1>
         <p className="text-slate-400 text-lg">
-          Local artwork generation platform — Phase 1 scaffold
+          Local artwork generation platform — Phase 3 scaffold
         </p>
         <HealthBadge health={health} />
+        <div className="flex gap-3 pt-4">
+          <button
+            type="button"
+            onClick={() => onNav("workflow")}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            Run a workflow →
+          </button>
+          <button
+            type="button"
+            onClick={() => onNav("gallery")}
+            className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+          >
+            Open Gallery
+          </button>
+        </div>
         <p className="text-xs text-slate-500 pt-8">
           Client: <code className="text-slate-400">localhost:5173</code> ·
           Server: <code className="text-slate-400">127.0.0.1:5174</code>

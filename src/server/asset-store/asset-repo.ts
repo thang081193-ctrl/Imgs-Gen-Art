@@ -189,6 +189,10 @@ export function createAssetRepo(db: Database.Database) {
         where.push("workflow_id = ?")
         params.push(filter.workflowId)
       }
+      if (filter.batchId !== undefined) {
+        where.push("batch_id = ?")
+        params.push(filter.batchId)
+      }
       const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
       const sql = `SELECT * FROM assets ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`
       params.push(filter.limit, filter.offset ?? 0)

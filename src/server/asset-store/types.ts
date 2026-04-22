@@ -89,6 +89,7 @@ export interface AssetInsertInput {
 export interface AssetListFilter {
   profileId?: string
   workflowId?: string
+  batchId?: string
   limit: number
   offset?: number
 }

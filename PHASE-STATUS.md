@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-6 of 9 shipped, 297/297 regression green, full HTTP read+write surface live — profiles/templates/providers/keys/assets/profile-assets all real routes, STUB_DOMAINS empty, end-to-end Mock batch + multipart upload flow provable via curl)
-Last updated: 2026-04-22 (Session #14, Opus 4.7 — Step 6 keys + assets + profile-assets routes, 8 scope decisions locked + 2 bonus items (HealthCheckContext contract extension + test-env isolation), 54 new tests, slot-manager Q7 patch.)
+Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-8 of 9 shipped, 345/345 regression green (full suite), client Workflow + Gallery pages live, SSE wire proved end-to-end in browser, dispatcher post-abort grace window fix, 3 new dispatcher tests locked)
+Last updated: 2026-04-22 (Session #16, Opus 4.7 — Step 8 ships client UI: 4 workflow forms (sidecar Q1(a)), Gallery + filters, SSE dispatch + cancel confirm + Gallery-CTA toast, dispatcher fix (grace window for post-abort error+aborted events); 6 open Qs chosen by bro with 4 bonus refinements (empty-state CTA, model-switch lang auto-deselect, progress-context confirm dialog, Gallery deep-link).)
 
 ## Phase 3 Summary
 
@@ -13,9 +13,263 @@ Last updated: 2026-04-22 (Session #14, Opus 4.7 — Step 6 keys + assets + profi
 | 4 | `workflow-runs` route + SSE streaming + cancel | ✅ Session #12 — 3 route files + app.ts mount + 11 integration tests |
 | 5 | Profiles + templates + providers routes | ✅ Session #13 — 4 route files + 2 repo helpers + 35 integration tests |
 | 6 | Keys + assets + profile-assets routes | ✅ Session #14 — 5 route files + multipart helper + profile-assets-repo + 54 tests |
-| 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ Session #15 entry point |
-| 8 | Client Workflow page + Gallery + SSE wire | ⏳ pending |
-| 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ pending |
+| 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ✅ Session #15 — 21 workflow files + 2 shared helpers + 4 test files + registry wire (45 new tests) |
+| 8 | Client Workflow page + Gallery + SSE wire | ✅ Session #16 — 21 client files + 1 server fix (dispatcher grace window) + 1 server extension (assets batchId filter) + 3 dispatcher tests |
+| 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ Session #17 entry point |
+
+## Completed in Session #16 (Phase 3 Step 8 — client Workflow page + Gallery + SSE wire)
+
+### Scope decisions locked Session #16 (6 from bro's opening + 4 bonus refinements)
+
+- **Q1 — Form-builder strategy = (a) hand-crafted sidecar per workflow.** 4 workflows × dedicated React component in `src/client/workflows/{wf}.tsx`; registry in `src/client/workflows/index.ts` maps WorkflowId → descriptor `{id, Component}`. Rejected (b) Zod `._def` introspection (fragile across Zod versions) and (c) `zod-to-json-schema` dep (each form still needs custom field UX — enum dropdowns, chip-picker with grey-out, screenshot picker — so the generic renderer wins little). Zero new npm deps.
+- **Q2 — SSE transport = `fetch` + ReadableStream (via extended `useSSE`).** Native `EventSource` auto-reconnects (violates "no resume in v1" per PLAN §6.4) and doesn't support POST with body. Extended Phase 1 `useSSE` hook in-place (bonus A) with: `method?: "GET"|"POST"` + `body?: unknown` + `onEvent?` callback + imperative `abort()` in the return value. Pre-existing GET+no-body callers unaffected (no call sites except CONTRIBUTING example).
+- **Q3 — style-transform source picker = dropdown + empty-state CTA** (refined). Screenshots listed from `profile.assets.screenshotUrls[]` (URL → asset-id via `/^\/api\/profile-assets\/([^/]+)\/file$/` regex). Empty state renders `<EmptyScreenshotState>` card: "No screenshots uploaded for {name}. Upload in Profile Manager (Phase 5)". Form still renders fully — user fills other fields — submit disabled via `onInputChange(null, "Pick a source screenshot")` returned by `parseInput`. Rule: form doesn't block render on missing data; error surfaces as a yellow hint line + disabled Run button.
+- **Q4 — ASO targetLangs = chip-picker with model-aware grey-out + auto-deselect on model switch.** Reads `model.capability.supportedLanguages` to set `supportedLangs` Set; unsupported chips render `disabled` with `title="Not supported by {displayName}"`. When model switches (`modelId` ref tracks prior value), any already-picked langs not in the new model's set auto-deselect + toast "Removed {lang} — not supported by {newModel}" (variant=warning). If all picked langs become unsupported → fallback to `["en"]`. Preserves user intent without silent validity breaks.
+- **Q5 — Gallery = default sort createdAt DESC + workflow-color chips + profile dropdown + batchId exact-match search + pagination 50/page (no tag filter).** Server `GET /api/assets` already serves `createdAt DESC`. Tag filter deferred — needs `?tags[]=` array query shape, which the current Zod schema doesn't support (would need `.extend` + repo multi-condition WHERE). Phase 3 polish or Phase 5.
+- **Q6 — Cancel UX = confirm dialog w/ progress context (always) + aborted toast w/ Gallery CTA link** (refined). Confirm dialog body: `"{completedCount}/{total} assets generated. {remaining} remaining will be skipped."` — single path, cost-aware. Aborted toast: `"Batch aborted. {N}/{M} assets saved to Gallery."` + `[View in Gallery →]` CTA that calls `navigator.go("gallery", { batchId })` to deep-link. Toast auto-dismisses at 6s.
+
+### Pre-code alignment resolutions (bro-approved before first edit)
+
+- **Bonus A — Verified useSSE signature mismatch before coding.** Phase 1 shipped `useSSE(url, { enabled? })` — GET only, no body, no onEvent, no imperative abort. Extended the hook in-place (per bro's rule "If mismatch → extend existing hook, don't create new"). Back-compat preserved: omitting `method`/`body`/`onEvent` → GET fetch identical to prior behavior. Adds `abort: () => void` to return value (stable ref via `useRef`). Refs hold `body` + `onEvent` so their changes don't re-trigger the effect — captured at start-time inside `streamEvents()`.
+- **Bonus B — Tokens + disabled variant.** Intentionally NOT adding a "disabled" column to `ColorVariantClasses` (would break `design-tokens.test` 5-variant guard). Chip disabled state uses ad-hoc Tailwind in `aso-screenshots.tsx`: `"border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed"` — visually distinct, not a color-variant axis. Rule 1 (no template interpolation) still satisfied via static classname literals.
+- **Bonus C — Gallery batchId search = exact match via server `?batchId=` query + "Batch not found" heuristic.** Required server-side extension (3 files, ~4 LOC each): `AssetListFilter.batchId?` in types, WHERE clause in `asset-repo.list`, `batchId` in `AssetListQuerySchema` + `coerceQuery`. Validate-on-blur + Enter keypress commits. UI shows yellow "Batch not found — 0 assets." when filter applied + result count is 0. Clear button resets.
+- **Bonus D — Per-workflow Concept shape in image_generated.** Asset card currently renders canonical `AssetDto` (workflowId badge, size, seed) — workflow-specific concept fields (ad's `featureFocus`, style's `styleDnaKey`, aso's `layoutId`) live on the `concept_generated` event but are NOT embedded in AssetDto. For Phase 3 MVP, the detail modal exposes `variantGroup` (encodes layout+copyKey-ish info per writer) + tags; richer per-workflow rendering lands with Phase 5 Replay UI (needs replayPayload enrichment anyway). Noted as known-pending.
+- **Bonus E — Cancel button placement = RunStatusBar component, shown only while `run.runState === "running"`.** Hidden when idle / complete / aborted / error. No stale button ever appears post-batch.
+
+### New client files (21 files, ~1860 LOC, all under 300 hard cap)
+
+**Router + toast + nav (5 files):**
+- `src/client/navigator.ts` (21) — `Page = "home"|"workflow"|"gallery"`, `NavParams = {batchId?}`, `Navigator` interface.
+- `src/client/components/TopNav.tsx` (57) — sticky top-nav w/ 3 NavLink buttons + app title (also clickable home).
+- `src/client/components/ToastHost.tsx` (117) — `useToastStack()` hook + `<ToastHost>` component + `<ToastItem>`. Auto-dismiss 6s. Variant-colored via COLOR_CLASSES badge. Optional CTA button. `type ShowToast` exported for prop-drilling.
+- `src/client/components/ConfirmDialog.tsx` (76) — modal w/ Esc + backdrop dismiss, danger/indigo variant. Single path per Q6 refine.
+- `src/client/App.tsx` (27, rewrite) — owns `page + params` state, toast stack; prop-drills `navigator` + `showToast` to pages. Route via `page === "x" && <X .../>`.
+
+**Page-level components (8 files):**
+- `src/client/components/WorkflowPicker.tsx` (39) — 4-card workflow picker themed per colorVariant (violet/blue/pink/emerald).
+- `src/client/components/ProfileSelector.tsx` (47) — profiles dropdown with loading / error / empty states.
+- `src/client/components/ProviderModelSelector.tsx` (107) — 2-dropdown (provider + provider-scoped models) + compat badge (derived from matrix lookup, reason + override tag + recommended tag).
+- `src/client/components/TopLevelSelectors.tsx` (53) — aspectRatio + language selects scoped to model.capability. Disabled when model null.
+- `src/client/components/RunStatusBar.tsx` (40) — progress bar (count/total) + Cancel button, color from workflow variant.
+- `src/client/components/EventLog.tsx` (56) — scrollable event stream with auto-scroll + per-type color + summary line.
+- `src/client/components/AssetFilterBar.tsx` (122) — profile dropdown + workflow chip toggles + batchId search w/ validate-on-blur + Clear + "Batch not found" hint.
+- `src/client/components/AssetThumbnail.tsx` (41) — square card, lazy-load `/api/assets/:id/file`, error state w/ red border + errorMessage, workflow-badge overlay.
+- `src/client/components/AssetDetailModal.tsx` (125) — full-asset inspector modal (img + metadata + download button + "filter by batch" CTA).
+
+**Sidecar workflow forms (6 files):**
+- `src/client/workflows/types.ts` (23) — `WorkflowFormProps` + `WorkflowFormDescriptor` types.
+- `src/client/workflows/artwork-batch.tsx` (106) — group (8 keys) + subjectDescription + conceptCount + variantsPerConcept + seed.
+- `src/client/workflows/ad-production.tsx` (90) — featureFocus (7-value enum) + conceptCount + variantsPerConcept + seed.
+- `src/client/workflows/style-transform.tsx` (145) — sourceImageAssetId (extracted from profile screenshotUrls) + styleDnaKey (ANIME/GHIBLI/PIXAR) + conceptCount + variantsPerConcept + seed; empty-state CTA card.
+- `src/client/workflows/aso-screenshots.tsx` (134) — targetLangs chip-picker (10 CopyLangs, max 3, model-aware grey-out + auto-deselect on model switch) + conceptCount + variantsPerConcept + seed.
+- `src/client/workflows/index.ts` (13) — `WORKFLOW_FORMS` registry keyed by WorkflowId.
+
+**Pages (3 files):**
+- `src/client/pages/Home.tsx` (72, rewrite) — added onNav prop + 2 CTA buttons ("Run a workflow →" / "Open Gallery"). Health badge unchanged.
+- `src/client/pages/Workflow.tsx` (187) — page composition: workflow picker → profile → provider/model → top-level selectors → form slot (dispatches to sidecar descriptor) → Run button → RunStatusBar during run → EventLog → ConfirmDialog. Runs orchestrated via `useWorkflowRun` hook.
+- `src/client/pages/Gallery.tsx` (127) — filter bar + grid (2/4/6 col responsive) + pagination + detail modal. Deep-links from navigator.params.batchId.
+
+**Custom hooks (2 extensions + 1 new):**
+- `src/client/utils/use-sse.ts` (140, rewrite) — extended with method/body/onEvent/imperative abort. Refs for body + onEvent so caller rerenders don't retrigger the effect.
+- `src/client/utils/use-workflow-run.ts` (122) — wraps useSSE with WorkflowEvent parsing + batch-state tracking. Emits toasts on complete/aborted w/ Gallery CTA. Returns `{runState, batchId, total, completedCount, events, start, cancel}`.
+- `src/client/api/hooks.ts` (+90 extend) — `useWorkflows()`, `useProfiles()`, `useProfile(id|null)`, `useProviders()`, `useCompatibility()`, `useAssets(filter, refreshKey?)`; shared `useFetch<T>(path|null)` helper (one-shot GET + AbortController cleanup); `lookupCompat(matrix, wfId, pId, mId)` helper.
+
+**Styles (1 extend):**
+- `src/client/styles/index.css` — added `.input` component class (Tailwind `@apply`) for form inputs/selects. Avoids repeating the full class string at every `<input>` / `<select>` site (Rule 1 compliance — static classname literal, no template interpolation).
+
+### Server-side fixes (2 files updated + 4 files extended)
+
+- **`src/server/workflows-runtime/dispatcher.ts` — post-abort grace window fix.** Previous impl early-returned on ANY non-`aborted` event post-abort, which cut off the `error` frame that provider.generate throws when its AbortSignal listener fires. The workflow's next-iter abort check (which yields `aborted`) thus never ran because the for-await loop was already broken. New policy: allow up to POST_ABORT_GRACE=5 events after abort; terminate on `aborted` or `complete`; defensive-return only if workflow keeps yielding normal events past the grace window (truly unresponsive). Session #10 D2 intent preserved (workflow owns aborted emission, dispatcher is backstop).
+- **Asset list filter — batchId support (4 files, ~4 LOC each):**
+  - `src/server/asset-store/types.ts` — `AssetListFilter.batchId?: string` added.
+  - `src/server/asset-store/asset-repo.ts` — WHERE clause in `list()` includes batch_id when filter.batchId set.
+  - `src/server/routes/assets.body.ts` — `AssetListQuerySchema.batchId: z.string().min(1).optional()`.
+  - `src/server/routes/assets.ts` — `coerceQuery` reads "batchId"; filter construction includes batchId when set.
+
+### New tests (3 cases)
+
+- `tests/unit/workflow-dispatcher.test.ts` (131, 3 cases) — NEW file. Locks the grace-window policy:
+  1. Workflow emits `started → image_generated → abort → error → aborted` → dispatcher forwards all 4.
+  2. Workflow emits `started → image_generated × 11 → abort` (no terminal) → dispatcher cuts off ≤ 7 events (2 pre-abort + 5 grace), never sees aborted.
+  3. Workflow ignores abort and emits `complete` → dispatcher forwards complete within grace (no early cutoff).
+
+### QA gate (Session #16 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 153 src files (+23 since Session #15), 0 violations
+         largest client: Workflow.tsx 187 LOC (refactored — SSE logic extracted to use-workflow-run.ts)
+         largest overall: keys.ts 262 LOC (unchanged)
+test: 345/345 pass (34 files; full `regression:full` suite)
+  breakdown: unit 231 + integration 101 + extraction 13
+  prior:   342 (Session #15 baseline, full suite)
+  new:     +3 (dispatcher grace-window policy tests)
+  regression: clean; no pre-existing tests broken
+build: vite bundle clean — 231.82 kB JS (70.63 kB gzip), 26.51 kB CSS
+```
+
+### Browser smoke (via curl — manual click-through pending by bro)
+
+Could not click through UI from this shell, but verified the full wire end-to-end with curl:
+
+1. **Dev server boots** — `npm run dev:server` + `npm run dev:client` in parallel; tsx watch compiles; vite serves index.html + TSX modules (react-refresh hot-inject working).
+2. **API endpoints return data:** `GET /api/health`, `/api/workflows`, `/api/profiles` all respond with seeded chartlens/plant-identifier/ai-chatbot profiles + 4 workflows.
+3. **SSE run happy path:** `POST /api/workflows/artwork-batch/run` with chartlens + mock + 1:1 + group=memory + 2 concepts × 1 variant + seed=42 → stream emits `started (total=2) → 2×(concept_generated + image_generated) → complete` with 2 AssetDto payloads. `replayClass=deterministic` on Mock.
+4. **File stream:** `GET /api/assets/{id}/file` → 200 + `content-type: image/png` + `content-length: 5337`. Mock PNG valid.
+5. **batchId filter:** `GET /api/assets?batchId=batch_FsHtU4lc6f` → returns only the 5 saved assets of that batch.
+6. **Cancel E2E (mid-flight):** `POST /run` with 10 concepts × 4 variants = 40 total, DELETE `/runs/:batchId` at 50ms mark → stream terminates with `aborted` event `{completedCount: 5, totalCount: 40}`; DELETE returns 204; batch status="aborted" in DB. Grace-window fix verified live.
+
+**Bro action item for session close:** Open http://localhost:5173 in Chrome/Edge, navigate Home → Workflow → pick artwork-batch → chartlens profile → mock provider → mock-fast → 1:1 → group=memory + subject="test" + conceptCount=2 → Run. Verify EventLog shows stream, toast fires on complete, "View in Gallery →" CTA deep-links to `/gallery` filtered by batchId. Also test Cancel mid-run on a larger batch.
+
+### Known pending items (for Session #17 — Step 9)
+
+1. **Full click-through browser smoke** — needs actual user-agent (Chrome/Edge) to finalize Step 8 sign-off per CLAUDE.md "Manual browser smoke required before session close". All 5 flows above are wire-proven via curl, but Q6 confirm dialog + toast CTA + deep-link behavior only truly validate in a real DOM.
+2. **Integration tests for full workflow-cancel flow via HTTP** — Step 9 BOOTSTRAP-PHASE3 lists `tests/integration/workflows-cancel.test.ts` as a scope item. The curl smoke covered the wire live, but a vitest harness nailing `streamSSE + DELETE + aborted terminal event` in-process is missing. Should exercise the grace-window fix at the route layer.
+3. **DTO-no-paths full sweep** — Step 9 `tests/integration/dto-no-paths.test.ts` walks every GET/POST route and checks response for banned keys. Per-route DTO mappers already enforce at write-time (spot checks in unit tests), but the tripwire test is missing.
+4. **Per-workflow Concept metadata in Gallery** — AdConcept/StyleConcept/AsoConcept extension fields aren't surfaced on asset cards (Bonus D alignment). Phase 5 Replay UI embeds these via replayPayload enrichment anyway.
+5. **Gallery tag filter** — bro-acknowledged deferral; needs Zod/asset-repo array query plumbing.
+6. **Gallery total count** — `GET /api/assets` doesn't return `total`; pagination uses `currentCount === pageSize` heuristic to hide "Next" on the last full page. Will show "Next" enabled on exact-page-size edge case (benign). Consider adding `total: number` to response + pagination counter.
+7. **Keys management UI** — endpoints live (Step 6), UI deferred per PLAN: "Client UI to manage them lands Phase 4 when real providers arrive".
+
+## Next Session (#17) kickoff — Phase 3 Step 9
+
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 345/345.
+2. Read `BOOTSTRAP-PHASE3.md` Step 9 section (DTO audit + full integration + PHASE-STATUS close).
+3. Add integration tests (est. ~20-30 new tests):
+   - `tests/integration/workflows-full.test.ts` — one test per workflow, consume SSE to completion, assert event type sequence + DB persistence.
+   - `tests/integration/workflows-cancel.test.ts` — exercise the dispatcher grace-window fix at the HTTP layer.
+   - `tests/integration/profiles-crud.test.ts` — full CRUD with expectedVersion.
+   - `tests/integration/keys-crud.test.ts` — gemini + vertex slot lifecycles.
+   - `tests/integration/dto-no-paths.test.ts` — recursive scanner on all routes; banned keys list.
+4. Manual browser E2E: run each of 4 workflows to completion + 1 cancel mid-batch.
+5. Update PHASE-STATUS Phase 3 DONE. Document Phase 4 entry (real Gemini + Vertex adapters).
+6. Est. 3-4h. Expected regression: ~370-380 tests passing.
+
+**Carry-over from Session #16 pre-Step-9 checklist:**
+- Seed profiles: already on disk (`data/profiles/*.json` × 3); `npm run seed:profiles` is idempotent.
+- Gitignored runtime: `data/assets/`, `data/profile-assets/`, `data/keys.enc`, `keys/vertex-*.json` — all OK, won't leak.
+- Browser-smoke validation deferred to bro — curl wire-proven but full UX (confirm dialog animation, toast CTA ripple, deep-link filter) needs a real DOM.
+
+
+
+## Completed in Session #15 (Phase 3 Step 7 — ad-production + style-transform + aso-screenshots)
+
+### Scope decisions locked Session #15 (8 from bro's opening + 2 pre-code alignment resolutions)
+
+- **Q1 — ad-production concept = (layoutId × copyKey) pair, feature-scoped:** `AdConcept` extends `Concept` with `{layoutId, copyKey, featureFocus}`. Selection: cartesian product of layouts-for-feature × copy-template langs, mulberry32 shuffle, pick top `conceptCount`. Input schema has `featureFocus: FeatureFocusSchema` (7-value enum from `@/core/templates`) + `conceptCount` (1-10) + `variantsPerConcept` (1-4) + optional `seed`.
+- **Q2 — style-transform source via profile-asset ref, Mock SKIPS read:** `sourceImageAssetId: z.string().min(1)` must resolve to a `profile_asset` row with `kind="screenshot"` on THE SAME profile — checked inside `run()` BEFORE first yield so 400 BadRequestError bubbles via dispatcher "pump first event" pattern (Session #12). 3 guard-clauses: `SOURCE_ASSET_NOT_FOUND` / `SOURCE_ASSET_PROFILE_MISMATCH` / `SOURCE_ASSET_WRONG_KIND`. Mock provider ignores source bytes — integration tests verify WIRING (asset resolution + error paths), not pixel transformation.
+- **Q3 — aso-screenshots targetLangs via CopyLangSchema, runtime-checked:** `targetLangs: z.array(CopyLangSchema).min(1).max(3)` — **resolution C**, using the 10-lang CopyLang enum as single source of truth (NOT a hardcoded list; see Pre-code Alignment below). Max 3 is cost control (targetLangs × conceptCount × variants grows exponentially). `run()` second-layer validator checks `targetLangs ⊆ model.capability.supportedLanguages` BEFORE any DB write — `th` slips through schema but trips the runtime check on Mock/Imagen (409 RuntimeValidationError, code `LANGUAGE_UNSUPPORTED`).
+- **Q4 — Factory pattern: Session #11 verbatim.** Each workflow exports `createXxxRun(resolveDeps, options): (params) => AsyncGenerator<WorkflowEvent>`. Deps bundle: `{assetRepo, batchRepo, provider}` (+ `profileAssetsRepo` for style-transform). Production wiring lazy-resolves from `@/server/asset-store/context` + `@/server/providers/registry`; tests inject stub deps via `createXxxRun(() => ({...}))`. No deviation from artwork-batch's template.
+- **Q5 — Replay-class via central helper, NOT hardcoded:** new `src/core/shared/replay-class.ts` exports `computeReplayClass(capability, asset)`. Returns `"deterministic"` ONLY when `capability.supportsDeterministicSeed === true` AND `asset.seed !== undefined` AND `asset.providerSpecificParams?.addWatermark === false` (explicit-false, NOT undefined; see Pre-code Alignment A). All 4 workflow asset-writers now call the helper. Phase 4 providers automatically classify correctly once their capability matures.
+- **Q6 — Event types: 6 stay, NO new types.** `WorkflowEvent` union unchanged. Workflow-specific concept shapes (`AdConcept`, `StyleConcept`, `AsoConcept`) EXTEND `Concept` with extra fields. Event payload carries the extended shape via structural typing; client narrows via `asset.workflowId` in Phase 5+ UI. Rejected `style_applied` / `layout_generated` — would balloon the exhaustive switch + conflate state-transitions with content categories.
+- **Q7 — Per-workflow seed-derivation salts (via `deriveSeed` in `@/core/shared/rand.ts`):**
+  - `artwork-batch`: `concept.title`
+  - `ad-production`: `` `${layoutId}:${copyKey}` ``
+  - `style-transform`: `` `${styleDnaKey}:${sourceAssetId}:${serial}` `` (serial added so per-concept seeds are distinct within a batch — Q7 base salt augmented for uniqueness)
+  - `aso-screenshots`: `` `${layoutId}:${targetLang}` `` (concept-level seed = `deriveSeed(batchSeed, layoutId)`; per-asset seed derived in runner)
+- **Q8 — Explicit Mock `compatibilityOverrides` on all 3 new workflows.** Each `src/workflows/<wf>/overrides.ts` declares `{providerId:"mock", modelId:"mock-fast", forceStatus:"compatible", reason:"Mock provider accepts all workflow requirements for Phase 3 E2E testing"}`. Pinned even when declarative check already passes — defense against declarative-logic OR Mock-capability-flag regressions.
+
+### Pre-code alignment resolutions (bro-approved before first edit)
+
+- **Resolution C (Q3 lang enum):** Q3 decision listed `["en","vi","ja","ko","pt","es","de","fr","it","zh"]` but `data/templates/copy-templates.json` ships `[de,en,es,fr,it,ja,ko,pt,th,vi]` (has `th`, no `zh`). Picked **C — reuse `CopyLangSchema` from `src/core/templates/types`** over hardcoding either list. Single source of truth; schema v2 propagation free; runtime validator catches provider-unsupported langs (e.g. `th` → 409 on Mock/Imagen). Unit tests pin behavior: `th` parses OK, `zh` rejected, runtime check catches `th` downstream.
+- **Resolution A (Q5 watermark semantics):** helper requires `addWatermark === false` explicitly — undefined → `best_effort`. This regressed artwork-batch's previous capability-only classifier, so `artwork-batch/asset-writer.ts` now passes `providerSpecificParams: { addWatermark: false }` explicitly (same as the 3 new workflows). Rationale: watermarking alters pixels in a way the provider can't reproduce later; treating absence as "false" would let future callers who forget the flag slip into a deterministic classification they don't have.
+
+### New shared helpers (2 changes, 38 LOC)
+
+- `src/core/shared/rand.ts` — **added `deriveSeed(batchSeed, salt): number`** (promoted from `src/workflows/artwork-batch/concept-generator.ts`). djb2-style hash × XOR with batchSeed, `>>> 0` normalize. Artwork-batch's `concept-generator.ts` re-exports from rand for back-compat.
+- `src/core/shared/replay-class.ts` (NEW 42) — `computeReplayClass(capability, asset)` helper (Q5). 3-condition AND-gate for `"deterministic"`, else `"best_effort"`. Also re-exports via `src/core/shared/index.ts`.
+
+### New workflow modules (3 folders × 7 files = 21 files, ~1650 LOC, all under 300 LOC hard cap)
+
+Each folder mirrors artwork-batch's structure for parity + review ergonomics:
+
+- **`src/workflows/ad-production/`** (~500 LOC total)
+  - `types.ts` — `AdConcept` = `Concept & {layoutId, copyKey, featureFocus}`.
+  - `input-schema.ts` — `AdProductionInputSchema` (strict, no aspectRatio/language).
+  - `concept-generator.ts` — `cartesianPairs()` + `pickPairs()` (seeded shuffle) + `generateAdConcepts()`; throws when `featureFocus` has no layouts.
+  - `prompt-composer.ts` — `buildAdPrompt()`; rotates `h/s` from `CopyEntry.h[variantIndex % 3]` so variants within a concept surface different headlines at the SAME seed.
+  - `overrides.ts` — Mock compatibility override (Q8).
+  - `asset-writer.ts` — `writeAdAsset()`; tags `[featureFocus, layoutId, copyKey]`, replayPayload embeds the triple.
+  - `run.ts` — `createAdProductionRun()`; standard async-gen flow + batch-row lifecycle.
+  - `index.ts` — factory wiring + `adProductionWorkflow` WorkflowDefinition.
+- **`src/workflows/style-transform/`** (~500 LOC total)
+  - `types.ts` — `StyleConcept` = `Concept & {styleDnaKey, sourceAssetId, serial}`.
+  - `input-schema.ts` — `{sourceImageAssetId, styleDnaKey ∈ [ANIME|GHIBLI|PIXAR], conceptCount, variantsPerConcept, seed?}`.
+  - `concept-generator.ts` — `generateStyleConcepts()`; serial-indexed seed derivation (1..N).
+  - `prompt-composer.ts` — `buildStylePrompt()`; pulls `promptCues` + `renderStyle` from `StyleDnaFile`; variant-angle line only for `variantIndex > 0`.
+  - `overrides.ts` — Mock override (Imagen correctly excluded by declarative check — no imageEditing).
+  - `asset-writer.ts` — `writeStyleAsset()`; tags `[styleDnaKey, sourceAssetId]`.
+  - `run.ts` — Q2 precondition (3 guard-clauses) BEFORE first yield; else standard flow.
+  - `index.ts` — `styleTransformWorkflow` WorkflowDefinition (uses `getProfileAssetsRepo` in deps).
+- **`src/workflows/aso-screenshots/`** (~550 LOC total)
+  - `types.ts` — `AsoConcept` = `Concept & {layoutId}`.
+  - `input-schema.ts` — `{conceptCount, variantsPerConcept, targetLangs: CopyLang[1..3], seed?}` (resolution C).
+  - `concept-generator.ts` — `phoneUiLayoutIds()` (filter `hasPhoneUI=true`) + `pickAsoLayouts()` + `generateAsoConcepts()`.
+  - `prompt-composer.ts` — `buildAsoPrompt()`; pulls localized h/s from `CopyTemplatesFile.templates[targetLang]`.
+  - `overrides.ts` — Mock override.
+  - `asset-writer.ts` — `writeAsoAsset()`; `variantGroup` encodes `${layoutId}:${targetLang}` tuple.
+  - `run.ts` — 3-level loop `concepts × targetLangs × variants`; total = product; Q3 runtime validator check first.
+  - `index.ts` — `asoScreenshotsWorkflow` WorkflowDefinition.
+
+### Supporting edits
+
+- `src/workflows/artwork-batch/concept-generator.ts` — drops local `deriveSeed`, imports from `@/core/shared/rand`, re-exports for back-compat.
+- `src/workflows/artwork-batch/asset-writer.ts` — drops local `resolveReplayClass`, calls `computeReplayClass(capability, { seed, providerSpecificParams: { addWatermark: false }})`. Behavior unchanged for Mock (still `"deterministic"`); test `artwork-batch replayClass=deterministic` assertion still passes.
+- `src/workflows/index.ts` — imports + exports + `ALL_WORKFLOWS` now lists all 4 (registration order = artwork-batch, ad-production, style-transform, aso-screenshots).
+- `src/server/asset-store/index.ts` — `+export * from "./profile-assets-repo"` so `ProfileAssetsRepo` type is importable from the barrel (fixed a typecheck error during Step 7 wire-up).
+- `tests/integration/workflows-routes.test.ts` — `GET /api/workflows` assertion updated from `toHaveLength(1)` to `toHaveLength(4)` + colorVariant map (artwork-batch=violet, ad-production=blue, style-transform=pink, aso-screenshots=emerald per PLAN §9.1).
+
+### Tests added (4 files, 45 cases)
+
+- `tests/unit/replay-class.test.ts` (6 cases) — all 6 classification branches (deterministic happy path + 5 negative paths: no-capability / no-seed / undefined-watermark / true-watermark / no-providerSpecificParams).
+- `tests/unit/workflow-ad-production.test.ts` (15 cases) — cartesianPairs filter correctness + empty case, pickPairs determinism/diverging-seeds/clamping, generateAdConcepts happy + no-layouts throw, buildAdPrompt variant-rotation + phone-UI gate, input-schema banned-key guards × 3, runner happy + same-seed reproducibility + pre-aborted.
+- `tests/unit/workflow-style-transform.test.ts` (11 cases) — generateStyleConcepts distinct-seeds + reproducibility, prompt composition + variant-angle gate, schema banned-keys, Q2 precondition × 3 (not-found / wrong-profile / wrong-kind), happy path with Mock skip-source behavior.
+- `tests/unit/workflow-aso-screenshots.test.ts` (13 cases) — phoneUiLayoutIds filter, pickAsoLayouts determinism + empty-throw, generateAsoConcepts, prompt lang-specific headline, schema banned-keys + targetLangs bounds (empty/>3/non-CopyLang/th-accepted), Q3 runtime validator (th on Mock → throws), lang-matrix happy path, per-lang seed distinctness.
+
+### QA gate (Session #15 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 130 src files (+32 since Session #14), 0 violations
+         all new files under 300 hard cap — largest: aso-screenshots/run.ts ~195 LOC
+test: 342/342 pass (33 files; full `regression:full` suite)
+  breakdown: unit 228 + integration 101 + extraction 13
+  prior:   297 (Session #14 baseline, full suite)
+  new:     +45 net (6 replay-class + 15 ad-production + 11 style-transform + 13 aso-screenshots)
+  regression: clean; no pre-existing tests broken
+```
+
+PLAN §7.4 compat matrix (end-to-end via `resolveCompatibility(ALL_WORKFLOWS, ALL_MODELS)`):
+
+```
+artwork-batch    × gemini/vertex/mock  → compatible (declarative)
+ad-production    × gemini/vertex       → compatible (declarative); mock → compatible (override)
+style-transform  × gemini              → compatible (declarative)
+                 × vertex              → INCOMPATIBLE — missing supportsImageEditing ✅ correct
+                 × mock                → compatible (override)
+aso-screenshots  × gemini/vertex       → compatible (declarative); mock → compatible (override)
+```
+
+### Deviations / design notes
+
+- **Q7 salt augmented for style-transform.** Literal Q7 salt `${styleDnaKey}:${sourceAssetId}` is constant across a batch's concepts, which would collapse all concept seeds to a single value. Added `:${serial}` (1..conceptCount) so per-concept seeds stay distinct while preserving Q7's deterministic-reproducibility intent for a fixed (batchSeed, pair, serial) triple.
+- **Style-transform concepts are numbered "interpretations"** of a fixed (source, style) pair — no template data for alternative angles/takes/compositions exists in style-dna.json (3 styles × 5 fields each, no per-concept variation axis). Title format `${styleLabel} · #${serial}`. Phase 4 Gemini NB2 + Phase 5 prompt-cues extraction may provide richer axes.
+- **ASO "layout source" = ad-layouts.json filtered by `hasPhoneUI=true`.** Current extracted data: 2-3 phone-UI layouts out of 29 (heavy on ad-variants). If ASO coverage needs broader ground, Phase 4 extract expansion OR a dedicated `screen-layouts.json` template. Concept-gen throws explicit error `no phone-UI layouts available` so the gap is loud, not silent.
+- **`ImageProvider.generate` extension for style-transform source file NOT added.** Mock skips source read per Q2; real Phase 4 Gemini NB2 will need `sourceImageBytes?: Uint8Array` on `GenerateParams`. Tracked as Phase 4 known-pending, not Phase 3 blocker.
+- **`WorkflowEvent.concept_generated` payload typed as base `Concept`** — AdConcept/StyleConcept/AsoConcept's extra fields ride via structural subtyping. Clients that want workflow-specific narrowing check `asset.workflowId` in Phase 5 UI (PLAN §9.1 locks workflowId ↔ concept-shape pairing).
+- **`inputSchema` STILL not serialized** in GET /api/workflows — Session #12 deferral unchanged. Step 8 client form-builder picks its strategy (Zod introspection / hand-crafted sidecar / `zod-to-json-schema` dep).
+
+### Known pending items (for Session #16 — Step 8)
+
+1. **Client Workflow page** — form-builder for 4 workflows' input schemas (Zod → dynamic React form). Bro to pick strategy: sidecar descriptor per workflow vs runtime Zod inspection vs JSON-schema converter dep.
+2. **SSE client integration** — EventSource subscribe + per-event-type handler (started/concept_generated/image_generated/error/aborted/complete) + cancel-button → `DELETE /api/workflows/runs/:batchId` wire.
+3. **Gallery** — list assets via `GET /api/assets?profileId=...&workflowId=...`; thumbnail via `GET /api/assets/:id/file`; filter chips per workflow color.
+4. **style-transform source picker** — upload screenshot first (Step 6 multipart already live) → select from profile's `screenshotAssetIds[]` in style-transform form. UI contract needs finalizing.
+5. **Compatibility hints** — "Mock compatible / Imagen incompatible (no image editing)" on workflow × model pickers using `GET /api/providers/compatibility`.
 
 ## Completed in Session #14 (Phase 3 Step 6 — keys + assets + profile-assets routes)
 
@@ -95,22 +349,24 @@ test: 297/297 pass (29 files) — 2.55s
 4. **Size-cap 413 not integration-tested** — unit-testable against the helper with small `maxBytes` override; skipped here because vitest >10MB Blob generation is slow + noisy. Single helper test can be added if contract tightens.
 5. **`inputSchema` in GET /workflows STILL omitted** — Session #12 deferral carried forward. Step 7 adds 3 workflows' input schemas but GET response shape unchanged. Step 8 client form-builder decides serialization strategy.
 
-## Next Session (#15) kickoff — Phase 3 Step 7
+## Next Session (#16) kickoff — Phase 3 Step 8
 
-1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 297/297.
-2. Read `BOOTSTRAP-PHASE3.md` Step 7 section (lines 231-251).
-3. Scope decisions for bro before coding (3 workflows, ~5-6 questions each):
-   - **ad-production** — input `{layoutId, targetCountry, productDescription}`. Template consumption = `ad-layouts` + `country-profiles`. Emits per-layout ad-variant assets. Concept-shape equivalent — is a "concept" a (layout, copy variant) pair? How many assets per run?
-   - **style-transform** — input `{styleKey, sourceImageAssetId, variantsPerStyle}`. Uses `style-dna` + `artwork-groups`. sourceImageAssetId references WHAT — profile-asset OR workflow-generated asset? Phase 3 Mock has no image editing — stub the edit as "re-colorize per DNA" OR skip actual source read?
-   - **aso-screenshots** — input `{targetLangs, screenCount}`. Uses `copy-templates` + `i18n`. `targetLangs: CopyLang[]` — limit to copy-templates-supported langs OR full LanguageCode[]?
-   - **Factory pattern** — same `createXxxRun(resolveDeps)` as artwork-batch? (Session #11 locked — just confirm no exceptions.)
-   - **Replay class** — all 3 Phase 3 workflows use Mock = deterministic? Matches artwork-batch Q7.
-   - **Event emissions** — beyond `started/concept_generated/image_generated/error/complete/aborted`, any workflow needs extras? (e.g., `style_applied`, `layout_generated`.)
-   - **Concept.seed** — all 3 must stamp `Concept.seed` via `deriveSeed(batchSeed, salt)` per Session #11 Q5. Confirm.
-   - **Abort semantics** — each run.ts owns its own `aborted` emission per Session #10 D2. Confirm pattern is reusable across 3 new workflows.
-4. After alignment, implement Step 7 per plan. Est 3-4h (3 workflows × ~4 files each + unit tests).
-5. Register all 3 in `src/workflows/index.ts` `ALL_WORKFLOWS`. Update `inputSchema`-banned-keys sweep test to cover all 4.
-6. `modelsByProvider("mock")` has only 1 model (`mock-fast`). All 3 workflows should be marked compatible with it in `compatibilityOverrides` so Phase 3 E2E works without Phase 4 providers.
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 342/342.
+2. Read `BOOTSTRAP-PHASE3.md` Step 8 section (client Workflow page + Gallery + SSE wire).
+3. Scope decisions for bro before coding:
+   - **Form-builder strategy** — 4 workflows' input schemas are Zod objects. Pick ONE: (a) hand-crafted sidecar descriptor per workflow (highest control, duplicated); (b) runtime Zod `._def` inspection (no dep, fragile across Zod versions); (c) add `zod-to-json-schema` npm dep + generic renderer. Rec (c).
+   - **SSE client transport** — native `EventSource` (simpler, auto-reconnect but we don't want it) vs `fetch` + ReadableStream (manual framing). Rec `fetch` — lets us hard-disable reconnect and abort cleanly via `AbortController` mirrored to the server-side DELETE `/runs/:batchId`.
+   - **style-transform source picker UI** — dropdown from profile's `screenshotAssetIds[]` OR "click to upload new" inline affordance? Rec dropdown MVP + "manage assets" deep-link to a profile-asset manager page (Phase 5 scope).
+   - **ASO targetLangs multi-select** — checkbox group (3 max, enforce client-side) OR chip-picker w/ `th` greyed out and tooltip "not supported by this model"? Rec chip-picker; read `provider.supportedLanguages` from `GET /api/providers/compatibility` to grey out.
+   - **Gallery filter/sort** — default sort `createdAt DESC`; filter chips per workflow (color-coded per PLAN §9.1: violet/blue/pink/emerald); tag filter from asset.tags?
+   - **Cancel UX** — in-flight batch progress shows "Cancel" button → DELETE /runs. Post-cancel SSE stream ends with `aborted` event; client dismisses spinner. Confirm pattern.
+4. Implement Step 8. Est 4-5h (4 forms + SSE client + gallery + cancel wire).
+5. After Step 8 ships, Step 9 is DTO audit + full integration tests across all 4 workflows.
+
+**Pre-Step-8 quick sanity checks:**
+- Run `node -e "fetch('http://localhost:3000/api/workflows').then(r=>r.json()).then(j=>console.log(j.workflows.map(w=>w.id)))"` → should print all 4 ids.
+- Verify `GET /api/providers/compatibility` shows `style-transform × vertex:imagen-4.0-generate-001 → incompatible` (key integration proof).
+- Run one mock batch E2E: `curl -N -X POST http://localhost:3000/api/workflows/ad-production/run -d '{"profileId":"...","providerId":"mock","modelId":"mock-fast","aspectRatio":"1:1","input":{"featureFocus":"restore","conceptCount":2,"variantsPerConcept":1,"seed":42}}'` — should stream started → 2×(concept_generated + image_generated) → complete SSE frames.
 
 ## Completed in Session #13 (Phase 3 Step 5 — profiles + templates + providers routes)
 

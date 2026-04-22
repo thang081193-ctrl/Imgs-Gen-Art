@@ -39,7 +39,7 @@ function coerceQuery(c: { req: { query: (key: string) => string | undefined } })
   // want just the keys the schema cares about. Use the single-arg getter so
   // Zod sees a clean record even for optional fields.
   const out: Record<string, string> = {}
-  for (const k of ["profileId", "workflowId", "limit", "offset"]) {
+  for (const k of ["profileId", "workflowId", "batchId", "limit", "offset"]) {
     const v = c.req.query(k)
     if (v !== undefined) out[k] = v
   }
@@ -64,6 +64,7 @@ export function createAssetsRoute(): Hono {
       offset: q.offset,
       ...(q.profileId ? { profileId: q.profileId } : {}),
       ...(q.workflowId ? { workflowId: q.workflowId } : {}),
+      ...(q.batchId ? { batchId: q.batchId } : {}),
     }
     const rows = repo.list(filter)
     const assets = rows.map(toAssetDto)

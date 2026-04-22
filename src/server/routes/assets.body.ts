@@ -9,6 +9,7 @@ import { z } from "zod"
 export const AssetListQuerySchema = z.object({
   profileId: z.string().min(1).optional(),
   workflowId: z.string().min(1).optional(),
+  batchId: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(500).default(50),
   offset: z.coerce.number().int().nonnegative().default(0),
 })
