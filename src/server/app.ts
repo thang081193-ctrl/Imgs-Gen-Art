@@ -6,10 +6,18 @@ import { Hono } from "hono"
 import { dtoFilter } from "./middleware/dto-filter"
 import { errorHandler } from "./middleware/error-handler"
 import { requestLogger } from "./middleware/logger"
+import { createAssetsRoute } from "./routes/assets"
 import { createDebugRoute } from "./routes/debug"
 import { createHealthRoute } from "./routes/health"
+import { createKeysRoute } from "./routes/keys"
+import {
+  createProfileAssetsRoute,
+  createProfileUploadAssetRoute,
+} from "./routes/profile-assets"
+import { createProfilesRoute } from "./routes/profiles"
 import { createProvidersRoute } from "./routes/providers"
 import { createStubsRoute } from "./routes/stubs"
+import { createTemplatesRoute } from "./routes/templates"
 import { createWorkflowRunsRoute } from "./routes/workflow-runs"
 import { createWorkflowsRoute } from "./routes/workflows"
 
@@ -27,6 +35,14 @@ export function createApp(config: AppConfig): Hono {
 
   app.route("/api/health", createHealthRoute(config.version))
   app.route("/api/providers", createProvidersRoute())
+  // Upload-asset subapp mounted FIRST so POST /:id/upload-asset registers
+  // before the main profiles subapp claims /:id/* catch-all shapes.
+  app.route("/api/profiles", createProfileUploadAssetRoute())
+  app.route("/api/profiles", createProfilesRoute())
+  app.route("/api/profile-assets", createProfileAssetsRoute())
+  app.route("/api/templates", createTemplatesRoute())
+  app.route("/api/keys", createKeysRoute())
+  app.route("/api/assets", createAssetsRoute())
   app.route("/api/debug", createDebugRoute())
   // Workflow-runs mounted FIRST under /api/workflows/runs so its DELETE
   // /:batchId wins over the broader /api/workflows/:id/run route below.

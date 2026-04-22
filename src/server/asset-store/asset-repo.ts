@@ -117,6 +117,10 @@ export function createAssetRepo(db: Database.Database) {
   const findByBatchStmt = db.prepare(
     `SELECT * FROM assets WHERE batch_id = ? ORDER BY created_at ASC`,
   )
+  const countByProfileStmt = db.prepare(
+    `SELECT COUNT(*) AS count FROM assets WHERE profile_id = ?`,
+  )
+  const deleteByIdStmt = db.prepare(`DELETE FROM assets WHERE id = ?`)
 
   return {
     insert(input: AssetInsertInput): AssetInternal {
@@ -163,6 +167,15 @@ export function createAssetRepo(db: Database.Database) {
 
     findByBatch(batchId: string): AssetInternal[] {
       return (findByBatchStmt.all(batchId) as AssetRow[]).map(rowToAsset)
+    },
+
+    countByProfile(profileId: string): number {
+      const row = countByProfileStmt.get(profileId) as { count: number }
+      return row.count
+    },
+
+    deleteById(id: string): boolean {
+      return deleteByIdStmt.run(id).changes > 0
     },
 
     list(filter: AssetListFilter): AssetInternal[] {

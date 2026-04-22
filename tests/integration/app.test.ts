@@ -60,24 +60,30 @@ describe("GET /api/providers", () => {
   })
 })
 
-describe("Stub routes — /api/{domain} returns 501 NOT_IMPLEMENTED", () => {
-  for (const domain of STUB_DOMAINS) {
-    it(`${domain}: GET /api/${domain} → 501`, async () => {
-      const res = await fetchApp(`/api/${domain}`)
-      expect(res.status).toBe(501)
-      const body = await res.json()
-      expect(body.code).toBe("NOT_IMPLEMENTED")
-      expect(body.message).toContain(`/api/${domain}`)
-    })
+// Phase 3 Step 6 shipped every domain — STUB_DOMAINS is now []. When future
+// phases register a new domain temporarily as a stub, these tests wake up
+// automatically via the parametrized loop below.
+describe.skipIf(STUB_DOMAINS.length === 0)(
+  "Stub routes — /api/{domain} returns 501 NOT_IMPLEMENTED",
+  () => {
+    for (const domain of STUB_DOMAINS) {
+      it(`${domain}: GET /api/${domain} → 501`, async () => {
+        const res = await fetchApp(`/api/${domain}`)
+        expect(res.status).toBe(501)
+        const body = await res.json()
+        expect(body.code).toBe("NOT_IMPLEMENTED")
+        expect(body.message).toContain(`/api/${domain}`)
+      })
 
-    it(`${domain}: POST /api/${domain}/some-id → 501`, async () => {
-      const res = await fetchApp(`/api/${domain}/abc`, { method: "POST" })
-      expect(res.status).toBe(501)
-      const body = await res.json()
-      expect(body.code).toBe("NOT_IMPLEMENTED")
-    })
-  }
-})
+      it(`${domain}: POST /api/${domain}/some-id → 501`, async () => {
+        const res = await fetchApp(`/api/${domain}/abc`, { method: "POST" })
+        expect(res.status).toBe(501)
+        const body = await res.json()
+        expect(body.code).toBe("NOT_IMPLEMENTED")
+      })
+    }
+  },
+)
 
 describe("Unknown routes", () => {
   it("GET /api/nonexistent → 404 (Hono default, not 501)", async () => {

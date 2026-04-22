@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-4 of 9 shipped, 216/216 regression green, HTTP layer live — `POST /api/workflows/:id/run` streams SSE + `DELETE /runs/:batchId` cancels, end-to-end Mock batch provable via curl)
-Last updated: 2026-04-22 (Session #12, Opus 4.7 — Step 4 workflows + workflow-runs routes, 4 scope decisions locked (Q1-Q4) + 2 bonus items, 11 new integration tests. Commit `ea9c9f7`.)
+Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-6 of 9 shipped, 297/297 regression green, full HTTP read+write surface live — profiles/templates/providers/keys/assets/profile-assets all real routes, STUB_DOMAINS empty, end-to-end Mock batch + multipart upload flow provable via curl)
+Last updated: 2026-04-22 (Session #14, Opus 4.7 — Step 6 keys + assets + profile-assets routes, 8 scope decisions locked + 2 bonus items (HealthCheckContext contract extension + test-env isolation), 54 new tests, slot-manager Q7 patch.)
 
 ## Phase 3 Summary
 
@@ -11,11 +11,150 @@ Last updated: 2026-04-22 (Session #12, Opus 4.7 — Step 4 workflows + workflow-
 | 2 | Workflow types + dispatcher core + abort registry + precondition | ✅ Session #10 — 5 files + 14 tests |
 | 3 | First workflow: `artwork-batch` (Mock) | ✅ Session #11 — 5 workflow files + 2 server updates + 23 tests |
 | 4 | `workflow-runs` route + SSE streaming + cancel | ✅ Session #12 — 3 route files + app.ts mount + 11 integration tests |
-| 5 | Profiles + templates + providers routes | ⏳ Session #13 entry point |
-| 6 | Keys + assets + profile-assets routes | ⏳ pending |
-| 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ pending |
+| 5 | Profiles + templates + providers routes | ✅ Session #13 — 4 route files + 2 repo helpers + 35 integration tests |
+| 6 | Keys + assets + profile-assets routes | ✅ Session #14 — 5 route files + multipart helper + profile-assets-repo + 54 tests |
+| 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ Session #15 entry point |
 | 8 | Client Workflow page + Gallery + SSE wire | ⏳ pending |
 | 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ pending |
+
+## Completed in Session #14 (Phase 3 Step 6 — keys + assets + profile-assets routes)
+
+### Scope decisions locked Session #14 (bro approved 8 questions + 2 bonus items)
+
+- **Q1 — Multipart 10MB central helper:** single `src/server/middleware/multipart.ts` exports `parseMultipartUpload(c, opts?)` returning `{ok:true,data} | {ok:false,response}`. All upload routes call it, emit identical 400/413/415 flat-shape errors. MAX_UPLOAD_BYTES = 10MB constant.
+- **Q2 — MIME allowlist:** explicit `["image/png", "image/jpeg", "image/webp"]`. Reject wildcard `image/*` (SVG = XSS risk via embedded scripts, GIF/BMP/TIFF = format/size problems). 415 shape: `{error:"UNSUPPORTED_MEDIA_TYPE", allowed:[], received}`. Vertex JSON upload overrides allowlist to `["application/json"]` — same helper, different opts.
+- **Q3 — Upload `kind` via form field (not query/part name):** multipart body has `name="kind"` value `"logo"|"badge"|"screenshot"`, `name="expectedVersion"` value number, `name="file"` binary. Zod enum at route layer. Mapping: logo → `appLogoAssetId`, badge → `storeBadgeAssetId`, screenshot → `push(screenshotAssetIds)`.
+- **Q4 — Upload mutation REQUIRES expectedVersion:** same optimistic-concurrency guard as PUT /profiles/:id. Order: parse multipart → Zod fields → tryLoadProfile → version check → file write → DB insert → profile save. Version check BEFORE file I/O so 409 leaves NO orphan. 409 body shape matches PUT: `{error:"VERSION_CONFLICT", message, currentVersion, expectedVersion}`.
+- **Q5 — `POST /assets/:id/replay` NOT registered** (Phase 5 scope). Unregistered route = Hono default 404 (honest semantics). Rejected 501-stub because stubs lie to RPC types + non-standard `Link:#phase-5` headers. assets.ts Step 6 registers 4 endpoints only: `GET /`, `GET /:id`, `GET /:id/file`, `DELETE /:id`.
+- **Q6 — `?include=` CSV from day 1:** `?include=replayPayload` today; `?include=replayPayload,tags` future-proof. Parser = `split(",").map(trim).filter(Boolean) → validate each via Zod enum`. Adding new options = extend enum, no API break.
+- **Q7 — DELETE active slot → activeSlotId = null:** set null + 200 with `{deleted, deactivated, warning}` so UI prompts explicit reactivation. Rejected auto-activate-next (unpredictable order, silent state change, security surprise). **REVERSED Session #3 behavior** — slot-manager.ts patched lines 87-94. Non-active delete → 204 empty.
+- **Q8 — POST /:id/test with optional `modelId` body:** default = `modelsByProvider(providerId)[0].id`. If explicit modelId provided, validate belongs to slot's provider (400 if not). Response includes full HealthStatus fields + slotId + modelId. Phase 3 Mock returns "ok"; gemini/vertex slots graceful-degrade to `status:"unknown"` with Phase 4 flag-comment (no route change when real providers arrive).
+- **Bonus A — `ImageProvider.health(modelId, context?)` extended:** added `HealthCheckContext` + `VertexServiceAccount` types in `@/core/providers/types`. Optional 2nd arg carries `{apiKey, serviceAccount, skipCache}` so key-test bypasses active-slot registry. Mock accepts + ignores. Phase 4 gemini/vertex impls use it. Backward-compatible — existing callers (workflow.run → provider.generate chain) unchanged.
+- **Bonus B — Test env isolation:** 3 env vars (`IMAGES_GEN_ART_KEYS_PATH`, `_VERTEX_DIR`, `_PROFILE_ASSETS_DIR`) gated by `process.env.X ?? defaultPath()` in store.ts + keys.ts + profile-assets.ts. Tests use `mkdtempSync(tmpdir())` scope so `data/keys.enc` / `/keys/` / `data/profile-assets/` never leak into real dirs. Pattern reusable for future dir-rooted state.
+
+### New infrastructure (2 files, 238 LOC)
+
+- `src/server/middleware/multipart.ts` (125) — `parseMultipartUpload(c, opts?)` via Web standard `FormData` (not Hono `parseBody`). Validates MIME + size, extracts fields record, returns `Uint8Array` + metadata. 3 flat-shape errors: 400 BAD_MULTIPART / 413 PAYLOAD_TOO_LARGE / 415 UNSUPPORTED_MEDIA_TYPE. `MAX_UPLOAD_BYTES` + `ALLOWED_UPLOAD_MIME` exported for test + per-route override.
+- `src/server/asset-store/profile-assets-repo.ts` (113) — `createProfileAssetsRepo(db)` factory. Methods: `insert/findById/listByProfile/delete`. Kind guard rejects invalid enum at insert time + drift check at row→internal map. Wired into `context.ts` singleton alongside asset/batch repos.
+
+### New route modules (5 files, 619 LOC)
+
+- `src/server/routes/keys.ts` (262) — 5 endpoints. `GET /` returns `{gemini:{activeSlotId,slots:KeySlotDto[]}, vertex:{...VertexSlotDto[]}}` (DTO strips keyEncrypted + serviceAccountPath). `POST /` dispatches by Content-Type: JSON → gemini key via GeminiCreateBodySchema, multipart → vertex SA file (writes to `keys/vertex-{slotId}.json`). `POST /:id/activate` flips activeSlotId. `DELETE /:id` Q7 tri-state (204 non-active / 200 active-with-warning / 404 unknown) + unlinks Vertex SA file. `POST /:id/test` Q8 wire (Mock → "ok", unregistered providers → "unknown"). 3-arg `findSlotAnywhere(store, slotId)` walks both trees since slot records don't carry providerId.
+- `src/server/routes/keys.body.ts` (31) — `GeminiCreateBodySchema` (`z.literal("gemini")` + label + key), `VertexFieldsSchema` (validates multipart fields record), `KeyTestBodySchema` (optional modelId, `passthrough()` for forward-compat).
+- `src/server/routes/assets.ts` (131) — 4 endpoints. `GET /` with `?profileId=&workflowId=&limit=&offset=` (z.coerce + defaults). `GET /:id?include=replayPayload` attaches `replayPayload:null` placeholder (Phase 5 gets real build). `GET /:id/file` streams bytes with mime derived from ext (png fallback). `DELETE /:id` unlinks file + repo row.
+- `src/server/routes/assets.body.ts` (24) — `AssetListQuerySchema` + `AssetIncludeOptionSchema` + `parseIncludeParam(raw)` CSV parser.
+- `src/server/routes/profile-assets.ts` (171) — TWO subapps exported: `createProfileAssetsRoute()` mounted at `/api/profile-assets` (GET /:id/file, DELETE /:id) + `createProfileUploadAssetRoute()` mounted at `/api/profiles` (POST /:id/upload-asset multipart). Upload step order: parse → validate kind+expectedVersion → load profile → version check → file write → DB insert → mutate profile + save. `applyKindToProfile` per-kind mutation. Dual-mount at `/api/profiles` in app.ts (upload subapp BEFORE main profiles subapp for registration specificity).
+
+### Supporting edits (7 files)
+
+- `src/core/providers/types.ts` — `+HealthCheckContext` + `+VertexServiceAccount` interfaces; `ImageProvider.health(modelId, context?)` signature extended. Index sig on VertexServiceAccount round-trips GCP JSON extras.
+- `src/server/providers/mock.ts` — `health(modelId, context?)` accepts + ignores context; returns fixed `status:"ok", message:"Mock provider — always healthy"`.
+- `src/server/keys/slot-manager.ts` — **Q7 patch:** `removeSlot` lines 87-94: `activeSlotId === slotId ? null : activeSlotId` (reversed Session #3 `slots[0]?.id ?? null` fallback). Comment flags the policy reversal.
+- `src/server/keys/store.ts` — `getDefaultKeysPath()` lazy + env-override via `IMAGES_GEN_ART_KEYS_PATH`. `loadStoredKeys`/`saveStoredKeys` dropped default-param, use getter instead (production default unchanged).
+- `src/server/asset-store/asset-repo.ts` — `+deleteById(id)` (counter to `countByProfile` added Step 5). Both use `.run().changes > 0` boolean semantics.
+- `src/server/asset-store/context.ts` — wire `_profileAssetsRepo` singleton; `getProfileAssetsRepo()` getter + reset cleanup.
+- `src/server/app.ts` — mount order: upload subapp `/api/profiles` FIRST (for `POST /:id/upload-asset` specificity), main profiles subapp second, profile-assets at `/api/profile-assets`, keys, assets in sequence. STUB_DOMAINS trimmed to empty.
+
+### Tests added (5 files, 800 LOC, 56 cases)
+
+- `tests/unit/slot-manager.test.ts` (91, 7 cases) — pinned Q7 semantics BEFORE slot-manager patch. Cases: add auto-activate + idempotence, removeSlot non-active / active-sets-null / only-slot-null / unknown-no-op / vertex-parity.
+- `tests/unit/profile-assets-repo.test.ts` (131, 8 cases) — round-trip insert/find/list/delete; kind guard rejects; caller-supplied uploadedAt honored.
+- `tests/integration/keys-routes.test.ts` (288, 16 cases) — GET stripped DTOs × 2; POST gemini JSON × 3; activate × 2; DELETE Q7 × 3; test-endpoint × 3; Vertex multipart × 3 (write + 415 reject + active-delete file unlink).
+- `tests/integration/assets-routes.test.ts` (216, 14 cases) — list + filter + 400; detail + ?include + 400-unknown-include; file stream + 404 orphan; delete + 404; replay-not-registered → 404 (Q5 proof).
+- `tests/integration/profile-assets-routes.test.ts` (294, 11 cases) — upload logo/screenshot happy × 2; guards × 4 (version / missing profile / 415 / bad kind); GET file × 2; DELETE × 2; round-trip binary equality.
+
+### QA gate result (Session #14 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 105 src files, 0 violations
+         largest: keys.ts 262 LOC (under 300 hard cap, over 250 soft — acceptable)
+test: 297/297 pass (29 files) — 2.55s
+  prior:   247 (Session #13 baseline)
+  removed:  -6 (3 profile-assets/assets/keys stub domains × 2 tests each)
+  new:     +56 (7 slot-manager + 8 profile-assets-repo + 16 keys-routes
+               + 14 assets-routes + 11 profile-assets-routes)
+  net:     +50
+```
+
+### Deviations from plan
+
+- **Vertex slot add — placeholder path workaround.** slot-manager.addVertexSlot assigns slotId internally, but the SA file path `keys/vertex-{slotId}.json` needs the ID up-front. Current impl creates slot with `vertexFilePath("pending")`, then rewrites `serviceAccountPath` in the returned store via spread before save. Ugly but functional. Cleanup: refactor slot-manager to accept caller-supplied id OR split id generation from slot creation. Deferred (not blocking Step 7).
+- **`describe.skipIf` guards empty STUB_DOMAINS loop** — `tests/integration/app.test.ts` iterates STUB_DOMAINS in a for-loop inside a describe block; when array is empty vitest errors "No test found in suite". Guard = `describe.skipIf(STUB_DOMAINS.length === 0)(...)`. Future phases adding stubs reactivate the suite automatically.
+- **Orphan file risk between multipart file-write + DB insert** — if process crashes between writeFileSync + getProfileAssetsRepo().insert, file stays, no row. Phase 5 `scripts/sweep-orphan-profile-assets.ts` reconciles.
+- **Atomic profile JSON save** — saveProfile uses `writeFileSync` (no tmp+rename). Pre-existing Session #6 choice; not widened here. store.ts (keys) uses atomic tmp+rename. Inconsistent; revisit when profile CRUD hits concurrent-write scenarios.
+- **Keys test endpoint Phase 3 degrade** — unregistered providers (gemini/vertex today) return `status:"unknown"`. Integration test asserts this; when Phase 4 registers real providers, status flips to "ok"/actual. Test flexible enough to survive either.
+
+### Known pending items (for Session #15)
+
+1. **`toAssetDetailDto` full shape** — `GET /assets/:id?include=replayPayload` returns `replayPayload: null` placeholder. Phase 5 lands the real build: parse stored replayPayload JSON + pair with FROZEN ProfileDto snapshot (needs `freezeProfileForReplay` at asset-write time — which currently doesn't embed profileSnapshot). Tracked in `src/server/asset-store/dto-mapper.ts:4` comment.
+2. **AppProfileSchema.version still z.literal(1)** — PUT /profiles + upload-asset both run expectedVersion check but save() can't bump (literal blocks). Schema v2 migration widens to number + sets initial bump point. Until then, expectedVersion is always 1 → always passes. Defensive nonetheless (rejects fabricated higher values).
+3. **Profile-asset DELETE leaves dangling reference** — removing a profile-asset via `DELETE /api/profile-assets/:id` does NOT back-update profile.assets.appLogoAssetId etc. GET /profile-assets/:id/file → 404; profile still points to dead id. Phase 5 UI cleanup job OR add automatic profile mutation on DELETE (needs expectedVersion too).
+4. **Size-cap 413 not integration-tested** — unit-testable against the helper with small `maxBytes` override; skipped here because vitest >10MB Blob generation is slow + noisy. Single helper test can be added if contract tightens.
+5. **`inputSchema` in GET /workflows STILL omitted** — Session #12 deferral carried forward. Step 7 adds 3 workflows' input schemas but GET response shape unchanged. Step 8 client form-builder decides serialization strategy.
+
+## Next Session (#15) kickoff — Phase 3 Step 7
+
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 297/297.
+2. Read `BOOTSTRAP-PHASE3.md` Step 7 section (lines 231-251).
+3. Scope decisions for bro before coding (3 workflows, ~5-6 questions each):
+   - **ad-production** — input `{layoutId, targetCountry, productDescription}`. Template consumption = `ad-layouts` + `country-profiles`. Emits per-layout ad-variant assets. Concept-shape equivalent — is a "concept" a (layout, copy variant) pair? How many assets per run?
+   - **style-transform** — input `{styleKey, sourceImageAssetId, variantsPerStyle}`. Uses `style-dna` + `artwork-groups`. sourceImageAssetId references WHAT — profile-asset OR workflow-generated asset? Phase 3 Mock has no image editing — stub the edit as "re-colorize per DNA" OR skip actual source read?
+   - **aso-screenshots** — input `{targetLangs, screenCount}`. Uses `copy-templates` + `i18n`. `targetLangs: CopyLang[]` — limit to copy-templates-supported langs OR full LanguageCode[]?
+   - **Factory pattern** — same `createXxxRun(resolveDeps)` as artwork-batch? (Session #11 locked — just confirm no exceptions.)
+   - **Replay class** — all 3 Phase 3 workflows use Mock = deterministic? Matches artwork-batch Q7.
+   - **Event emissions** — beyond `started/concept_generated/image_generated/error/complete/aborted`, any workflow needs extras? (e.g., `style_applied`, `layout_generated`.)
+   - **Concept.seed** — all 3 must stamp `Concept.seed` via `deriveSeed(batchSeed, salt)` per Session #11 Q5. Confirm.
+   - **Abort semantics** — each run.ts owns its own `aborted` emission per Session #10 D2. Confirm pattern is reusable across 3 new workflows.
+4. After alignment, implement Step 7 per plan. Est 3-4h (3 workflows × ~4 files each + unit tests).
+5. Register all 3 in `src/workflows/index.ts` `ALL_WORKFLOWS`. Update `inputSchema`-banned-keys sweep test to cover all 4.
+6. `modelsByProvider("mock")` has only 1 model (`mock-fast`). All 3 workflows should be marked compatible with it in `compatibilityOverrides` so Phase 3 E2E works without Phase 4 providers.
+
+## Completed in Session #13 (Phase 3 Step 5 — profiles + templates + providers routes)
+
+### Scope decisions locked Session #13 (bro approved 5 questions + 1 bonus)
+
+- **Q1 — Version conflict 409 flat shape:** `{error:"VERSION_CONFLICT", message, currentVersion, expectedVersion}` (NOT nested under `details`). Matches Step 4 DELETE /runs precedent `{error, currentStatus}`. Field name `error` (not `code`) per PLAN §6.4 convention. Naming `expectedVersion` (not `attemptedVersion`) round-trips with request body field.
+- **Q2 — DELETE profile hard-unlink + asset-count guard:** 409 `PROFILE_HAS_ASSETS` when `assetRepo.countByProfile(id) > 0`. Response includes `assetCount` so UI can prompt "this profile has 42 assets — delete them first". No soft-delete / recoverable trash. Added `countByProfile(profileId: string): number` to asset-repo.
+- **Q3 — upload-asset NOT registered in Step 5:** Hono default 404 for unregistered routes (honest semantics). Rejected 501-stub because it lies to type system + non-standard header. Step 6 ships the real upload under profile-assets module.
+- **Q4 — /providers/health 4 modes:** (none)→full matrix, `?provider=X`→single-provider subtree, `?provider=X&model=Y`→flat HealthStatus, `?model=Y` alone→400 `MODEL_REQUIRES_PROVIDER` (model IDs not globally unique across providers). Bonus 404s: `PROVIDER_NOT_FOUND` (no matches), `MODEL_NOT_FOUND` (provider exists, model doesn't).
+- **Q5 — Templates read-only via Hono default 405/404:** only GET registered per template path. Non-GET methods fall through to Hono's default (empirically 404 for unmatched method). Paranoid test asserts 4xx + non-5xx so status flexibility survives any Hono internal change.
+- **Bonus — typed `Hono<{Variables:{validatedBody:XxxBody}}>` reused** on profiles POST/PUT. First time body schemas reuse `AppProfileSchema.omit().extend().partial()` to keep storage schema as single source of truth.
+
+### New route modules (4 files, 359 LOC)
+
+- `src/server/routes/profiles.ts` (186) — 7 endpoints: `GET /` list → ProfileSummaryDto[]; `GET /:id` → ProfileDto; `POST /import` static path BEFORE `:id` routes; `GET /:id` + `GET /:id/export` (Content-Disposition attachment); `POST /` create with slugified id fallback via `shortId("profile", 8)`; `PUT /:id` version-guard + 409 flat; `DELETE /:id` asset-count guard + 409/404. `buildCreated` + `mergeUpdate` spread-only helpers keep version immutable. NOT registered: `POST /:id/upload-asset` (Step 6 owns it).
+- `src/server/routes/profiles.body.ts` (35) — `ProfileCreateBodySchema` (= AppProfileSchema.omit({version,id,createdAt,updatedAt}) + optional id), `ProfileUpdateBodySchema` (= partial() + expectedVersion), `ProfileImportBodySchema` (= AppProfileSchema full).
+- `src/server/routes/templates.ts` (38) — 6 GETs: `/artwork-groups`, `/ad-layouts`, `/country-profiles`, `/style-dna`, `/i18n`, `/copy` (URL-tidy vs file `copy-templates.json`). Only GET registered; Hono handles method-mismatch.
+- `src/server/routes/providers.ts` (107, was 27) — extended with `/compatibility` (real `resolveCompatibility(ALL_WORKFLOWS, ALL_MODELS)` matrix) + `/health` (Q4 4-modes with Zod-esque query guard). `stubHealth()` per (provider, model) returns `{status:"ok", message:"stub..."}`.
+
+### Supporting edits
+
+- `src/server/profile-repo/enumerator.ts` (NEW 27) — `listProfiles(dir?)` reads dir + Zod-validates each; `deleteProfile(id, dir?)` unlinks + returns bool. Re-exported via index.ts barrel.
+- `src/server/asset-store/asset-repo.ts` — `+countByProfile(profileId): number` prepared stmt.
+- `src/server/app.ts` — mount `/api/profiles` + `/api/templates` before stubs.
+- `src/server/routes/stubs.ts` — STUB_DOMAINS → `[assets, keys, profile-assets]` (3 left from 5).
+
+### Tests added (3 files, 35 cases)
+
+- `tests/integration/profiles-routes.test.ts` (363, 19 cases) — list + 3 seeded assertions; detail happy + 404; POST create/slugify/duplicate/partial × 4; PUT happy + 409 flat + 404 × 3; DELETE happy + 404 + 409 assets × 3; export Content-Disposition × 2; import round-trip + duplicate + malformed × 3. `TEST_PREFIX = "zz-test-{pid}-{ts}-"` for cross-file isolation.
+- `tests/integration/templates-routes.test.ts` (72, 9 cases) — parametrized happy path × 6 (asserts schemaVersion:1 + top-level key); POST/DELETE 4xx × 2; unknown template → 404 × 1.
+- `tests/integration/providers-routes.test.ts` (97, 7 cases) — compatibility matrix assert; health × 6 (no-filter, provider-only, both, model-alone 400, unknown-provider 404, unknown-model 404).
+
+### QA gate (Session #13 final)
+
+```
+test: 247/247 pass (24 files) — 2.37s
+  prior:   216; removed: -4 (profiles+templates stub tests); new: +35; net: +31
+check-loc: 98 src files, 0 violations
+```
+
+### Deviations
+
+- **PUT /profiles version bump blocked by schema v1 literal** — expectedVersion guard runs but save can't bump. Noted in code comment; schema v2 migration resolves. Tests assert 409 with currentVersion:1 + expectedVersion:99 (fabricated) to prove the guard.
+- **POST /import creates at stored version** — body carries version literal(1) + preserves createdAt/updatedAt via `{touchUpdatedAt: false}`.
 
 ## Completed in Session #12 (Phase 3 Step 4 — workflows + workflow-runs routes)
 
@@ -77,19 +216,6 @@ extract:all runtime: unchanged
 2. **Client-disconnect mid-flight cleanup** — if the client aborts while mocks are generating, workflow.run's try/finally in `run.ts` doesn't update `batch.status` on non-signal-aware interruption (e.g., writeSSE throws when reader closes). Current workaround: workflow authors are responsible for graceful cleanup per Session #10 D2. Step 7 workflows (ad-production/style-transform/aso-screenshots) must replicate artwork-batch's pattern; `CONTRIBUTING.md`-style guidance atop each run.ts is the reminder. If pattern becomes tedious, consider wrapping `dispatch()` with a generic "post-stream status stamp" helper in Step 7 scope.
 3. **`data/assets/` grows on repeat integration-test runs** — `afterEach` cleans `chartlens` dir, but any test using a different profileId would leak. Keep the `ASSET_CLEANUP_DIR` pattern consistent when Step 6 lands profile-assets tests.
 4. **Resume endpoint lives under workflow-runs** — `ALL /:batchId/resume` returns 501 with `Resume: not-supported` header. Plan §6.4 is clear "no resume v1"; endpoint exists only for graceful client rejection. Can remove if Step 8 client never asks.
-
-## Next Session (#13) kickoff — Phase 3 Step 5
-
-1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 216/216.
-2. Read `BOOTSTRAP-PHASE3.md` Step 5 section (lines 159-189).
-3. Scope decisions for bro before coding:
-   - **Profile version conflict** — `PUT /api/profiles/:id` with stale `expectedVersion` → `VersionConflictError` (409). Response body: `{ code, message, details: { currentVersion, attemptedVersion } }` OK, or need richer diff?
-   - **Profile delete semantics** — hard unlink `data/profiles/{id}.json` or soft-delete with a `deleted: true` field? PLAN §7.1 says hard; confirm vs "recoverable trash" UX.
-   - **Profile upload-asset stub** — plan says `POST /api/profiles/:id/upload-asset` "defer to Step 6". Ship as 501 stub inside profiles.ts, or wait for Step 6 and leave 404 fall-through?
-   - **Provider health in Phase 3** — plan says return stubbed `{ status: "unknown" }` for non-mock. Mock returns real health (already implemented). `?provider=` + `?model=` filters — support both, or only one with composition client-side?
-   - **Templates read-only** — plan says 404 on POST/PUT/DELETE. Inline per-handler or use a `route.all("*", ...)` catch?
-4. After alignment, implement Step 5 per plan. Est 3-4h.
-5. Route typing pattern: reuse `Hono<{Variables:{validatedBody: XxxBody}}>` for any `validateBody` consumer (profiles POST/PUT).
 
 ---
 

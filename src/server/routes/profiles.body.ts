@@ -1,0 +1,35 @@
+// BOOTSTRAP-PHASE3 Step 5 — body schemas for /api/profiles.
+//
+// Colocated per patterns.md Session #2 (.body.ts sibling). Reuses
+// AppProfileSchema's field shapes via .omit()/.extend()/.partial() so the
+// storage schema stays the single source of truth (Rule 14): any AppProfile
+// v2 migration propagates here automatically.
+//
+// Create body: AppProfile minus {version, id, createdAt, updatedAt}; id
+// optional (server slugifies from name if absent). Update body: same shape
+// but top-level .partial() + required expectedVersion for optimistic
+// concurrency. Import body: full AppProfile shape (round-trip from export).
+
+import { z } from "zod"
+import { AppProfileSchema } from "@/core/schemas/app-profile"
+
+const ProfileWritableSchema = AppProfileSchema.omit({
+  version: true,
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+})
+
+export const ProfileCreateBodySchema = ProfileWritableSchema.extend({
+  id: z.string().min(1).optional(),
+})
+
+export const ProfileUpdateBodySchema = ProfileWritableSchema.partial().extend({
+  expectedVersion: z.number().int().nonnegative(),
+})
+
+export const ProfileImportBodySchema = AppProfileSchema
+
+export type ProfileCreateBody = z.infer<typeof ProfileCreateBodySchema>
+export type ProfileUpdateBody = z.infer<typeof ProfileUpdateBodySchema>
+export type ProfileImportBody = z.infer<typeof ProfileImportBodySchema>

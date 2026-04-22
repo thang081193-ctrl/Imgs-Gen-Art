@@ -82,14 +82,18 @@ export function activateSlot(store: StoredKeys, provider: ProviderId, slotId: st
 }
 
 export function removeSlot(store: StoredKeys, provider: ProviderId, slotId: string): StoredKeys {
+  // Q7 (Session #14): deleting the active slot sets activeSlotId = null —
+  // no auto-activate-next. Reasons: predictable state, no silent cascade,
+  // caller (UI) surfaces a banner prompting explicit activation. This
+  // reverses the Session #3 "fall back to slots[0]" behavior.
   if (provider === "gemini") {
     const slots = store.gemini.slots.filter((s) => s.id !== slotId)
     const activeSlotId =
-      store.gemini.activeSlotId === slotId ? (slots[0]?.id ?? null) : store.gemini.activeSlotId
+      store.gemini.activeSlotId === slotId ? null : store.gemini.activeSlotId
     return { ...store, gemini: { activeSlotId, slots } }
   }
   const slots = store.vertex.slots.filter((s) => s.id !== slotId)
   const activeSlotId =
-    store.vertex.activeSlotId === slotId ? (slots[0]?.id ?? null) : store.vertex.activeSlotId
+    store.vertex.activeSlotId === slotId ? null : store.vertex.activeSlotId
   return { ...store, vertex: { activeSlotId, slots } }
 }

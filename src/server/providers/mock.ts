@@ -5,7 +5,13 @@
 import { createHash } from "node:crypto"
 import { modelsByProvider } from "@/core/model-registry/models"
 import { PROVIDER_IDS } from "@/core/model-registry/providers"
-import type { GenerateParams, GenerateResult, HealthStatus, ImageProvider } from "@/core/providers/types"
+import type {
+  GenerateParams,
+  GenerateResult,
+  HealthCheckContext,
+  HealthStatus,
+  ImageProvider,
+} from "@/core/providers/types"
 import { encodeSolidPng } from "./mock-png-encoder"
 
 const MOCK_IMAGE_SIZE = 1024
@@ -39,11 +45,15 @@ export const mockProvider: ImageProvider = {
   displayName: "Mock",
   supportedModels: modelsByProvider(PROVIDER_IDS.MOCK),
 
-  async health(_modelId: string): Promise<HealthStatus> {
+  async health(
+    _modelId: string,
+    _context?: HealthCheckContext,
+  ): Promise<HealthStatus> {
     return {
       status: "ok",
       latencyMs: 1,
       checkedAt: new Date().toISOString(),
+      message: "Mock provider — always healthy",
     }
   },
 

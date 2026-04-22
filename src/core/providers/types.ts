@@ -14,8 +14,43 @@ export interface ImageProvider {
   readonly displayName: string
   readonly supportedModels: ModelInfo[]
 
-  health(modelId: string): Promise<HealthStatus>
+  /**
+   * Check provider health for a specific model.
+   *
+   * Optional `context` enables end-to-end key verification via
+   * `POST /api/keys/:id/test` — caller passes decrypted credentials so the
+   * probe targets the slot-under-test instead of the provider's default
+   * (active-slot) credentials. When omitted, providers use whatever active
+   * credentials they were constructed with (ambient `GET /providers/health`).
+   *
+   * Phase 3 (Mock) ignores `context` and always returns "ok". Phase 4
+   * providers use `apiKey` (Gemini) / `serviceAccount` (Vertex) to
+   * authenticate without touching the active-slot registry.
+   */
+  health(modelId: string, context?: HealthCheckContext): Promise<HealthStatus>
   generate(params: GenerateParams): Promise<GenerateResult>
+}
+
+/**
+ * Parsed GCP service-account JSON for Vertex auth. Core fields are typed;
+ * extras (token_uri, cert URLs, etc.) round-trip via the index signature
+ * so provider impls don't lose anything when the upstream shape extends.
+ */
+export interface VertexServiceAccount {
+  type: string
+  project_id: string
+  client_email: string
+  private_key: string
+  [key: string]: unknown
+}
+
+export interface HealthCheckContext {
+  /** Plaintext Gemini API key — test a specific slot without activating it. */
+  apiKey?: string
+  /** Parsed Vertex service-account JSON. */
+  serviceAccount?: VertexServiceAccount
+  /** Bypass any provider-internal health-result cache (Phase 4+). */
+  skipCache?: boolean
 }
 
 export interface GenerateParams {

@@ -7,23 +7,33 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, resolve } from "node:path"
 import { EMPTY_STORE, StoredKeysSchema, type StoredKeys } from "./types"
 
-const DEFAULT_KEYS_PATH = resolve(process.cwd(), "data", "keys.enc")
-
-export function resolveDefaultKeysPath(): string {
-  return DEFAULT_KEYS_PATH
+// Default path is resolved lazily so tests can inject IMAGES_GEN_ART_KEYS_PATH
+// (via mkdtempSync) to isolate from a developer's real `data/keys.enc`.
+// Production code never sets the env var; default matches PLAN §4 layout.
+function getDefaultKeysPath(): string {
+  return (
+    process.env.IMAGES_GEN_ART_KEYS_PATH ??
+    resolve(process.cwd(), "data", "keys.enc")
+  )
 }
 
-export function loadStoredKeys(path: string = DEFAULT_KEYS_PATH): StoredKeys {
-  if (!existsSync(path)) return EMPTY_STORE
-  const raw = readFileSync(path, "utf8")
+export function resolveDefaultKeysPath(): string {
+  return getDefaultKeysPath()
+}
+
+export function loadStoredKeys(path?: string): StoredKeys {
+  const p = path ?? getDefaultKeysPath()
+  if (!existsSync(p)) return EMPTY_STORE
+  const raw = readFileSync(p, "utf8")
   const parsed: unknown = JSON.parse(raw)
   return StoredKeysSchema.parse(parsed)
 }
 
-export function saveStoredKeys(data: StoredKeys, path: string = DEFAULT_KEYS_PATH): void {
+export function saveStoredKeys(data: StoredKeys, path?: string): void {
+  const p = path ?? getDefaultKeysPath()
   StoredKeysSchema.parse(data) // fail before touching disk
-  mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
+  mkdirSync(dirname(p), { recursive: true })
+  const tmp = `${p}.tmp`
   writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8")
-  renameSync(tmp, path)
+  renameSync(tmp, p)
 }

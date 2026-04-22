@@ -1,18 +1,13 @@
-// Phase 1 stub routes — remaining domains that still respond 501 NOT_IMPLEMENTED.
-// Each will be replaced by a real route file when the corresponding phase
-// lands: profiles/assets/profile-assets = Phase 3 Steps 5-6, keys = Phase 4,
-// templates = Phase 2+5. workflows + workflow-runs shipped in Phase 3 Step 4.
+// Phase 1 stub routes — empty after Phase 3 Step 6. File kept so tests +
+// future domains still have a mount point; STUB_DOMAINS is now [] which
+// means `createStubsRoute()` is effectively a no-op Hono subapp. Leaving
+// the surface area intact makes re-enabling domains in later phases a
+// one-entry edit instead of a full restructure.
 
 import { Hono } from "hono"
 import { NotImplementedError } from "@/core/shared/errors"
 
-export const STUB_DOMAINS: readonly string[] = [
-  "profiles",
-  "assets",
-  "keys",
-  "templates",
-  "profile-assets",
-]
+export const STUB_DOMAINS: readonly string[] = []
 
 export function createStubsRoute(): Hono {
   const route = new Hono()
