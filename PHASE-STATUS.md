@@ -1,9 +1,22 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 1, Week 1 — Foundation — COMPLETE ✅**
-Last updated: 2026-04-21 (Session #7, Opus 4.7 — Step 6 + Step 7 complete, 120/120 tests + vite build + dev smoke green)
+Current phase: **Phase 2, Part 1 — `src/core/templates/` module + Zod schemas — COMPLETE ✅**
+Last updated: 2026-04-22 (Session #8, Opus 4.7 — templates module + 30 schema tests, 122/122 green. Extraction scripts deferred to Session #9.)
 
-## Summary
+## Phase 2 Summary
+
+| Step | Title | Status |
+|---|---|---|
+| 1 | Move Genart-{1,2,3}/ → vendor/ + .gitignore for data/templates/ negation | ✅ Session #8 — genart-3 moved cleanly; genart-1/2 **copied** (Windows file-lock, zombies remain at root, bro manual cleanup pending) |
+| 2 | Vendor source shape mapping (6 extraction targets) | ✅ Session #8 — Explore agent report, see Session #8 notes |
+| 3 | `src/core/templates/` module (types + 6 parsers + barrel) | ✅ Session #8 — 8 files, 582 LOC, all under 300 cap |
+| 4 | Layer 1 schema tests (`templates-schemas.test.ts`) | ✅ Session #8 — 30 tests, 18ms |
+| 5 | 3 extract scripts + orchestrator (AST parse via ts-morph) | ⏳ Session #9 |
+| 6 | Run `extract:all` → produce 6 data/templates/*.json | ⏳ Session #9 |
+| 7 | Layer 2 acceptance test + determinism test + (optional) Layer 3 snapshot | ⏳ Session #9 |
+| 8 | Commit data/templates/*.json + final regression + PHASE-STATUS update | ⏳ Session #9 |
+
+## Phase 1 Summary (for reference)
 
 | Step | Title | Status |
 |---|---|---|
@@ -14,6 +27,144 @@ Last updated: 2026-04-21 (Session #7, Opus 4.7 — Step 6 + Step 7 complete, 120
 | 5 | SQLite + Migrations + Profile Repo | ✅ Session #6 — QA gate green (92 tests pass) |
 | 6 | Hono Server Skeleton | ✅ Session #7 — QA gate green (120 tests pass, 13 files) |
 | 7 | Vite Client Skeleton | ✅ Session #7 — regression green, vite build green, dev smoke green |
+
+---
+
+## Completed in Session #8 (Phase 2 Part 1)
+
+### Decisions locked Session #8 (approved by bro)
+
+**D1 — Artwork-groups output shape (v2 decision):** camelCase merged Record
+`{ schemaVersion: 1, groups: { memory, cartoon, aiArt, festive, xmas, baby, avatar, allInOne } }`.
+DROP `sexyAnime` + `superSexy` (unchanged from v2.0). Keys in camelCase for JSON idiom consistency; source SCREAMING_SNAKE is Genart-1 hand-writing artifact.
+
+**D2 — Country-profiles merge direction:** preserved structure (B).
+`{ zones: {...}, countries: { VN: { name, zone: "SEA", defaultLang, langs } } }`. Rejects flat-merge (A) — zone duplication 16× bloats file, drift risk when editing zones. Phase 3 `resolveCountry(data, code): ResolvedCountryProfile` flattens at load time. Interface + implementation landed in Session #8 (pure 15-LOC fn, colocated in `country-profiles.ts` — deviates from bro's "interface-only in Phase 2" plan, flagged in commit message).
+
+**D3 — i18n / copy-templates lang divergence:** extract as-is.
+`I18nLangSchema` = 11 langs (en, vi, ja, ko, th, es, fr, id, pt, it, de). `CopyLangSchema` = 10 langs (subset minus `id`). Divergence is intentional from Genart-3; do NOT fabricate missing langs.
+
+**D4 — Extraction strategy (Session #9 scope):** AST parse via `ts-morph` (NOT dynamic import). Reasons: vendor code might break runtime imports (peer deps), fail-fast per Rule 12, no vendor code execution = safer + deterministic.
+
+**D5 — Determinism format:** sort object keys recursively + `JSON.stringify(x, null, 2)` + trailing newline. Enforced by a `determinism.test.ts` that hashes data/templates/ twice across consecutive `extract:all` runs (Session #9).
+
+**D6 — Extract script location:** flat under `scripts/extract-genart-{1,2,3}.ts` + `scripts/extract-all.ts` orchestrator.
+
+**D7 — Language enum locality:** don't churn canonical `LanguageCode` (src/core/model-registry/types.ts) to add `th` + `id`. Rule 14 stability wins — bumping canonical would force AppProfile v1 → v2 for unrelated reasons. Templates define their own local enums; Phase 3 may consolidate when workflow inputs cross both axes.
+
+### Files under `src/core/templates/` (8 files, 582 LOC)
+
+- `types.ts` (46) — shared Zod fragments only: `SchemaVersion1`, `I18nLangSchema` (11), `CopyLangSchema` (10), `FeatureFocusSchema` (7 values extracted from `FeatureFocus` TS enum in Genart-2). Rationale for language locality inlined.
+- `artwork-groups.ts` (85) — `ArtworkGroupsSchema` + `parseArtworkGroups`. Maps 10 vendor exports → 8 camelCase keys, DROPS sexyAnime + superSexy. Fail-fast guard: drop-target keys (SEXY_ANIME_GROUPS + SUPER_SEXY_GROUPS) must still exist in vendor source (else re-audit required — vendor silent removal would mean we stop dropping anything).
+- `ad-layouts.ts` (75) — `AdLayoutsSchema` + `parseAdLayouts`. Record<layoutId, LayoutConfig> with 28 entries expected. Invariant check: `layouts[k].id === k` (catches vendor manual edits breaking pairing).
+- `country-profiles.ts` (129) — `CountryProfilesSchema` + `parseCountryProfiles` + `ResolvedCountryProfile` interface + `resolveCountry(data, code)` flat-merge fn. Preserved-structure output (D2). Cross-reference check: every `country.zone` must exist as a `zones[]` key.
+- `style-dna.ts` (71) — `StyleDnaSchema` + `parseStyleDna`. Closed 3-key enum (ANIME/GHIBLI/PIXAR) — adding a style = schema bump. Preserves SCREAMING_SNAKE keys (enum-like constants, not data labels). Invariant: `styles[k].key === k`.
+- `i18n.ts` (59) — `I18nSchema` + `parseI18n`. Schema shape built programmatically from `I18nLangSchema.options` — adding a lang to types.ts auto-propagates.
+- `copy-templates.ts` (58) — `CopyTemplatesSchema` + `parseCopyTemplates`. Same programmatic auto-prop pattern as i18n. `.length(3)` on `h` + `s` arrays (vendor fixed-3 invariant).
+- `index.ts` (59) — barrel re-exports public surface.
+
+Parsers are PURE: `(raw: unknown) => ValidatedFile`, no file I/O. All I/O lives in extract scripts (Session #9).
+
+### Approach: colocated (A) vs centralized (B)
+
+bro's "Start order" line said types.ts holds "all 6 Zod schemas + shared types". bro's "Design defaults" item #2 said "each template file: Zod schema + parser function colocated, ~40-80 LOC each". These contradict; Session #8 chose A (colocated) because:
+- Self-contained modules per CONTRIBUTING single-responsibility
+- LOC distributed across files (avoids bloat)
+- Matches `country-profiles.ts` step-4 instruction ("parser + ResolvedCountryProfile + resolveCountry")
+
+types.ts kept only cross-cutting enums. Bro can revert to B in Session #9 if preferred, but the 30 tests would need re-routing.
+
+### New dependency
+
+- `ts-morph@28.0.0` (devDependency, pinned exact per hard rule) — installed in Session #8 for Session #9 AST-parse extraction. Did NOT audit-fix the 10 vulnerabilities flagged at install (2 low, 4 moderate, 3 high, 1 critical — all transitive through ts-morph or existing deps); Session #9 bro should decide whether to audit-fix-force.
+
+### Tests
+
+- `tests/unit/templates-schemas.test.ts` (30) — Layer 1, 18ms.
+  - `parseArtworkGroups` × 6 (valid+drop, drop-key audit guard, missing mapped, non-string, bad-input, Zod defense-in-depth).
+  - `parseAdLayouts` × 4 (valid+feature, id/key mismatch, missing export, bad-feature).
+  - `parseCountryProfiles + resolveCountry` × 7 (preserved-structure, cross-ref, lang rejection, flat-merge, unknown-code throw, empty-zones, compile-time type).
+  - `parseStyleDna` × 5 (valid, missing export, key/record mismatch, missing required style, extra style strict).
+  - `parseI18n` × 4 (all 11 langs incl th+id, missing lang, extra lang, partial entry).
+  - `parseCopyTemplates` × 4 (all 10 langs, `id` rejection, wrong-length, missing export).
+
+### QA gate result (Session #8 final)
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 68 src files, 0 violations (tests/ exempt by design)
+test: 122/122 pass (92 prior unit + 30 new + 0 integration — no integration changes)
+  Duration: 1.05s
+build: not re-run (no client changes since Session #7's clean build)
+```
+
+### Deviations from bro's plan
+
+1. **Session boundary numbering** — bro's D4 treats Session #8 as "pre-move" with Session #9 starting at "Move Genart → vendor/". Session #8 actually did the move already (genart-3 clean; genart-1/2 copied due to Windows file-lock). Session #9 starts at extract scripts, not the move.
+2. **resolveCountry fully implemented** (bro said interface-only Phase 2). 15-LOC pure fn, colocated, enables Layer 2 acceptance test. Bro can revert to interface-only if preferred — would simplify `country-profiles.ts` by ~25 LOC.
+3. **Approach A colocated schemas** (bro said "all 6 schemas in types.ts"). See "Approach" subsection above.
+
+### Known issues / pending items
+
+1. **Genart-1/2 zombie folders at project root** — `Genart-1/` and `Genart-2/` could not be renamed on Windows (Permission denied from bash, PowerShell `Move-Item`, and cmd `move` all failed; root cause unknown — likely VS Code / WebStorm / indexer holding folder handles without FILE_SHARE_DELETE). Content was **copied** to `vendor/genart-{1,2}/` and originals left at root. `.gitignore` lines 35-36 retained `/Genart-1/` + `/Genart-2/` for safety. Bro must close whatever process is holding them, then delete manually; remove the gitignore lines once gone.
+2. **ts-morph audit** — 10 vulnerabilities (1 critical) flagged at install. Session #9 should decide: `npm audit fix --force` vs ignore (likely dev-only transitives).
+3. **Integration tests unchanged** — no server changes this session, so 28 Step 6+7 integration tests untouched. Regression:full still 120/120 (92 unit + 28 integration) from Session #7; Session #8 regression shows 122 because test:unit includes the 30 new ones but not the 28 integration.
+4. **`data/templates/` directory empty, tracked by gitignore negation** — negation pattern verified with `git check-ignore`. Session #9 extract scripts will populate.
+
+---
+
+## Next Session (#9) kickoff checklist
+
+1. Read this file + `memory/MEMORY.md` + `memory/patterns.md` to recover state. Verify decisions **D1-D7** locked above.
+2. Verify baseline — `npm run regression:full` must be 122/122 green (plus 28 integration = 150), 0 TS errors, 0 lint/LOC violations.
+3. Verify ts-morph installed at 28.0.0 exact: `npm ls ts-morph`.
+4. Decide audit-fix policy for 10 vulnerabilities.
+5. (Optional, if bro closed IDE) Retry `mv Genart-1 vendor/genart-1` + `mv Genart-2 vendor/genart-2`, remove `/Genart-1/` + `/Genart-2/` from .gitignore.
+
+### Session #9 scope (Steps 5-8, est. 4-6h)
+
+**Step 5 — Extract scripts (~210 LOC, 4 files)**
+- `scripts/extract-genart-1.ts` (~40) — ts-morph reads `vendor/genart-1/types.ts`, extracts 10 `_GROUPS` array exports into `{ MEMORY_GROUPS: [...], ... }`, calls `parseArtworkGroups`, writes `data/templates/artwork-groups.json`.
+- `scripts/extract-genart-2.ts` (~40) — reads `vendor/genart-2/constants.ts`, extracts `LAYOUTS` Record, calls `parseAdLayouts`, writes `data/templates/ad-layouts.json`.
+- `scripts/extract-genart-3.ts` (~80) — reads `vendor/genart-3/constants.ts`, extracts `ZONE_BASE` + `COUNTRY_OVERRIDES` + `ART_STYLES` + `I18N` + `COPY_TEMPLATES`, calls 4 parsers, writes 4 JSON files.
+- `scripts/extract-all.ts` (~50) — orchestrator, supports `--dry-run` (prints plan without writing), enforces determinism (sorted keys, 2-space indent, trailing newline), invokes the 3 extractors in sequence.
+- Add to `package.json` scripts: `extract:all`, `extract:all:dry`, possibly per-target.
+
+**Step 6 — Run extract:all**
+- `npm run extract:all -- --dry-run` — preview.
+- `npm run extract:all` — write 6 real JSONs under `data/templates/`.
+- Commit the 6 JSON files as separate commit (Phase-2-data boundary).
+
+**Step 7 — Layer 2 acceptance test + determinism + Layer 3 snapshot (optional)**
+- `tests/extraction/full-extract.test.ts` (~80) — exec `extract:all`, assert 6 files exist + validate each against its loader schema + anchor-value checks:
+  - `country-profiles.json` has `countries.VN.name === "Vietnam"`
+  - `style-dna.json` has `styles.GHIBLI`
+  - `artwork-groups.json` does NOT have `sexyAnime` or `superSexy`
+  - `i18n.json` has 11 langs (incl `th` + `id`)
+  - `copy-templates.json` has 10 langs (no `id`)
+- `tests/extraction/determinism.test.ts` (~30) — run extract:all twice, hash `data/templates/` before + after, assert byte-identical.
+- (Optional) `tests/extraction/upstream-snapshot.test.ts` (~30) — SHA-256 of each extracted file committed, mismatch → warn "upstream vendor content drifted, re-verify extraction logic".
+
+**Step 8 — Finalize + update PHASE-STATUS**
+- Regression: 150+ tests green (Session #8's 122 + ~5 acceptance + 1 determinism + optional 6 snapshot).
+- Mark Phase 2 DONE in PHASE-STATUS.
+- Document deferred items:
+  - Phase 3: `src/server/templates/loader.ts` (file I/O + cache, couples with workflow runtime)
+  - Phase 3: `src/server/templates/cache.ts`
+  - Phase 3: workflow runners consume templates via loader
+
+### Session #9 open questions
+
+1. **Audit policy** for ts-morph transitives (10 vulns, 1 critical).
+2. **Layer 3 snapshot test** — include or skip? (Bro said "optional, recommend if budget allows".)
+3. **Extract script CLI shape** — support filtering (`--only=genart-3`)? Or always all-or-nothing?
+4. **package.json scripts naming** — `extract:all` + `extract:all:dry` + `extract:genart-1` etc., or cleaner?
+5. **Genart zombie cleanup** — if bro closed IDE, move succeeds → gitignore cleanup. Else leave as is.
+
+---
+
+
 
 ## Phase 1 Week 1 FINAL QA gate (Session #7)
 
