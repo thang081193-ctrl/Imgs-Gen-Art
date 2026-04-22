@@ -1,9 +1,9 @@
-// BOOTSTRAP-PHASE3 Step 3 — per-variant asset persistence for artwork-batch.
+// Session #15 — per-variant asset persistence for style-transform.
 //
-// Splits the DB / filesystem side-effects out of run.ts so the generator
-// loop stays readable and the LOC budget (<300) holds. Path layout per
-// Q3 decision: `data/assets/{profileId}/{YYYY-MM-DD}/{assetId}.png` —
-// avoids flat-exploding a single directory into 10k+ files.
+// Mirrors artwork-batch / ad-production asset-writers. Style-transform
+// records the source profile-asset + style key in both `inputParams` and
+// `replayPayload` so Phase 5 replay can re-run the transformation against
+// the same source file.
 
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
@@ -17,24 +17,26 @@ import { shortId } from "@/core/shared/id"
 import type { AssetInsertInput, AssetRepo } from "@/server/asset-store"
 import { toAssetDto } from "@/server/asset-store"
 
+import type { StyleConcept } from "./types"
+
 export const DEFAULT_ASSETS_DIR = resolve(process.cwd(), "data", "assets")
 
-export interface AssetWriteInput {
+export interface StyleAssetWriteInput {
   profile: AppProfile
   batchId: string
-  concept: { id: string; title: string; seed: number }
+  concept: StyleConcept
   prompt: string
   providerId: string
   model: ModelInfo
   aspectRatio: AspectRatio
   language: LanguageCode | undefined
-  tagGroup: string
   generateResult: GenerateResult
   assetsDir: string
   now: Date
+  variantIndex: number
 }
 
-function buildReplayPayload(input: AssetWriteInput): string {
+function buildReplayPayload(input: StyleAssetWriteInput): string {
   return JSON.stringify({
     version: 1,
     profileVersion: input.profile.version,
@@ -44,30 +46,33 @@ function buildReplayPayload(input: AssetWriteInput): string {
     seed: input.concept.seed,
     aspectRatio: input.aspectRatio,
     language: input.language ?? null,
+    sourceAssetId: input.concept.sourceAssetId,
+    styleDnaKey: input.concept.styleDnaKey,
+    serial: input.concept.serial,
+    variantIndex: input.variantIndex,
   })
 }
 
-function buildInputParams(input: AssetWriteInput): string {
+function buildInputParams(input: StyleAssetWriteInput): string {
   return JSON.stringify({
-    conceptTitle: input.concept.title,
-    tagGroup: input.tagGroup,
+    sourceAssetId: input.concept.sourceAssetId,
+    styleDnaKey: input.concept.styleDnaKey,
+    serial: input.concept.serial,
+    variantIndex: input.variantIndex,
   })
 }
 
-export function writeAssetAndInsert(
-  input: AssetWriteInput,
+export function writeStyleAsset(
+  input: StyleAssetWriteInput,
   assetRepo: AssetRepo,
 ): AssetDto {
   const assetId = shortId("ast", 10)
-  const datePart = input.now.toISOString().slice(0, 10)  // YYYY-MM-DD
+  const datePart = input.now.toISOString().slice(0, 10)
   const filePath = join(input.assetsDir, input.profile.id, datePart, `${assetId}.png`)
 
   mkdirSync(dirname(filePath), { recursive: true })
   writeFileSync(filePath, input.generateResult.imageBytes)
 
-  // Session #15 Q5 — classify via shared helper. Mock doesn't apply a
-  // watermark so we pass `addWatermark: false` explicitly; unset would
-  // collapse to "best_effort" (helper treats absence as ambiguous).
   const replayClass = computeReplayClass(input.model.capability, {
     seed: input.concept.seed,
     providerSpecificParams: { addWatermark: false },
@@ -77,7 +82,7 @@ export function writeAssetAndInsert(
     id: assetId,
     profileId: input.profile.id,
     profileVersionAtGen: input.profile.version,
-    workflowId: "artwork-batch",
+    workflowId: "style-transform",
     batchId: input.batchId,
     variantGroup: input.concept.title,
     promptRaw: input.prompt,
@@ -96,7 +101,7 @@ export function writeAssetAndInsert(
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
     costUsd: input.model.costPerImageUsd,
-    tags: [input.tagGroup],
+    tags: [input.concept.styleDnaKey, input.concept.sourceAssetId],
     createdAt: input.now.toISOString(),
   }
 

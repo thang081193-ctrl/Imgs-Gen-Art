@@ -1,9 +1,14 @@
-// BOOTSTRAP-PHASE3 Step 3 — per-variant asset persistence for artwork-batch.
+// Session #15 — per-variant asset persistence for ad-production.
 //
-// Splits the DB / filesystem side-effects out of run.ts so the generator
-// loop stays readable and the LOC budget (<300) holds. Path layout per
-// Q3 decision: `data/assets/{profileId}/{YYYY-MM-DD}/{assetId}.png` —
-// avoids flat-exploding a single directory into 10k+ files.
+// Mirrors artwork-batch/asset-writer.ts: file write → replay-class compute →
+// DB insert → AssetDto return. Diverges only in:
+//   - hardcoded workflowId: "ad-production"
+//   - buildInputParams shape (AdConcept-specific)
+//   - replayPayload includes layoutId/copyKey/featureFocus so Phase 5
+//     replay can reconstruct the full prompt from the same input triple
+//   - variantGroup keyed by concept.title which already encodes the
+//     (layoutId · copyKey) pair — no extra field needed
+//   - tags includes featureFocus + layoutId + copyKey for filter UI
 
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
@@ -17,24 +22,26 @@ import { shortId } from "@/core/shared/id"
 import type { AssetInsertInput, AssetRepo } from "@/server/asset-store"
 import { toAssetDto } from "@/server/asset-store"
 
+import type { AdConcept } from "./types"
+
 export const DEFAULT_ASSETS_DIR = resolve(process.cwd(), "data", "assets")
 
-export interface AssetWriteInput {
+export interface AdAssetWriteInput {
   profile: AppProfile
   batchId: string
-  concept: { id: string; title: string; seed: number }
+  concept: AdConcept
   prompt: string
   providerId: string
   model: ModelInfo
   aspectRatio: AspectRatio
   language: LanguageCode | undefined
-  tagGroup: string
   generateResult: GenerateResult
   assetsDir: string
   now: Date
+  variantIndex: number
 }
 
-function buildReplayPayload(input: AssetWriteInput): string {
+function buildReplayPayload(input: AdAssetWriteInput): string {
   return JSON.stringify({
     version: 1,
     profileVersion: input.profile.version,
@@ -44,30 +51,33 @@ function buildReplayPayload(input: AssetWriteInput): string {
     seed: input.concept.seed,
     aspectRatio: input.aspectRatio,
     language: input.language ?? null,
+    layoutId: input.concept.layoutId,
+    copyKey: input.concept.copyKey,
+    featureFocus: input.concept.featureFocus,
+    variantIndex: input.variantIndex,
   })
 }
 
-function buildInputParams(input: AssetWriteInput): string {
+function buildInputParams(input: AdAssetWriteInput): string {
   return JSON.stringify({
-    conceptTitle: input.concept.title,
-    tagGroup: input.tagGroup,
+    layoutId: input.concept.layoutId,
+    copyKey: input.concept.copyKey,
+    featureFocus: input.concept.featureFocus,
+    variantIndex: input.variantIndex,
   })
 }
 
-export function writeAssetAndInsert(
-  input: AssetWriteInput,
+export function writeAdAsset(
+  input: AdAssetWriteInput,
   assetRepo: AssetRepo,
 ): AssetDto {
   const assetId = shortId("ast", 10)
-  const datePart = input.now.toISOString().slice(0, 10)  // YYYY-MM-DD
+  const datePart = input.now.toISOString().slice(0, 10)
   const filePath = join(input.assetsDir, input.profile.id, datePart, `${assetId}.png`)
 
   mkdirSync(dirname(filePath), { recursive: true })
   writeFileSync(filePath, input.generateResult.imageBytes)
 
-  // Session #15 Q5 — classify via shared helper. Mock doesn't apply a
-  // watermark so we pass `addWatermark: false` explicitly; unset would
-  // collapse to "best_effort" (helper treats absence as ambiguous).
   const replayClass = computeReplayClass(input.model.capability, {
     seed: input.concept.seed,
     providerSpecificParams: { addWatermark: false },
@@ -77,7 +87,7 @@ export function writeAssetAndInsert(
     id: assetId,
     profileId: input.profile.id,
     profileVersionAtGen: input.profile.version,
-    workflowId: "artwork-batch",
+    workflowId: "ad-production",
     batchId: input.batchId,
     variantGroup: input.concept.title,
     promptRaw: input.prompt,
@@ -96,7 +106,7 @@ export function writeAssetAndInsert(
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
     costUsd: input.model.costPerImageUsd,
-    tags: [input.tagGroup],
+    tags: [input.concept.featureFocus, input.concept.layoutId, input.concept.copyKey],
     createdAt: input.now.toISOString(),
   }
 

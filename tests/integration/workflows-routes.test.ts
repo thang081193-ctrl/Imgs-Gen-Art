@@ -99,18 +99,24 @@ afterEach(() => {
 })
 
 describe("GET /api/workflows", () => {
-  it("returns list with artwork-batch metadata", async () => {
+  it("returns all 4 PLAN §9.1 workflows with metadata", async () => {
     const res = await fetchApp("/api/workflows")
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       workflows: { id: string; displayName: string; colorVariant: string }[]
     }
-    expect(body.workflows).toHaveLength(1)
-    expect(body.workflows[0]).toMatchObject({
-      id: "artwork-batch",
-      colorVariant: "violet",
-    })
-    expect(body.workflows[0]?.displayName).toBeTruthy()
+    expect(body.workflows).toHaveLength(4)
+
+    // PLAN §9.1 locked id → colorVariant pairing. Order is registration
+    // order, but we assert by id so a future reshuffle won't break this.
+    const byId = new Map(body.workflows.map((w) => [w.id, w]))
+    expect(byId.get("artwork-batch")).toMatchObject({ colorVariant: "violet" })
+    expect(byId.get("ad-production")).toMatchObject({ colorVariant: "blue" })
+    expect(byId.get("style-transform")).toMatchObject({ colorVariant: "pink" })
+    expect(byId.get("aso-screenshots")).toMatchObject({ colorVariant: "emerald" })
+    for (const w of body.workflows) {
+      expect(w.displayName).toBeTruthy()
+    }
   })
 })
 
