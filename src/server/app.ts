@@ -10,6 +10,8 @@ import { createDebugRoute } from "./routes/debug"
 import { createHealthRoute } from "./routes/health"
 import { createProvidersRoute } from "./routes/providers"
 import { createStubsRoute } from "./routes/stubs"
+import { createWorkflowRunsRoute } from "./routes/workflow-runs"
+import { createWorkflowsRoute } from "./routes/workflows"
 
 export interface AppConfig {
   version: string
@@ -26,6 +28,10 @@ export function createApp(config: AppConfig): Hono {
   app.route("/api/health", createHealthRoute(config.version))
   app.route("/api/providers", createProvidersRoute())
   app.route("/api/debug", createDebugRoute())
+  // Workflow-runs mounted FIRST under /api/workflows/runs so its DELETE
+  // /:batchId wins over the broader /api/workflows/:id/run route below.
+  app.route("/api/workflows/runs", createWorkflowRunsRoute())
+  app.route("/api/workflows", createWorkflowsRoute())
   app.route("/api", createStubsRoute())
 
   app.onError(errorHandler)
