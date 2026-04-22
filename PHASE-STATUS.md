@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-3 of 9 shipped, 209/209 regression green, artwork-batch workflow E2E via Mock provider — DB + filesystem + abort lifecycle proven)
-Last updated: 2026-04-22 (Session #11, Opus 4.7 — Step 3 artwork-batch workflow, 7 scope decisions locked (Q1-Q7), 23 new unit tests. Awaiting bro commit.)
+Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-4 of 9 shipped, 216/216 regression green, HTTP layer live — `POST /api/workflows/:id/run` streams SSE + `DELETE /runs/:batchId` cancels, end-to-end Mock batch provable via curl)
+Last updated: 2026-04-22 (Session #12, Opus 4.7 — Step 4 workflows + workflow-runs routes, 4 scope decisions locked (Q1-Q4) + 2 bonus items, 11 new integration tests. Commit `ea9c9f7`.)
 
 ## Phase 3 Summary
 
@@ -10,12 +10,88 @@ Last updated: 2026-04-22 (Session #11, Opus 4.7 — Step 3 artwork-batch workflo
 | 1 | Templates loader + cache (`src/server/templates/`) | ✅ Session #10 — 3 files + 9 tests |
 | 2 | Workflow types + dispatcher core + abort registry + precondition | ✅ Session #10 — 5 files + 14 tests |
 | 3 | First workflow: `artwork-batch` (Mock) | ✅ Session #11 — 5 workflow files + 2 server updates + 23 tests |
-| 4 | `workflow-runs` route + SSE streaming + cancel | ⏳ Session #12 entry point |
-| 5 | Profiles + templates + providers routes | ⏳ pending |
+| 4 | `workflow-runs` route + SSE streaming + cancel | ✅ Session #12 — 3 route files + app.ts mount + 11 integration tests |
+| 5 | Profiles + templates + providers routes | ⏳ Session #13 entry point |
 | 6 | Keys + assets + profile-assets routes | ⏳ pending |
 | 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ pending |
 | 8 | Client Workflow page + Gallery + SSE wire | ⏳ pending |
 | 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ pending |
+
+## Completed in Session #12 (Phase 3 Step 4 — workflows + workflow-runs routes)
+
+### Scope decisions locked Session #12 (bro approved 4 questions + 2 bonus items)
+
+- **Q1 — SSE framing:** pure `streamSSE` from `hono/streaming`. NO `Retry-After` (wrong semantic — batches don't have retry logic), NO custom event-id (resume explicitly not supported v1 per PLAN §6.4). Each frame = `{ event: workflowEvent.type, data: JSON.stringify(workflowEvent) }`. YAGNI — revisit Phase 4+ if needed.
+- **Q2 — Cancel endpoint tri-state:** `DELETE /api/workflows/runs/:batchId` returns **204** (running batch → abort succeeds, no body), **409** BATCH_NOT_RUNNING + `currentStatus` (finished batch), **404** BATCH_NOT_FOUND (unknown id). Distinguishes "already done" from "never existed" so UI can show the right message; 404-conflation was rejected.
+- **Q3 — Input validation split:** MIDDLEWARE `validateBody()` (shape check — required fields, correct types → 400) stays SEPARATE from dispatcher `checkPreconditions` (semantic — workflow exists, key active, compatibility → 400/401/404/409). Two concerns, two layers. Body schema colocated per patterns.md Session #2 convention: `workflows.body.ts` sibling.
+- **Q4 — Stub removal:** `workflows` + `workflow-runs` removed from `STUB_DOMAINS`. Remaining 5 stubs: `profiles`, `assets`, `keys`, `templates`, `profile-assets`. Mount paths — TWO separate route files: `/api/workflows` (GET list + POST /:id/run) and `/api/workflows/runs` (DELETE cancel + ALL resume→501).
+- **Bonus A — 3-layer abort wire:** `client disconnect → c.req.raw.signal → route's local AbortController → dispatcher → workflow.run's abortSignal → provider.generate abortSignal`. DELETE takes the same path via `abortBatch(batchId)` hitting the same registered controller.
+- **Bonus B — Abort smoke relaxed:** pre-aborted signal variant (not mid-flight) is the reliable probe for the wire — Mock provider's 20ms/gen × 4 concepts = 80ms total runtime races any `setTimeout`-based abort. Mid-flight graceful-cleanup of `batch.status` is deferred (workflow authors own their own abort-path `updateStatus` per Session #11 Q1; Step 7 workflows must follow the artwork-batch pattern).
+
+### New route module (3 files, 193 LOC)
+
+- `src/server/routes/workflows.ts` (114) — `GET /` returns `{ workflows: [{id, displayName, description, colorVariant, requirement, compatibilityOverrides}] }`. `POST /:id/run` wires `validateBody(WorkflowRunBodySchema)` → creates local `AbortController` + attaches `c.req.raw.signal` listener + defensive pre-aborted sync check → calls `dispatch()` with `{ controller }` dep → **pumps first event via `generator.next()` BEFORE `streamSSE`** so precondition errors bubble as real HTTP 400/401/404/409 (Hono's `streamSSE` flushes `text/event-stream + 200` headers the moment the handler returns — any error inside the callback is silently logged and closes an empty stream). On happy path, `streamSSE` iterates remaining events, writes each as `{event, data}` frames, removes listener in `try/finally`. Typed `Hono<{Variables:{validatedBody: WorkflowRunBody}}>` so `c.get` resolves the parsed body without runtime cast.
+- `src/server/routes/workflows.body.ts` (26) — `WorkflowRunBodySchema` (Zod): 5 required (`profileId`, `providerId`, `modelId`, `aspectRatio` via `AspectRatioSchema`, `input: z.unknown()`) + 1 optional (`language` via `LanguageCodeSchema`). `input: z.unknown()` because per-workflow shape is enforced downstream by precondition #8 (`workflow.inputSchema.parse`) — body layer only checks envelope keys.
+- `src/server/routes/workflow-runs.ts` (53) — `DELETE /:batchId`: `isBatchActive()` → `abortBatch()` → 204; else `batchRepo.findById()` → 409 with `currentStatus` OR 404. `ALL /:batchId/resume` → 501 + `Resume: not-supported` header (defensive stub for any client that asks).
+
+### Server-side supporting changes
+
+- `src/server/app.ts` — mount order locked: `/api/workflows/runs` BEFORE `/api/workflows` (though Hono dispatches by full path + method — `DELETE /runs/:batchId` vs `POST /:id/run` are disjoint by method anyway, but reg-order keeps specificity explicit).
+- `src/server/routes/stubs.ts` — `workflows` + `workflow-runs` removed from `STUB_DOMAINS`. Comment header updated to reflect "Phase 3 Step 4 shipped" status.
+
+### Tests added (1 new file, 11 cases)
+
+- `tests/integration/workflows-routes.test.ts` (NEW, 284 LOC):
+  - **Setup:** `beforeAll(preloadAllTemplates)`, `beforeEach(reset + initAssetStore({ path: ":memory:" }))`, `afterEach(rmSync data/assets/chartlens)` to avoid unbounded PNG accumulation on repeated runs.
+  - **Helpers:** `readSSE(res)` drains the full stream; `parseSSEEvents(raw)` splits `\n\n` blocks → `{event, data}[]`.
+  - `GET /api/workflows` × 1 — returns artwork-batch with `id`, `colorVariant: "violet"`, non-empty `displayName`.
+  - Body validation × 2 — missing `profileId` → 400, malformed JSON → 400.
+  - Precondition errors × 3 — unknown workflow id → 404, unknown profileId → 404, banned input key (`aspectRatio` leaked into input) → 400.
+  - SSE happy path × 1 — full stream: `started → concept_generated × 2 → image_generated × 2 → complete`; `Content-Type: text/event-stream`; `started.total === 2`; post-run DB assertion `batch.status === "completed"`, `successfulAssets === 2`.
+  - Abort smoke × 1 — pre-aborted signal → response status < 600, stream drains, `GET /api/health` still 200 (no hung handler).
+  - DELETE tri-state × 3 — unknown batchId → 404 BATCH_NOT_FOUND; pre-seeded finished batch → 409 BATCH_NOT_RUNNING + `currentStatus: "completed"`; `ALL /:batchId/resume` → 501 + `Resume: not-supported` header.
+
+### QA gate result (Session #12 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 94 src files, 0 violations (up 8 from Session #11: 3 route files + 1 body schema + 4 modified don't count)
+test: 216/216 pass (21 files) — 2.40s
+  prior:   209 (Session #11 baseline)
+  removed:  -4 (stub 501 tests for workflows + workflow-runs gone)
+  new:    +11 (workflows-routes integration)
+extract:all runtime: unchanged
+```
+
+### Deviations from plan
+
+- **`GET /api/workflows` omits `inputSchema` serialization.** Plan sketch used `zodToJsonSchema(w.inputSchema)` which requires the `zod-to-json-schema` dep. Deferred — Step 8 client form-builder will decide: add the dep, hand-craft per-workflow JSON descriptors in a sidecar `formSchema.ts`, or read the Zod shape at runtime via `._def` inspection. Current response ships `id`, `displayName`, `description`, `colorVariant`, `requirement`, `compatibilityOverrides` (6 fields — enough for client workflow picker + compatibility warning UI).
+- **`Hono<{Variables:{validatedBody: WorkflowRunBody}}>` generic** — first typed sub-app in the codebase. Needed because `new Hono()` defaults `Variables` to empty, making `c.get("validatedBody")` fail typecheck with `parameter of type 'never'`. `validator.ts` middleware's default `MiddlewareHandler<E=any>` is compatible with any concrete `E` so no middleware change needed. Pattern to reuse in Step 5 profiles route (also uses `validateBody`).
+- **Pre-event pumping** — `generator.next()` called BEFORE `streamSSE(c, ...)` so `checkPreconditions` errors bubble to `errorHandler` as proper HTTP responses. Alternative (emit SSE error frame inside `streamSSE`) was rejected because it sends `text/event-stream + 200` headers — client gets a 200 with an empty stream instead of a 4xx JSON error. Trade-off: batch row for the failed precondition is created only AFTER the first yield (happens in `workflow.run.ts` line 61, NOT in `checkPreconditions`), so no DB pollution from preflight failures.
+
+### Known pending items (for Session #13)
+
+1. **`inputSchema` shape in GET response** — see deviation above. Step 5 profiles route doesn't need it, but Step 8 client definitely does. Decide then.
+2. **Client-disconnect mid-flight cleanup** — if the client aborts while mocks are generating, workflow.run's try/finally in `run.ts` doesn't update `batch.status` on non-signal-aware interruption (e.g., writeSSE throws when reader closes). Current workaround: workflow authors are responsible for graceful cleanup per Session #10 D2. Step 7 workflows (ad-production/style-transform/aso-screenshots) must replicate artwork-batch's pattern; `CONTRIBUTING.md`-style guidance atop each run.ts is the reminder. If pattern becomes tedious, consider wrapping `dispatch()` with a generic "post-stream status stamp" helper in Step 7 scope.
+3. **`data/assets/` grows on repeat integration-test runs** — `afterEach` cleans `chartlens` dir, but any test using a different profileId would leak. Keep the `ASSET_CLEANUP_DIR` pattern consistent when Step 6 lands profile-assets tests.
+4. **Resume endpoint lives under workflow-runs** — `ALL /:batchId/resume` returns 501 with `Resume: not-supported` header. Plan §6.4 is clear "no resume v1"; endpoint exists only for graceful client rejection. Can remove if Step 8 client never asks.
+
+## Next Session (#13) kickoff — Phase 3 Step 5
+
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 216/216.
+2. Read `BOOTSTRAP-PHASE3.md` Step 5 section (lines 159-189).
+3. Scope decisions for bro before coding:
+   - **Profile version conflict** — `PUT /api/profiles/:id` with stale `expectedVersion` → `VersionConflictError` (409). Response body: `{ code, message, details: { currentVersion, attemptedVersion } }` OK, or need richer diff?
+   - **Profile delete semantics** — hard unlink `data/profiles/{id}.json` or soft-delete with a `deleted: true` field? PLAN §7.1 says hard; confirm vs "recoverable trash" UX.
+   - **Profile upload-asset stub** — plan says `POST /api/profiles/:id/upload-asset` "defer to Step 6". Ship as 501 stub inside profiles.ts, or wait for Step 6 and leave 404 fall-through?
+   - **Provider health in Phase 3** — plan says return stubbed `{ status: "unknown" }` for non-mock. Mock returns real health (already implemented). `?provider=` + `?model=` filters — support both, or only one with composition client-side?
+   - **Templates read-only** — plan says 404 on POST/PUT/DELETE. Inline per-handler or use a `route.all("*", ...)` catch?
+4. After alignment, implement Step 5 per plan. Est 3-4h.
+5. Route typing pattern: reuse `Hono<{Variables:{validatedBody: XxxBody}}>` for any `validateBody` consumer (profiles POST/PUT).
+
+---
 
 ## Completed in Session #11 (Phase 3 Step 3 — artwork-batch workflow)
 
