@@ -8,7 +8,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createLogger } from "@/core/shared/logger"
-import { openAssetDatabase } from "@/server/asset-store/db"
+import { initAssetStore } from "@/server/asset-store/context"
 import { preloadAllTemplates } from "@/server/templates"
 import { createApp } from "./app"
 
@@ -25,7 +25,7 @@ function readVersion(): string {
 
 function boot(): void {
   try {
-    openAssetDatabase()
+    initAssetStore()
   } catch (err) {
     logger.error("database boot failed", {
       message: err instanceof Error ? err.message : String(err),

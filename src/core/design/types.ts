@@ -5,11 +5,22 @@ export type ColorVariant =
   | "violet" | "blue" | "pink" | "emerald"       // workflow identity
   | "indigo" | "green" | "yellow" | "red" | "sky" | "slate"  // semantic
 
-export type WorkflowId =
-  | "artwork-batch"
-  | "ad-production"
-  | "style-transform"
-  | "aso-screenshots"
+export const WORKFLOW_IDS = [
+  "artwork-batch",
+  "ad-production",
+  "style-transform",
+  "aso-screenshots",
+] as const
+
+export type WorkflowId = (typeof WORKFLOW_IDS)[number]
+
+/** Narrow a raw DB string into the WorkflowId union. Throws on drift. */
+export function asWorkflowId(raw: string): WorkflowId {
+  if ((WORKFLOW_IDS as readonly string[]).includes(raw)) {
+    return raw as WorkflowId
+  }
+  throw new Error(`asWorkflowId: unknown workflow_id '${raw}' (DB drift or stale schema)`)
+}
 
 export interface ColorVariantClasses {
   active: string

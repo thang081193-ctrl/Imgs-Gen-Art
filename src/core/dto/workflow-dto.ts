@@ -6,7 +6,10 @@ export interface Concept {
   id: string
   title: string
   description: string
-  seed?: number
+  // Per Session #11 Q5: seed is REQUIRED so Phase 5 replay can re-run
+  // one variant deterministically. All workflow runners derive a stable
+  // per-concept seed from (batchSeed, concept.title).
+  seed: number
   tags: string[]
 }
 

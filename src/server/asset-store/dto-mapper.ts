@@ -23,7 +23,7 @@ export function toAssetDto(asset: AssetInternal): AssetDto {
     seed: asset.seed,
     aspectRatio: asset.aspectRatio,
     language: asset.language,
-    imageUrl: `/api/assets/${asset.id}/file`,
+    imageUrl: asset.status === "completed" ? `/api/assets/${asset.id}/file` : null,
     width: asset.width,
     height: asset.height,
     fileSizeBytes: asset.fileSizeBytes,

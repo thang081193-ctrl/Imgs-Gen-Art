@@ -4,12 +4,14 @@
 // ALL_WORKFLOWS from here.
 
 import { NotFoundError } from "@/core/shared/errors"
+import { artworkBatchWorkflow } from "./artwork-batch"
 import type { WorkflowDefinition } from "./types"
 
 export * from "./types"
+export { artworkBatchWorkflow } from "./artwork-batch"
 
 export const ALL_WORKFLOWS: readonly WorkflowDefinition[] = [
-  // Step 3: artworkBatchWorkflow,
+  artworkBatchWorkflow,
   // Step 7: adProductionWorkflow, styleTransformWorkflow, asoScreenshotsWorkflow,
 ] as const
 

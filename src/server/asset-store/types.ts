@@ -5,13 +5,14 @@
 // before responding.
 
 import type { AssetStatus, ReplayClass } from "@/core/dto/asset-dto"
+import type { WorkflowId } from "@/core/design/types"
 import type { AspectRatio, LanguageCode } from "@/core/model-registry/types"
 
 export interface AssetInternal {
   id: string
   profileId: string
   profileVersionAtGen: number
-  workflowId: string
+  workflowId: WorkflowId
   batchId: string | null
   variantGroup: string | null
 
@@ -50,7 +51,7 @@ export interface AssetInsertInput {
   id: string
   profileId: string
   profileVersionAtGen: number
-  workflowId: string
+  workflowId: WorkflowId
   batchId?: string | null
   variantGroup?: string | null
 
@@ -97,7 +98,7 @@ export type BatchStatus = "running" | "completed" | "aborted" | "error"
 export interface BatchInternal {
   id: string
   profileId: string
-  workflowId: string
+  workflowId: WorkflowId
   totalAssets: number
   successfulAssets: number
   totalCostUsd: number | null
@@ -110,7 +111,7 @@ export interface BatchInternal {
 export interface BatchCreateInput {
   id: string
   profileId: string
-  workflowId: string
+  workflowId: WorkflowId
   totalAssets: number
   successfulAssets?: number
   totalCostUsd?: number | null

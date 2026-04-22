@@ -3,6 +3,7 @@
 // `list` is stubbed early because Phase 3 DTO-no-paths audit test needs it.
 
 import type Database from "better-sqlite3"
+import { asWorkflowId } from "@/core/design/types"
 import type {
   AssetInternal,
   AssetInsertInput,
@@ -78,7 +79,7 @@ function rowToAsset(row: AssetRow): AssetInternal {
     id: row.id,
     profileId: row.profile_id,
     profileVersionAtGen: row.profile_version_at_gen,
-    workflowId: row.workflow_id,
+    workflowId: asWorkflowId(row.workflow_id),
     batchId: row.batch_id,
     variantGroup: row.variant_group,
     promptRaw: row.prompt_raw,

@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-2 of 9 shipped, 186/186 regression green, dispatcher/precondition layer ready for first workflow)
-Last updated: 2026-04-22 (Session #10, Opus 4.7 — Step 1 templates loader + Step 2 workflow types/dispatcher/precondition/abort registry. Awaiting bro commit.)
+Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-3 of 9 shipped, 209/209 regression green, artwork-batch workflow E2E via Mock provider — DB + filesystem + abort lifecycle proven)
+Last updated: 2026-04-22 (Session #11, Opus 4.7 — Step 3 artwork-batch workflow, 7 scope decisions locked (Q1-Q7), 23 new unit tests. Awaiting bro commit.)
 
 ## Phase 3 Summary
 
@@ -9,13 +9,101 @@ Last updated: 2026-04-22 (Session #10, Opus 4.7 — Step 1 templates loader + St
 |---|---|---|
 | 1 | Templates loader + cache (`src/server/templates/`) | ✅ Session #10 — 3 files + 9 tests |
 | 2 | Workflow types + dispatcher core + abort registry + precondition | ✅ Session #10 — 5 files + 14 tests |
-| 3 | First workflow: `artwork-batch` (Mock) | ⏳ Session #11 entry point |
-| 4 | `workflow-runs` route + SSE streaming + cancel | ⏳ pending |
+| 3 | First workflow: `artwork-batch` (Mock) | ✅ Session #11 — 5 workflow files + 2 server updates + 23 tests |
+| 4 | `workflow-runs` route + SSE streaming + cancel | ⏳ Session #12 entry point |
 | 5 | Profiles + templates + providers routes | ⏳ pending |
 | 6 | Keys + assets + profile-assets routes | ⏳ pending |
 | 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ pending |
 | 8 | Client Workflow page + Gallery + SSE wire | ⏳ pending |
 | 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ pending |
+
+## Completed in Session #11 (Phase 3 Step 3 — artwork-batch workflow)
+
+### Scope decisions locked Session #11 (bro approved 7 questions)
+
+- **Q1 — batch-repo shape:** single `updateStatus(batchId, patch)` method with runtime invariants (`completed` requires `completedAt`; `aborted` requires `abortedAt`; `error` neither required). Caller stamps timestamps — repo stays pure CRUD.
+- **Q2 — concept count:** added `conceptCount: z.int().min(1).max(10).default(4)` to artwork-batch input schema. Shuffle via **mulberry32** from `src/core/shared/rand.ts` (NOT SHA-256 — reuses existing helper, pattern consistency with Phase 2 extract scripts).
+- **Q3 — Mock asset write path:** `data/assets/{profileId}/{YYYY-MM-DD}/{assetId}.png` (PLAN §4 layout, not flat). Verified `data/assets/` auto-gitignored via `/data/*` pattern. No rollback on insert fail — orphan sweep deferred to Phase 5 tool.
+- **Q4 — locale:** `params.language ?? "en"`. Language instruction line appended only when `locale !== "en"`.
+- **Q5 — per-concept seed:** `Concept.seed` tightened from optional to REQUIRED. djb2-style `deriveSeed(batchSeed, salt)` produces deterministic unsigned 32-bit seed per concept. Enables Phase 5 replay of individual variants.
+- **Q6 — workflowId enum vs string:** schema stays `TEXT`, TS type is `WorkflowId` union. New `asWorkflowId(raw)` guard in `src/core/design/types.ts` validates on read; asset-repo + batch-repo both cast via `rowTo*` helpers. Catches DB drift / stale schema versions per Rule 14 spirit.
+- **Q7 — Mock replayClass:** `"deterministic"` (Mock has `supportsDeterministicSeed: true` + per-concept seed from Q5 + no watermark = all 3 PLAN §8.1 conditions met). Unlocks Phase 5 replay-UI smoke without needing real Imagen 4 key.
+
+### New workflow module (`src/workflows/artwork-batch/`, 5 files, ~360 LOC)
+
+- `input-schema.ts` (30) — `ArtworkBatchInputSchema` (Zod). Fields: `group` (8-key enum), `subjectDescription`, `conceptCount` (default 4), `variantsPerConcept` (default 1), `seed?`. `.strict()` enforces no extra keys — precondition #7 belt-and-suspenders at runtime.
+- `concept-generator.ts` (56) — `pickConcepts` (mulberry32 seeded sort), `deriveSeed` (djb2 XOR), `generateConcepts` (composes both + stamps `Concept` shape).
+- `prompt-builder.ts` (30) — `buildPrompt({ concept, profile, locale })`. Lines: tone → subject → creation prompt → palette → must-include → avoid → (conditional) language hint. Empty do/dont lists omit their lines.
+- `asset-writer.ts` (110) — isolated file I/O + DB insert side effects so run.ts stays event-loop focused. Handles date-partitioned path, mkdir recursive, replay payload JSON, replay class derivation.
+- `run.ts` (140) — `createArtworkBatchRun(resolveDeps, options)` factory → `(params) => AsyncGenerator<WorkflowEvent>`. Loads `getArtworkGroups()` at run time, creates batch row, iterates concepts × variants, handles abort (fast path pre-loop check + between-iteration check), per-variant try/catch emits `error` without halting batch, final `updateStatus` + `complete` event.
+- `index.ts` (40) — production `WorkflowDefinition` with `run` bound to singleton deps (`getAssetRepo` / `getBatchRepo` / `getProvider("mock")`). Re-exports factory + helpers for test use. Registered in `src/workflows/index.ts` `ALL_WORKFLOWS`.
+
+### Server-side supporting changes
+
+- `src/server/asset-store/batch-repo.ts` — added `BatchTerminalStatus` + `BatchUpdatePatch` + `updateStatus()` with `assertValidPatch()` runtime guard. SQL uses `COALESCE(?, col)` so `null` patch fields preserve existing values.
+- `src/server/asset-store/context.ts` (NEW, 44) — module-level singleton owning `OpenedDatabase` + `AssetRepo` + `BatchRepo`. `initAssetStore()` replaces `openAssetDatabase()` in server boot. `_resetAssetStoreForTests()` closes DB + drops refs. `asset-store/index.ts` barrel updated.
+- `src/server/asset-store/asset-repo.ts` + `batch-repo.ts` — `rowTo*` calls `asWorkflowId()` on `workflow_id` column read (Q6).
+- `src/server/asset-store/types.ts` — `AssetInternal.workflowId`, `AssetInsertInput.workflowId`, `BatchInternal.workflowId`, `BatchCreateInput.workflowId` all tightened from `string` → `WorkflowId`.
+- `src/server/asset-store/dto-mapper.ts` — `imageUrl` now `asset.status === "completed" ? \`/api/assets/${id}/file\` : null` (Q3 refinement).
+- `src/server/index.ts` — boot calls `initAssetStore()` in place of direct `openAssetDatabase()`. Template preload unchanged.
+
+### Universal type changes
+
+- `src/core/design/types.ts` — added `WORKFLOW_IDS` readonly array + `asWorkflowId(raw)` guard function. `WorkflowId` now derived from the array literal (single source of truth).
+- `src/core/dto/workflow-dto.ts` — `Concept.seed` changed from `seed?: number` to `seed: number` (Q5). Applies to all 4 workflows; `ad-production` / `style-transform` / `aso-screenshots` (Step 7) must set a seed at concept-creation time.
+- `src/core/dto/asset-dto.ts` — `AssetDto.imageUrl` widened to `string | null`; `AssetDto.workflowId` narrowed `string → WorkflowId`.
+
+### Tests added (2 files touched / 1 new, 23 new cases)
+
+- `tests/unit/asset-store.test.ts` — +6 cases under new `batch-repo — updateStatus (Phase 3)` block: completed/aborted/error transitions + missing-timestamp failures + unknown-id throw.
+- `tests/unit/workflow-artwork-batch.test.ts` (NEW, 335, 17 cases):
+  - `pickConcepts` × 3 (seed determinism, seed-divergence, count clamp to pool)
+  - `deriveSeed` × 3 (same input → same output, different salts distinct, unsigned 32-bit invariant)
+  - `generateConcepts` × 1 (end-to-end determinism + concept shape)
+  - `buildPrompt` × 3 (en happy + vi language line + empty do/dont)
+  - `ArtworkBatchInputSchema` × 2 (rejects aspectRatio + rejects language — Q7 guardrail)
+  - `run()` happy × 3 (event sequence, disk + DB linkage, determinism across runs)
+  - `run()` abort × 2 (pre-aborted + mid-flight with partial success + batch status = aborted)
+
+### QA gate result (Session #11 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 86 src files, 0 violations (up 8 from Session #10: context.ts + 5 workflow files + 2 modified don't count)
+test: 209/209 pass (20 files) — 2.25s
+  prior:   186 (Session #10 baseline)
+  new:      23 (6 batch-repo updateStatus + 17 workflow-artwork-batch)
+extract:all runtime: 45ms (unchanged)
+```
+
+### Deviations from plan
+
+- **`asset-writer.ts` split out of `run.ts`** — plan listed 4 files (input-schema, concept-generator, prompt-builder, run). Added a 5th (asset-writer) to keep `run.ts` under 150 LOC + make DB/FS side effects testable in isolation. Net LOC unchanged; single-responsibility gain.
+- **Factory pattern `createArtworkBatchRun(resolveDeps)`** instead of direct `async *run()`. Needed because `ALL_WORKFLOWS` is built at module-import time but asset-store singleton is only initialized at server boot. Factory defers dep resolution. Tests bypass the factory and build their own instance with in-memory repos. Does NOT widen the `WorkflowDefinition.run` signature seen by dispatcher — it still sees `(params) => AsyncGenerator`.
+- **`context.ts` singleton pattern** — new module. Boot path changes from `openAssetDatabase()` → `initAssetStore()`. All existing tests that called `openAssetDatabase({ path: ":memory:" })` directly still work (factory is exported independently).
+
+### Known pending items (for Session #12)
+
+1. **HTTP-layer integration smoke** — plan Step 3 listed no integration test; Step 4 plan includes `tests/integration/workflows-full.test.ts` smoke. First real end-to-end with SSE framing arrives Session #12.
+2. **`getProvider("mock")` hardcoded** in `artworkBatchWorkflow.run`. Step 4 route handler will thread `providerId` from request body through dispatcher → `params.providerId`. Currently `params.providerId` is ignored inside run.ts (always uses mock). Acceptable for Phase 3 (Mock-only). **Must switch when real gemini/vertex providers land Phase 4** — change to `getProvider(params.providerId)` inside the factory's closure. Flagged here so the diff is obvious.
+3. **Orphan PNG sweep** — if DB insert fails after file write, the PNG stays on disk. Phase 5 tool: `scripts/sweep-orphan-assets.ts` to reconcile `data/assets/` with `assets` table and unlink orphans.
+4. **Concept description reuse** — every concept in a batch carries the same `description = input.subjectDescription`. Fine for Phase 3; Step 7 workflows (style-transform especially) may want per-concept description derivation.
+5. **Batch `aborted` not emitted by dispatcher** — per Session #10 D2, dispatcher doesn't inject `aborted`. artwork-batch's run.ts emits it itself. Step 7 workflows must follow the same pattern; reminder locked in CONTRIBUTING-style comment atop run.ts.
+
+## Next Session (#12) kickoff — Phase 3 Step 4
+
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 209/209.
+2. Read `BOOTSTRAP-PHASE3.md` Step 4 section (lines 125-155).
+3. Scope decisions for bro before coding:
+   - SSE framing — `streamSSE` from `hono/streaming` per plan. Any `Retry-After` or custom event-id shape needed?
+   - Cancel endpoint path — `DELETE /api/workflows/runs/:batchId` per plan. Return 204 on successful abort, 404 if unknown/done. OK?
+   - Route input validation — reuse `validateBody()` middleware? Or inline since dispatcher will validate via precondition anyway?
+   - `workflow-runs` stub in `STUB_DOMAINS` — keep or remove? Plan says remove.
+4. After alignment, implement Step 4 per plan. Est 2-3h.
+
+---
 
 ## Completed in Session #10 (Phase 3 Steps 1-2)
 

@@ -1,5 +1,6 @@
 // Plan §6.4 — AssetDto + AssetDetailDto. No filesystem paths (Rule 11).
 
+import type { WorkflowId } from "../design/types"
 import type { ReplayPayloadDto } from "./replay-payload-dto"
 
 export type AssetStatus = "completed" | "error"
@@ -9,7 +10,7 @@ export interface AssetDto {
   id: string
   profileId: string
   profileVersionAtGen: number
-  workflowId: string
+  workflowId: WorkflowId
   batchId: string | null
   variantGroup: string | null
 
@@ -23,7 +24,7 @@ export interface AssetDto {
   aspectRatio: string
   language: string | null
 
-  imageUrl: string
+  imageUrl: string | null
   width: number | null
   height: number | null
   fileSizeBytes: number | null

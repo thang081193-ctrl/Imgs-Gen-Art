@@ -175,6 +175,86 @@ describe("batch-repo — create / findById", () => {
   })
 })
 
+describe("batch-repo — updateStatus (Phase 3)", () => {
+  const seed = (db: ReturnType<typeof openMemory>["db"]) => {
+    const repo = createBatchRepo(db)
+    repo.create({
+      id: "batch_u",
+      profileId: "chartlens",
+      workflowId: "artwork-batch",
+      totalAssets: 3,
+      status: "running",
+    })
+    return repo
+  }
+
+  it("transitions to completed + stamps completedAt + updates counters", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    const updated = repo.updateStatus("batch_u", {
+      status: "completed",
+      successfulAssets: 3,
+      totalCostUsd: 0,
+      completedAt: "2026-04-22T10:00:00.000Z",
+    })
+    expect(updated.status).toBe("completed")
+    expect(updated.successfulAssets).toBe(3)
+    expect(updated.totalCostUsd).toBe(0)
+    expect(updated.completedAt).toBe("2026-04-22T10:00:00.000Z")
+    expect(updated.abortedAt).toBeNull()
+  })
+
+  it("transitions to aborted + stamps abortedAt + partial successfulAssets", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    const updated = repo.updateStatus("batch_u", {
+      status: "aborted",
+      successfulAssets: 1,
+      abortedAt: "2026-04-22T10:00:05.000Z",
+    })
+    expect(updated.status).toBe("aborted")
+    expect(updated.successfulAssets).toBe(1)
+    expect(updated.abortedAt).toBe("2026-04-22T10:00:05.000Z")
+    expect(updated.completedAt).toBeNull()
+  })
+
+  it("transitions to error without requiring either timestamp", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    const updated = repo.updateStatus("batch_u", { status: "error" })
+    expect(updated.status).toBe("error")
+    expect(updated.completedAt).toBeNull()
+    expect(updated.abortedAt).toBeNull()
+  })
+
+  it("throws when transitioning to completed without completedAt", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    expect(() =>
+      repo.updateStatus("batch_u", { status: "completed", successfulAssets: 3 }),
+    ).toThrow(/completedAt required/)
+  })
+
+  it("throws when transitioning to aborted without abortedAt", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    expect(() =>
+      repo.updateStatus("batch_u", { status: "aborted" }),
+    ).toThrow(/abortedAt required/)
+  })
+
+  it("throws when batchId unknown", () => {
+    const { db } = openMemory()
+    const repo = seed(db)
+    expect(() =>
+      repo.updateStatus("batch_missing", {
+        status: "completed",
+        completedAt: "2026-04-22T10:00:00.000Z",
+      }),
+    ).toThrow(/unknown batch id/)
+  })
+})
+
 describe("Rule 11 — toAssetDto strips filePath, adds opaque imageUrl", () => {
   it("DTO has no filePath key, no disk path in serialized JSON, imageUrl = /api/assets/{id}/file", () => {
     const { db } = openMemory()
