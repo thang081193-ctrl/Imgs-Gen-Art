@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "strings": {
+    "de": {
+      "after": "MAGIE",
+      "before": "REALITÄT",
+      "cta": "App kostenlos herunterladen",
+      "name": "Deutsch"
+    },
+    "en": {
+      "after": "MAGIC",
+      "before": "REALITY",
+      "cta": "Download App Free",
+      "name": "English"
+    },
+    "es": {
+      "after": "MAGIA",
+      "before": "REALIDAD",
+      "cta": "Descargar App Gratis",
+      "name": "Español"
+    },
+    "fr": {
+      "after": "MAGIE",
+      "before": "RÉALITÉ",
+      "cta": "Télécharger l'app gratuite",
+      "name": "Français"
+    },
+    "id": {
+      "after": "SIHIR",
+      "before": "REALITA",
+      "cta": "Unduh App Gratis",
+      "name": "Bahasa Indonesia"
+    },
+    "it": {
+      "after": "MAGIA",
+      "before": "REALTÀ",
+      "cta": "Scarica App Gratis",
+      "name": "Italiano"
+    },
+    "ja": {
+      "after": "魔法",
+      "before": "現実",
+      "cta": "アプリを無料でダウンロード",
+      "name": "日本語"
+    },
+    "ko": {
+      "after": "마법",
+      "before": "현실",
+      "cta": "앱 무료 다운로드",
+      "name": "한국어"
+    },
+    "pt": {
+      "after": "MAGIA",
+      "before": "REALIDADE",
+      "cta": "Baixar App Grátis",
+      "name": "Português"
+    },
+    "th": {
+      "after": "เวทมนตร์",
+      "before": "ความจริง",
+      "cta": "ดาวน์โหลดแอปฟรี",
+      "name": "ไทย"
+    },
+    "vi": {
+      "after": "PHÉP THUẬT",
+      "before": "THỰC TẾ",
+      "cta": "Tải App Miễn Phí",
+      "name": "Tiếng Việt"
+    }
+  }
+}

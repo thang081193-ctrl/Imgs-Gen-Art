@@ -1,0 +1,69 @@
+{
+  "groups": {
+    "aiArt": [
+      "OilPainting",
+      "Watercolor",
+      "Cyberpunk",
+      "Fantasy",
+      "Sketch"
+    ],
+    "allInOne": [
+      "Moodboard",
+      "Magazine",
+      "Cinematic",
+      "SocialGrid",
+      "Scrapbook",
+      "FoodieFix",
+      "SelfieGlow",
+      "TravelVlog",
+      "PetSticker",
+      "ProductPro"
+    ],
+    "avatar": [
+      "Forest",
+      "Ocean",
+      "Fire",
+      "Sky"
+    ],
+    "baby": [
+      "Newborn",
+      "Milestone1M",
+      "Milestone6M",
+      "FirstYear",
+      "MessyFun"
+    ],
+    "cartoon": [
+      "Anime",
+      "Chibi",
+      "Comic",
+      "Hero",
+      "3D"
+    ],
+    "festive": [
+      "Christmas",
+      "Halloween",
+      "LunarNewYear",
+      "Valentine",
+      "Easter"
+    ],
+    "memory": [
+      "Family",
+      "Wedding",
+      "Childhood",
+      "Pets"
+    ],
+    "xmas": [
+      "SantaGlam",
+      "ElfPlayful",
+      "ReindeerCute",
+      "SnowQueen",
+      "CozyPJ",
+      "GoldenGala",
+      "Gingerbread",
+      "Nutcracker",
+      "WinterDate",
+      "SkiResort"
+    ]
+  },
+  "schemaVersion": 1
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "styles": {
+    "ANIME": {
+      "key": "ANIME",
+      "label": "Anime / Manga",
+      "promptCues": "High-quality cel-shaded anime, sharp lineart, vibrant manga colors, 2D aesthetic, Shonen style.",
+      "renderStyle": "Anime Masterpiece",
+      "uiVibe": "Bold Manga lines with dynamic speed-line accents"
+    },
+    "GHIBLI": {
+      "key": "GHIBLI",
+      "label": "Ghibli-inspired",
+      "promptCues": "Studio Ghibli aesthetic, hand-painted watercolor textures, soft dreamy lighting, nostalgic cinematic atmosphere.",
+      "renderStyle": "Hand-painted Watercolor",
+      "uiVibe": "Soft paper textures and dreamy nature motifs"
+    },
+    "PIXAR": {
+      "key": "PIXAR",
+      "label": "Pixar / Disney 3D",
+      "promptCues": "Disney-style 3D render, stylized proportions, expressive eyes, sub-surface scattering skin, cinematic 3D lighting.",
+      "renderStyle": "Stylized 3D Animation",
+      "uiVibe": "Glowing 3D neon borders and polished glass effects"
+    }
+  }
+}

@@ -1,0 +1,266 @@
+{
+  "layouts": {
+    "aiart_collage_styles": {
+      "afterStyle": "orbiting bubbles of different art styles (anime, van gogh, 3d, cyberpunk)",
+      "beforeStyle": "central photo thumbnail",
+      "description": "Phone in center surrounded by 4 different art style variations of the same person.",
+      "feature": "ai_art",
+      "hasPhoneUI": true,
+      "id": "aiart_collage_styles",
+      "type": "multi_style_collage"
+    },
+    "aiart_phone_before_after": {
+      "afterStyle": "stylized AI art masterpiece (oil/digital) OF THE SAME PERSON",
+      "beforeStyle": "normal selfie, photorealistic",
+      "description": "Split vertically: Real photo on top, AI transformed version on bottom.",
+      "feature": "ai_art",
+      "hasPhoneUI": true,
+      "id": "aiart_phone_before_after",
+      "type": "phone_before_after_style"
+    },
+    "aiart_prompt_typing": {
+      "afterStyle": "A stunning generated image exploding from the keyboard area",
+      "beforeStyle": "UI text field saying 'Cyberpunk warrior'",
+      "description": "Phone UI showing a text prompt being typed, and the image emerging above it.",
+      "feature": "ai_art",
+      "hasPhoneUI": true,
+      "id": "aiart_prompt_typing",
+      "type": "text_to_image_ui"
+    },
+    "aiart_sketch_reveal": {
+      "afterStyle": "incredibly detailed, glowing colorful render",
+      "beforeStyle": "black and white rough pencil lines",
+      "description": "Half the image is a rough pencil sketch, blending into a fully rendered AI art piece.",
+      "feature": "ai_art",
+      "hasPhoneUI": false,
+      "id": "aiart_sketch_reveal",
+      "type": "sketch_to_realism"
+    },
+    "allinone_cinematic_reel": {
+      "afterStyle": "A trendy VERTICAL FILM STRIP design ready for TikTok/Reels. The moments are sequenced into a beautiful narrative with cinematic color grading and storytelling flow.",
+      "beforeStyle": "A scattering of random phone snapshots, disconnected and plain.",
+      "description": "Concept: Random Snaps to Cinema. Unconnected photos becoming a story.",
+      "feature": "all_in_one",
+      "hasPhoneUI": false,
+      "id": "allinone_cinematic_reel",
+      "type": "cinematic_film_strip"
+    },
+    "allinone_digital_scrapbook": {
+      "afterStyle": "A beautiful, textured SCRAPBOOK PAGE. The selected photos are arranged artistically with washi tape, cute stickers, handwritten notes, and paper texture background. Cozy, aesthetic vibe.",
+      "beforeStyle": "A tablet screen UI showing a 'File Selection' grid of messy, unedited photos (Birthday/Christmas theme).",
+      "description": "Concept: Digital Files -> Aesthetic Journal. Left: Tablet UI selecting photos. Right: Decorated Scrapbook page.",
+      "feature": "all_in_one",
+      "hasPhoneUI": false,
+      "id": "allinone_digital_scrapbook",
+      "type": "digital_scrapbook_split"
+    },
+    "allinone_life_story_card": {
+      "afterStyle": "A designed VERTICAL MEMORY CARD sitting on a textured surface (wood/linen). It features the same photo but framed elegantly with 'Our Day' typography, a date stamp, and sentimental graphics. Curated Life Story vibe.",
+      "beforeStyle": "First-person view of a hand holding a smartphone. The screen displays a raw, candid photo in the camera roll.",
+      "description": "Concept: Phone Pic -> Memory Card. Left: Hand holding phone with raw pic. Right: Designed Vertical Card.",
+      "feature": "all_in_one",
+      "hasPhoneUI": false,
+      "id": "allinone_life_story_card",
+      "type": "life_story_card_split"
+    },
+    "allinone_perfect_hero": {
+      "afterStyle": "The final result is a Viral-Worthy MASTERPIECE. 8K resolution, perfect lighting, distractions removed, professionally edited to look like a top-tier Travel Influencer post ready for Instagram.",
+      "beforeStyle": "Phone UI showing a list of many bad/dark photos, with one 'Raw' photo selected.",
+      "description": "Concept: The Hidden Gem. Finding the one good shot in a messy album and making it perfect.",
+      "feature": "all_in_one",
+      "hasPhoneUI": true,
+      "id": "allinone_perfect_hero",
+      "type": "perfect_hero_shot"
+    },
+    "allinone_travel_moodboard": {
+      "afterStyle": "A stunning, Instagram-ready TRAVEL MOODBOARD COLLAGE. The best photos from the gallery are arranged artistically, color-graded with a cohesive preset, and framed like a professional Influencer Story. Aesthetic stickers, clean layout, perfect vibes.",
+      "beforeStyle": "Smartphone Screen UI displaying the 'Camera Roll' or 'Gallery'. A MESSY GRID of random, unorganized photos, duplicates, bad lighting, and screenshots.",
+      "description": "Concept: Chaos to Art. Shows a messy phone gallery grid turning into a curated moodboard.",
+      "feature": "all_in_one",
+      "hasPhoneUI": false,
+      "id": "allinone_travel_moodboard",
+      "type": "travel_moodboard_collage"
+    },
+    "cartoon_burst_multi_panel": {
+      "afterStyle": "Collage of 2-3 tilted panels showing the SAME person in distinct styles: Anime, Chibi, and Western, connected by a neon comic burst",
+      "beforeStyle": "Real person portrait/selfie, clear face, occupying 45% left side, neon lighting",
+      "description": "Left: Real Photo (45%). Center: Comic Energy Burst. Right: 2-3 Tilted Panels with Anime/Chibi/Western styles.",
+      "feature": "cartoon",
+      "hasPhoneUI": false,
+      "id": "cartoon_burst_multi_panel",
+      "type": "multi_panel_burst"
+    },
+    "cartoon_cosplay_ui": {
+      "afterStyle": "full body stylized RPG character with stats",
+      "beforeStyle": "user avatar thumbnail",
+      "description": "UI looking like a video game character selection screen.",
+      "feature": "cartoon",
+      "hasPhoneUI": true,
+      "id": "cartoon_cosplay_ui",
+      "type": "game_character_select"
+    },
+    "cartoon_flow_transformation": {
+      "afterStyle": "A flowing purple/neon energy stream leading to 3 distinct anime characters of the same person on the right",
+      "beforeStyle": "Real selfie with neon lighting, photorealistic, occupying left side",
+      "description": "Left: Real Neon Selfie. Center: Energy Stream. Right: 3 distinct Anime characters (Classic, Schoolgirl, Chibi) shrinking in size.",
+      "feature": "cartoon",
+      "hasPhoneUI": false,
+      "id": "cartoon_flow_transformation",
+      "type": "flow_stream_transformation"
+    },
+    "cartoon_half_tone_tear": {
+      "afterStyle": "vibrant comic book dot-pattern style inside the tear",
+      "beforeStyle": "real world photo surface, photorealistic",
+      "description": "Real paper torn in the middle revealing a comic book world underneath.",
+      "feature": "cartoon",
+      "hasPhoneUI": false,
+      "id": "cartoon_half_tone_tear",
+      "type": "paper_tear_reveal"
+    },
+    "cartoon_phone_multi": {
+      "afterStyle": "various anime/manga styles surrounding",
+      "beforeStyle": "real person center",
+      "description": "Center portrait with multiple anime variants radiating out.",
+      "feature": "cartoon",
+      "hasPhoneUI": true,
+      "id": "cartoon_phone_multi",
+      "type": "cartoon_transformation_phone"
+    },
+    "cartoon_split_android": {
+      "afterStyle": "studio ghibli or webtoon style character (SAME POSE)",
+      "beforeStyle": "real selfie, photorealistic, raw camera capture",
+      "description": "Classic split. Left real, Right Anime.",
+      "feature": "cartoon",
+      "hasPhoneUI": true,
+      "id": "cartoon_split_android",
+      "type": "before_after_split_50_50"
+    },
+    "enhance_magnifying_lens": {
+      "afterStyle": "inside the lens is hyper-sharp showing skin texture",
+      "beforeStyle": "blurry background photo",
+      "description": "A magnifying loop hovering over a blurry photo, revealing perfect sharpness inside the circle.",
+      "feature": "enhance",
+      "hasPhoneUI": false,
+      "id": "enhance_magnifying_lens",
+      "type": "magnifying_glass_zoom"
+    },
+    "enhance_slider_interaction": {
+      "afterStyle": "bright, vivid, perfectly focused",
+      "beforeStyle": "dull, flat, out of focus",
+      "description": "Phone UI showing the slider being dragged. Left side of slider is blurry, Right is HD.",
+      "feature": "enhance",
+      "hasPhoneUI": true,
+      "id": "enhance_slider_interaction",
+      "type": "ui_slider_active"
+    },
+    "enhance_split_view": {
+      "afterStyle": "crystal clear 8K resolution, sharp details, HDR lighting, perfect focus",
+      "beforeStyle": "extremely pixelated, low resolution, motion blur, heavy digital noise, jpeg artifacts",
+      "description": "50/50 Split. Left: Pixelated/Blurry. Right: 4K Ultra HD. High contrast.",
+      "feature": "enhance",
+      "hasPhoneUI": true,
+      "id": "enhance_split_view",
+      "type": "before_after_split_50_50"
+    },
+    "polaroid_clothesline": {
+      "afterStyle": "printed square photo hanging physically",
+      "beforeStyle": "digital raw photo",
+      "description": "Photos hanging on a string with wooden clips, warm fairy lights.",
+      "feature": "polaroid",
+      "hasPhoneUI": false,
+      "id": "polaroid_clothesline",
+      "type": "hanging_photos"
+    },
+    "polaroid_phone_mixed": {
+      "afterStyle": "physical prints falling from the device",
+      "beforeStyle": "screen image",
+      "description": "Digital phone screen dropping physical polaroids out of it.",
+      "feature": "polaroid",
+      "hasPhoneUI": true,
+      "id": "polaroid_phone_mixed",
+      "type": "polaroid_plus_phone"
+    },
+    "polaroid_scrapbook": {
+      "afterStyle": "taped photo on paper with handwritten date",
+      "beforeStyle": "plain photo",
+      "description": "A vintage scrapbook page with tape, stickers, and the photo.",
+      "feature": "polaroid",
+      "hasPhoneUI": false,
+      "id": "polaroid_scrapbook",
+      "type": "scrapbook_page"
+    },
+    "polaroid_stack_plain": {
+      "afterStyle": "stack of 3-4 scattered polaroids",
+      "beforeStyle": "source image",
+      "description": "Messy pile of printed memories.",
+      "feature": "polaroid",
+      "hasPhoneUI": false,
+      "id": "polaroid_stack_plain",
+      "type": "polaroid_stack"
+    },
+    "restore_dual_frames": {
+      "afterStyle": "brand new modern frame, containing the fully restored vivid high-quality photo",
+      "beforeStyle": "dusty old wooden frame, glass is cracked, photo inside is yellowed, water damaged and torn",
+      "description": "Two frames side-by-side on a wooden table. Left Frame: Old/Dusty. Right Frame: New/Shiny.",
+      "feature": "restore",
+      "hasPhoneUI": false,
+      "id": "restore_dual_frames",
+      "type": "dual_photo_frames"
+    },
+    "restore_hand_holding": {
+      "afterStyle": "the real world background, fully colored, same scene but alive, 4k resolution",
+      "beforeStyle": "physical crumpled photo print held in hand, very old, torn corners, black and white, scratched surface",
+      "description": "First-person POV holding an old B&W print against the real colorful restored background scene.",
+      "feature": "restore",
+      "hasPhoneUI": false,
+      "id": "restore_hand_holding",
+      "type": "hand_holding_photo"
+    },
+    "restore_split_view": {
+      "afterStyle": "RESTORED PHOTO: vibrant color, warm sunlight, high definition 8k, smooth skin, perfect details",
+      "beforeStyle": "RUINED PHOTO: heavy white scratches, torn paper edges, fungal spots, deep cracks, faded sepia monochrome",
+      "description": "Torn Paper Split. Left: Sepia/Ruined. Right: Restored/HD. Divider is a ripped paper edge.",
+      "feature": "restore",
+      "hasPhoneUI": false,
+      "id": "restore_split_view",
+      "type": "before_after_split_50_50"
+    },
+    "threed_box_doll": {
+      "afterStyle": "glossy 3D character inside transparent packaging",
+      "beforeStyle": "small reference photo in corner",
+      "description": "The subject transformed into a toy inside a plastic collector's box.",
+      "feature": "three_d",
+      "hasPhoneUI": true,
+      "id": "threed_box_doll",
+      "type": "3d_doll_box"
+    },
+    "threed_clay_style": {
+      "afterStyle": "soft, rounded, fingerprint-textured clay character",
+      "beforeStyle": "real photo",
+      "description": "A soft, stop-motion clay look. Very trendy and cute.",
+      "feature": "three_d",
+      "hasPhoneUI": false,
+      "id": "threed_clay_style",
+      "type": "claymation_texture"
+    },
+    "threed_floating_island": {
+      "afterStyle": "miniature 3D world with the character in center",
+      "beforeStyle": "full body photo cutout",
+      "description": "The person placed on a cute 3D isometric floating island environment.",
+      "feature": "three_d",
+      "hasPhoneUI": false,
+      "id": "threed_floating_island",
+      "type": "isometric_island"
+    },
+    "threed_phone_timeline": {
+      "afterStyle": "high-end Pixar-style 3D character",
+      "beforeStyle": "standard portrait",
+      "description": "Evolution bar: Photo -> Low Poly -> High Poly 3D.",
+      "feature": "three_d",
+      "hasPhoneUI": true,
+      "id": "threed_phone_timeline",
+      "type": "photo_to_3d_timeline"
+    }
+  },
+  "schemaVersion": 1
+}

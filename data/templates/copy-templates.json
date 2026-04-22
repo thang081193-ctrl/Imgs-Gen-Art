@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "de": {
+      "h": [
+        "Sieh deine animierte Seele",
+        "Spiegelbild der Magie",
+        "Jenseits der Realität"
+      ],
+      "s": [
+        "Sofort verwandeln",
+        "Dein Charakter wartet",
+        "Kostenlos testen"
+      ]
+    },
+    "en": {
+      "h": [
+        "See Your Animated Soul",
+        "Magic Mirror Reflection",
+        "Beyond Reality"
+      ],
+      "s": [
+        "Transform instantly",
+        "Your character awaits",
+        "Try it for free"
+      ]
+    },
+    "es": {
+      "h": [
+        "Mira tu alma animada",
+        "Reflejo del Espejo Mágico",
+        "Más allá de la realidad"
+      ],
+      "s": [
+        "Transfórmate al instante",
+        "Tu personaje te espera",
+        "Pruébalo gratis"
+      ]
+    },
+    "fr": {
+      "h": [
+        "Voyez votre âme animée",
+        "Reflet du miroir magique",
+        "Au-delà de la réalité"
+      ],
+      "s": [
+        "Transformez-vous instantanément",
+        "Votre personnage vous attend",
+        "Essai gratuit"
+      ]
+    },
+    "it": {
+      "h": [
+        "Guarda la tua anima animata",
+        "Riflesso dello specchio magico",
+        "Oltre la realtà"
+      ],
+      "s": [
+        "Trasformati istantaneamente",
+        "Il tuo personaggio ti aspetta",
+        "Prova gratuita"
+      ]
+    },
+    "ja": {
+      "h": [
+        "アニメの魂を見る",
+        "魔法の鏡の反射",
+        "現実を超えて"
+      ],
+      "s": [
+        "一瞬で変身",
+        "あなたのキャラが待っている",
+        "無料で試す"
+      ]
+    },
+    "ko": {
+      "h": [
+        "애니메이션 소울을 만나보세요",
+        "마법 거울의 투영",
+        "현실 그 너머"
+      ],
+      "s": [
+        "순식간에 변신",
+        "당신의 캐릭터가 기다립니다",
+        "무료 체험"
+      ]
+    },
+    "pt": {
+      "h": [
+        "Veja sua alma animada",
+        "Reflexo do Espelho Mágico",
+        "Além da realidade"
+      ],
+      "s": [
+        "Transforme-se instantaneamente",
+        "Seu personagem espera",
+        "Experimente grátis"
+      ]
+    },
+    "th": {
+      "h": [
+        "ดูจิตวิญญาณอนิเมะของคุณ",
+        "เงาสะท้อน từกระจกวิเศษ",
+        "เหนือกว่าความเป็นจริง"
+      ],
+      "s": [
+        "เปลี่ยนร่างในพริบตา",
+        "ตัวละครของคุณรออยู่",
+        "ลองใช้ฟรี"
+      ]
+    },
+    "vi": {
+      "h": [
+        "Soi bóng nhân vật AI",
+        "Gương thần biến hình",
+        "Phiên bản hoạt hình của bạn"
+      ],
+      "s": [
+        "Biến đổi trong tích tắc",
+        "Khám phá bản thân mới",
+        "Trải nghiệm miễn phí"
+      ]
+    }
+  }
+}

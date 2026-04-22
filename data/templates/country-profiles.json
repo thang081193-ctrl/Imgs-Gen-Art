@@ -1,0 +1,235 @@
+{
+  "countries": {
+    "BR": {
+      "defaultLang": "pt",
+      "langs": [
+        "pt",
+        "en"
+      ],
+      "name": "Brazil",
+      "zone": "LATAM"
+    },
+    "DE": {
+      "defaultLang": "de",
+      "langs": [
+        "de",
+        "en"
+      ],
+      "name": "Germany",
+      "zone": "GLOBAL_WEST"
+    },
+    "ES": {
+      "defaultLang": "es",
+      "langs": [
+        "es",
+        "en"
+      ],
+      "name": "Spain",
+      "zone": "GLOBAL_WEST"
+    },
+    "FR": {
+      "defaultLang": "fr",
+      "langs": [
+        "fr",
+        "en"
+      ],
+      "name": "France",
+      "zone": "GLOBAL_WEST"
+    },
+    "GB": {
+      "defaultLang": "en",
+      "langs": [
+        "en"
+      ],
+      "name": "United Kingdom",
+      "zone": "GLOBAL_WEST"
+    },
+    "ID": {
+      "defaultLang": "id",
+      "langs": [
+        "id",
+        "en"
+      ],
+      "name": "Indonesia",
+      "zone": "SEA"
+    },
+    "IT": {
+      "defaultLang": "it",
+      "langs": [
+        "it",
+        "en"
+      ],
+      "name": "Italy",
+      "zone": "GLOBAL_WEST"
+    },
+    "JP": {
+      "defaultLang": "ja",
+      "langs": [
+        "ja",
+        "en"
+      ],
+      "name": "Japan",
+      "zone": "EAST_ASIA"
+    },
+    "KR": {
+      "defaultLang": "ko",
+      "langs": [
+        "ko",
+        "en"
+      ],
+      "name": "South Korea",
+      "zone": "EAST_ASIA"
+    },
+    "MX": {
+      "defaultLang": "es",
+      "langs": [
+        "es",
+        "en"
+      ],
+      "name": "Mexico",
+      "zone": "LATAM"
+    },
+    "MY": {
+      "defaultLang": "en",
+      "langs": [
+        "en"
+      ],
+      "name": "Malaysia",
+      "zone": "SEA"
+    },
+    "PH": {
+      "defaultLang": "en",
+      "langs": [
+        "en"
+      ],
+      "name": "Philippines",
+      "zone": "SEA"
+    },
+    "SG": {
+      "defaultLang": "en",
+      "langs": [
+        "en"
+      ],
+      "name": "Singapore",
+      "zone": "SEA"
+    },
+    "TH": {
+      "defaultLang": "th",
+      "langs": [
+        "th",
+        "en"
+      ],
+      "name": "Thailand",
+      "zone": "SEA"
+    },
+    "US": {
+      "defaultLang": "en",
+      "langs": [
+        "en"
+      ],
+      "name": "United States",
+      "zone": "GLOBAL_WEST"
+    },
+    "VN": {
+      "defaultLang": "vi",
+      "langs": [
+        "vi",
+        "en"
+      ],
+      "name": "Vietnam",
+      "zone": "SEA"
+    }
+  },
+  "schemaVersion": 1,
+  "zones": {
+    "EAST_ASIA": {
+      "camera": [
+        "minimalist smartphone selfie",
+        "mirror reflection"
+      ],
+      "casting": [
+        "East Asian young woman",
+        "East Asian young man",
+        "East Asian couple"
+      ],
+      "placesEveryday": [
+        "plain modern room",
+        "neat city street",
+        "minimalist cafe"
+      ],
+      "wardrobeEveryday": [
+        "casual oversized shirt",
+        "minimalist sweater",
+        "neat city wear"
+      ]
+    },
+    "GLOBAL_WEST": {
+      "camera": [
+        "raw handheld phone selfie",
+        "mirror selfie in bathroom"
+      ],
+      "casting": [
+        "Western young woman",
+        "Western young man",
+        "Western couple"
+      ],
+      "placesEveryday": [
+        "kitchen",
+        "living room",
+        "bedroom",
+        "urban street"
+      ],
+      "wardrobeEveryday": [
+        "denim jacket",
+        "casual sweater",
+        "modern casual outfit"
+      ]
+    },
+    "LATAM": {
+      "camera": [
+        "vibrant handheld selfie",
+        "outdoor mirror selfie"
+      ],
+      "casting": [
+        "Latin American woman",
+        "Latin American man",
+        "Latin American couple"
+      ],
+      "placesEveryday": [
+        "balcony",
+        "bright living room",
+        "sunny street",
+        "patio"
+      ],
+      "wardrobeEveryday": [
+        "bright casual clothes",
+        "summer wear",
+        "jeans and t-shirt"
+      ]
+    },
+    "SEA": {
+      "camera": [
+        "mirror selfie holding smartphone",
+        "handheld phone selfie"
+      ],
+      "casting": [
+        "Southeast Asian woman",
+        "Southeast Asian man",
+        "Southeast Asian kid",
+        "Southeast Asian couple"
+      ],
+      "placesEveryday": [
+        "ordinary bedroom",
+        "simple local cafe",
+        "street corner",
+        "living room"
+      ],
+      "wardrobeEveryday": [
+        "casual hoodie",
+        "worn t-shirt",
+        "local street wear",
+        "casual local outfit"
+      ]
+    }
+  }
+}

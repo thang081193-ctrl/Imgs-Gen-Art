@@ -29,11 +29,6 @@ images-gen-art.db-shm
 
 # Vendored source apps for Phase 2 extraction — anchored to project root
 /vendor/
-# Zombie Genart folders awaiting manual cleanup (Windows file-lock prevented
-# rename during Phase 2 Step 1; content already copied into /vendor/). Delete
-# these .gitignore lines once /Genart-1/ and /Genart-2/ are removed from disk.
-/Genart-1/
-/Genart-2/
 
 # Env files
 .env

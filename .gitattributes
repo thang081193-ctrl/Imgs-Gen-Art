@@ -1,0 +1,16 @@
+# Force LF line endings across all platforms.
+# Rationale: Phase 2 upstream-snapshot.test.ts pins SHA-256 of data/templates/*.json;
+# Windows autocrlf would convert LF→CRLF on checkout and break the hash invariant.
+# Global `eol=lf` ensures consistent bytes in working tree everywhere.
+* text=auto eol=lf
+
+# Binary — never touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.db binary
+*.db-wal binary
+*.db-shm binary
+*.enc binary
