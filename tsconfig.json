@@ -20,7 +20,8 @@
       "@/core/*": ["src/core/*"],
       "@/server/*": ["src/server/*"],
       "@/client/*": ["src/client/*"],
-      "@/workflows/*": ["src/workflows/*"]
+      "@/workflows/*": ["src/workflows/*"],
+      "@/workflows": ["src/workflows/index"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "scripts/**/*.ts"],

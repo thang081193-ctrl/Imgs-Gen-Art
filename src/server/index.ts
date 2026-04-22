@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url"
 
 import { createLogger } from "@/core/shared/logger"
 import { openAssetDatabase } from "@/server/asset-store/db"
+import { preloadAllTemplates } from "@/server/templates"
 import { createApp } from "./app"
 
 const logger = createLogger()
@@ -27,6 +28,15 @@ function boot(): void {
     openAssetDatabase()
   } catch (err) {
     logger.error("database boot failed", {
+      message: err instanceof Error ? err.message : String(err),
+    })
+    process.exit(1)
+  }
+
+  try {
+    preloadAllTemplates()
+  } catch (err) {
+    logger.error("template preload failed", {
       message: err instanceof Error ? err.message : String(err),
     })
     process.exit(1)

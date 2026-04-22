@@ -1,9 +1,93 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 2 — COMPLETE ✅** (extraction pipeline shipped, 6 JSONs generated, 163/163 regression green)
-Last updated: 2026-04-22 (Session #9, Opus 4.7 — extract scripts + 13 extraction tests + upstream tripwire. Awaiting bro commit.)
+Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-2 of 9 shipped, 186/186 regression green, dispatcher/precondition layer ready for first workflow)
+Last updated: 2026-04-22 (Session #10, Opus 4.7 — Step 1 templates loader + Step 2 workflow types/dispatcher/precondition/abort registry. Awaiting bro commit.)
 
-## Phase 2 Summary
+## Phase 3 Summary
+
+| Step | Title | Status |
+|---|---|---|
+| 1 | Templates loader + cache (`src/server/templates/`) | ✅ Session #10 — 3 files + 9 tests |
+| 2 | Workflow types + dispatcher core + abort registry + precondition | ✅ Session #10 — 5 files + 14 tests |
+| 3 | First workflow: `artwork-batch` (Mock) | ⏳ Session #11 entry point |
+| 4 | `workflow-runs` route + SSE streaming + cancel | ⏳ pending |
+| 5 | Profiles + templates + providers routes | ⏳ pending |
+| 6 | Keys + assets + profile-assets routes | ⏳ pending |
+| 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ⏳ pending |
+| 8 | Client Workflow page + Gallery + SSE wire | ⏳ pending |
+| 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ pending |
+
+## Completed in Session #10 (Phase 3 Steps 1-2)
+
+### Step 1 — Templates loader + cache (3 files under `src/server/templates/`)
+
+- `loader.ts` (77) — `loadTemplate<T>(name, schema, { baseDir? }): T`. Synchronous read + `JSON.parse` + `schema.safeParse`. Every I/O / parse / drift failure wrapped as `ExtractionError` with `{ template, path, cause|issues }` details. `TemplateName` union + `ALL_TEMPLATE_NAMES` readonly array + `DEFAULT_TEMPLATES_DIR` exported.
+- `cache.ts` (79) — module-level `Map<TemplateName, unknown>` memo. 6 typed getters (`getArtworkGroups`, `getAdLayouts`, `getCountryProfiles`, `getStyleDna`, `getI18n`, `getCopyTemplates`). `preloadAllTemplates()` iterates `ALL_TEMPLATE_NAMES` via switch so every name is statically visited (adding a template forces a switch update). `_resetTemplateCacheForTests()` test-only export.
+- `index.ts` (22) — barrel re-exports.
+- Boot wiring: `src/server/index.ts` calls `preloadAllTemplates()` between `openAssetDatabase()` and `serve()` — fail-fast if any JSON missing/corrupted before binding HTTP listener.
+
+### Step 2 — Workflow orchestration core (5 files)
+
+- `src/workflows/types.ts` (48) — PLAN §6.3 shape. `WorkflowRunParams` (profile, providerId, modelId, aspectRatio, language?, input, abortSignal, batchId) + `WorkflowDefinition` (id, displayName, description, colorVariant, requirement, compatibilityOverrides, inputSchema, `run: (params) => AsyncGenerator<WorkflowEvent>`). Re-exports `Concept`, `WorkflowEvent`, `CompatibilityMatrix`, `CompatibilityResult`, `CompatibilityOverride`, `WorkflowRequirement`, `WorkflowId` for one-stop workflow imports.
+- `src/workflows/index.ts` (23) — `ALL_WORKFLOWS: readonly WorkflowDefinition[] = []` (empty until Step 3+7 populate) + `getWorkflow(id)` lookup throwing `NotFoundError` with `availableWorkflows` list on miss.
+- `src/server/workflows-runtime/abort-registry.ts` (45) — module-level `Map<string, AbortController>`. `registerBatch` (throws on duplicate batchId), `abortBatch` (returns false if unknown/already-aborted), `deregisterBatch`, `isBatchActive`, `_resetAbortRegistryForTests`.
+- `src/server/workflows-runtime/precondition-check.ts` (132) — PLAN §6.4 sweep. Dependency-injectable (`PreconditionDeps` with optional `getWorkflow` / `loadProfile` / `resolveModel` / `hasActiveKey` stubs). Order: #1 workflow exists → #2 profile loads → #3 model resolves + providerId matches → #4 active key (mock always ok; gemini/vertex check `loadStoredKeys().<provider>.activeSlotId !== null`) → #5 compatibility matrix (supports overrides) → #6 runtime aspect-ratio + language → #7 banned input keys (`aspectRatio` / `language` forbidden at input level per §6.3) → #8 `workflow.inputSchema.parse`. Returns `{ workflow, profile, model, parsedInput }` on success so dispatcher doesn't re-fetch.
+- `src/server/workflows-runtime/dispatcher.ts` (55) — `async *dispatch(params, deps)` AsyncGenerator. Calls `checkPreconditions` first, registers `AbortController` (caller can inject an externally-owned one via `deps.controller`), iterates `workflow.run(runParams)`, defensive early-exit if controller aborts without workflow acknowledging, deregisters in `finally` so memory can't leak.
+- `src/server/workflows-runtime/index.ts` (19) — barrel.
+
+### Tests added (2 files, 23 new tests)
+
+- `tests/unit/templates-loader.test.ts` (109, 9 tests) — real-JSON happy path, returned shape echo, missing-file / malformed-JSON / schema-drift (via `mkdtempSync` fixture dir), cache hit same-reference, cross-getter isolation, cache-reset forces re-read.
+- `tests/unit/workflows-precondition.test.ts` (215, 14 tests) — one happy + one throwing path per precondition #1-#8; extra happy-path case for `compatibilityOverrides` forcing compatible; dep-injected `getWorkflow` / `loadProfile` / `resolveModel` / `hasActiveKey` so test never touches disk.
+
+### Infra tweak
+
+- `tsconfig.json` paths: added `"@/workflows": ["src/workflows/index"]` root alias alongside existing `"@/workflows/*": ["src/workflows/*"]` so bare `@/workflows` barrel imports resolve (vitest already had it — tsconfig was the missing half). **No other structural changes.**
+
+### Decisions locked Session #10
+
+- **Workflow input schema guardrails:** precondition #7 explicitly rejects `aspectRatio` / `language` keys on input BEFORE `inputSchema.parse` runs. Prevents a workflow author accidentally declaring them in their Zod schema (Step 7 unit-test sweep is belt-and-suspenders at registration time).
+- **Dispatcher does NOT auto-emit `aborted` event.** Workflow `run()` is contractually responsible for respecting its own `abortSignal` and emitting `{ type: "aborted", batchId, completedCount, totalCount }` on shutdown (per Step 3 spec). Dispatcher adds a defensive `return` if the generator keeps yielding non-`aborted` events post-abort, but does not inject. Simpler contract; Step 3-7 tests enforce the shape per workflow.
+- **`@/workflows` as root barrel.** tsconfig alias mirrors the vitest alias; future route/client imports can use `import { ALL_WORKFLOWS, getWorkflow } from "@/workflows"` without `/index` suffix.
+- **`hasActiveKey` default impl** reads `loadStoredKeys()`. Mock always true; gemini/vertex require `activeSlotId !== null`. Unknown provider → false (which then trips NoActiveKeyError — acceptable; Step 3 dispatch path goes through mock only in Phase 3, real provider arriving in Phase 4 needs no change here).
+
+### QA gate result (Session #10 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 78 src files, 0 violations
+test: 186/186 pass (19 files) — 2.08s
+  prior:   163 (122 unit + 28 integration + 13 extraction)
+  new:      23 (9 templates-loader + 14 workflows-precondition)
+extract:all runtime: still 45ms (no script changes)
+```
+
+### Known pending items (for Session #11)
+
+1. **`ALL_WORKFLOWS` is empty** — Step 3 registers `artworkBatchWorkflow`, Step 7 appends the other three. `getWorkflow("artwork-batch")` currently throws NotFoundError (expected, covered in precondition #1 test).
+2. **Dispatcher has no E2E coverage yet** — only precondition unit tests today. Step 3 smoke (Mock workflow through dispatcher, abort mid-stream) gives first end-to-end signal.
+3. **`_resetTemplateCacheForTests` + `_resetAbortRegistryForTests`** are test-only underscore exports. Not reachable from production boot paths; flagged here so future security audit doesn't flag them as prod leakage.
+4. **`src/workflows/artwork-batch/` dir does NOT exist yet** — Step 3 creates `input-schema.ts` + `concept-generator.ts` + `prompt-builder.ts` + `run.ts` + `index.ts` (~4 files). Reads `getArtworkGroups()` from Step 1 cache.
+5. **Batch repo extension (`createBatch`, `updateBatchStatus`) deferred** — Step 3 plan says add to `src/server/asset-store/batch-repo.ts`. File doesn't yet exist; Session #11 creates alongside artwork-batch.
+
+## Next Session (#11) kickoff — Phase 3 Step 3
+
+1. Read this file + `memory/MEMORY.md` to recover state. Verify baseline `npm run regression:full` = 186/186.
+2. Read `BOOTSTRAP-PHASE3.md` Step 3 section in full (lines 88-121).
+3. Scope decisions for bro before coding:
+   - batch-repo shape (new file vs extend asset-repo)
+   - concept-generator determinism strategy (use seed? Pick first N entries of category? Random with seeded shuffle?)
+   - Mock asset write path — real `data/assets/<id>.png` files, or stub `Buffer.from("mock-bytes")`?
+   - How `buildPrompt` composes profile + concept + locale (is locale = language from top-level or profile.defaultLang?)
+4. After alignment, implement Step 3 per plan. Est 3-4h.
+
+If context budget still OK after Step 3, continue to Step 4 (SSE route + cancel) since that's the natural unlock for client work.
+
+---
+
+## Phase 2 Summary (closed)
 
 | Step | Title | Status |
 |---|---|---|
