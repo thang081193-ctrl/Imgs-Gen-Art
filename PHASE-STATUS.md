@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (6 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI + compat warning banner; 497/497 regression green)
-Last updated: 2026-04-23 (Session #22 close — Phase 4 Step 6 DONE. New `CompatibilityWarning` component at `src/client/components/workflow/` with `getBannerMessage` pure-fn fallback. Wired into Workflow page BELOW `ProviderModelSelector` (same section, causal locality). Stripped `incompatible` branch from `CompatBadge` inside `ProviderModelSelector` — badge now owns positive affirmation only (green "Compatible · recommended"); banner owns hard failure. Run button got `title={compat.reason}` tooltip when disabled for compat reason. +5 unit tests for pure-fn fallback/passthrough/whitespace handling. 492 → 497 regression green. Smoke via Claude_Preview MCP: style-transform × Imagen 4 → red banner with server reason "model missing required capability supportsImageEditing" + Run disabled + tooltip; switch to Gemini NB Pro → banner hidden + green badge appears.)
+Current phase: **Phase 4 — IN PROGRESS ⏳** (7 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI + compat warning banner + live smoke scaffold; 497/497 regression green + 10 live-gated skipped)
+Last updated: 2026-04-23 (Session #23 close — Phase 4 Step 7 code-complete, bro-gated for live run. New `tests/live/workflows-smoke.test.ts` (391 LOC, 11 interleaved combos; `describe.skipIf(AVAILABLE_COMBOS.length === 0)` + per-combo env filter → partial-env support). BUNDLED two latent bug fixes: (a) all 4 workflow registrations hardcoded `getProvider("mock")` at registration time — Session #11 Known Pending #2 — signature `resolveDeps: () => Deps` widened to `(params: WorkflowRunParams) => Deps` so provider resolves at run-time via `params.providerId` (8 src edits + 4 unit-test arg-sig updates); (b) `vitest.config.ts` `exclude: ["tests/live/**"]` latent bug since Session #18 broke `npm run test:live` — removed exclude (skipIf alone provides hermeticity). Plus `test:live:smoke-all` script. 497/497 regression green + 10 live-gated skipped (existing gemini-live: 5, vertex-live: 5; smoke-all: 0-tests-when-no-env).)
 
 ## Phase 4 Summary
 
@@ -13,8 +13,103 @@ Last updated: 2026-04-23 (Session #22 close — Phase 4 Step 6 DONE. New `Compat
 | 4 | `/api/providers/health` live wiring + TTL-by-status cache | ✅ Session #21 — 4 new src files in `src/server/health/` (cache + probe + context + barrel) + keys.ts invalidate hooks + providers.ts route rewrite + 16 unit tests + 3 wiring integration tests + 3 added /health integration cases |
 | 5 | Cost tracking per asset + batch | ✅ Session #21 (bundled) — GenerateResult.costUsd + 3 adapter COST tables + finalizeBatch helper + all 4 workflow run.ts refactored + 4 asset-writers + client formatCost util + thumbnail chip + detail modal + Gallery page-total header + 10 unit tests |
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
-| 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #23 |
+| 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #24 |
+
+## Completed in Session #23 (Phase 4 Step 7 — 11 live smoke tests)
+
+Bundled 2 latent bug fixes alongside the scaffold: (1) workflow provider-wiring (Session #11 Known Pending #2 — all 4 registrations hardcoded `getProvider("mock")`, would've silently mocked every live call); (2) `vitest.config.ts` exclude latent bug since Session #18 broke `npm run test:live`. Without either fix, Step 7 smokes are unrunnable — coupling rather than splitting kept the git log tight.
+
+### Scope decisions locked Session #23 (5 Qs + bonuses A-H, all rec'd verbatim)
+
+**Smoke scaffold decisions:**
+- **Q1 — Full HTTP end-to-end** (vs adapter-only): exercises dispatcher + route + asset-writer + DB + SSE. Adapter-level smokes already in `tests/live/providers.{gemini,vertex}-live.test.ts`.
+- **Q2 — Dedicated smoke profile via `POST /api/profiles`** + dummy 64-byte red-PNG screenshot upload in `beforeAll`. `afterAll` deletes profile JSON + workflow asset dir. Profile ID = `smoke-${Date.now()}` for uniqueness.
+- **Q3 — 1 concept × 1 variant** uniform across all 4 workflows. ad-production's `(layout, copy)` pair still resolves to 1 asset at `conceptCount: 1`. Tightest billable call.
+- **Q4 — Parameterized `it.each(AVAILABLE_COMBOS)`** + `buildInput(workflowId)` switch helper. Single assertion pattern.
+- **Q5 — Magic bytes + size gate + IHDR dimension parse** (upgraded from "optional" to "recommended" mid-negotiation). No `sharp` dep. 24-byte read + 2 `readUInt32BE` yields width/height; 1:1 assertion with ±0.02 tolerance.
+
+**Bonuses:**
+- **A — Serial within file**: Vitest default; single file via script.
+- **B — Full context dump on fail**: `console.error({combo, input, eventCount, lastEvents, error})` before rethrow.
+- **C — Cost assertion**: `EXPECTED_COSTS = {gemini:NB_PRO:0.134, gemini:NB_2:0.067, vertex:IMAGEN_4:0.04}`; both `asset.costUsd` + `batch.totalCostUsd` asserted.
+- **D — afterAll cleanup + `KEEP_SMOKE_ASSETS=1` escape** for manual review.
+- **E — No retry**: Vitest default. Transient 503 = real signal, not masked.
+- **F — 120s per-test timeout** covers real SDK latency (~15-45s + buffer).
+- **G — Provider-interleaved `SMOKE_COMBOS`** (gemini/vertex/gemini/vertex…) spreads rate-limit pressure.
+- **H — `AVAILABLE_COMBOS = SMOKE_COMBOS.filter(env)`** partial-env support. `describe.skipIf(AVAILABLE_COMBOS.length === 0)` for neither-key case. Script renamed `test:live:smoke-all` to reflect semantics.
+
+### Bundled fixes (both discovered during exploration)
+
+- **Workflow provider-wiring fix** (Session #11 Known Pending #2). Signature of `resolveDeps` widened from `() => Deps` to `(params: WorkflowRunParams) => Deps` so provider lookup happens at run-time with real `params.providerId`. Each workflow's `run.ts` now calls `resolveDeps(params)`; each `index.ts` registers `(params) => ({ ..., provider: getProvider(params.providerId) })`. Unit tests: 4 files × 1 line each, `() => stubDeps` → `(_params) => stubDeps` (ignored-arg sig). DI pattern preserved — tests still inject stubs cleanly.
+- **Vitest config `exclude: ["tests/live/**"]` removed.** Latent since Session #18: vitest applies `exclude` before path filter, so `npm run test:live` (which does `vitest run tests/live`) exited with "No test files found". `describe.skipIf(!HAS_KEY)` in each live file provides hermeticity — regression:full now runs tests/live/** which auto-skip without creds (zero billable calls + zero flake). Adds ~50ms + 10 skipped entries.
+
+### New src changes (8 files — provider-wiring fix)
+
+- `src/workflows/{artwork-batch,ad-production,style-transform,aso-screenshots}/run.ts` × 4 — resolveDeps signature + call-site.
+- `src/workflows/{artwork-batch,ad-production,style-transform,aso-screenshots}/index.ts` × 4 — registration passes `(params) => ({ ..., provider: getProvider(params.providerId) })`.
+
+### New test file (1 file, 391 LOC, 0-11 tests depending on env)
+
+- **`tests/live/workflows-smoke.test.ts`** — 11 interleaved smoke combos (Bonus G order). `beforeAll` seeds Gemini/Vertex slots via `addGeminiSlot`/`addVertexSlot` + `saveStoredKeys`, preloads templates, inits in-memory asset-store, creates smoke profile via `POST /api/profiles`, uploads dummy screenshot via `POST /api/profiles/:id/upload-asset kind=screenshot`. `it.each(AVAILABLE_COMBOS)` runs `POST /api/workflows/:id/run` → `readSSE` → `parseSSEEvents`, asserts: status 200, last event `complete`, batch status `completed` + successfulAssets 1, 1 asset in ledger, `asset.costUsd === EXPECTED_COSTS[provider:model]`, `batch.totalCostUsd === asset.costUsd` (1×1), `assertValidPNG(asset.filePath, "1:1")` (magic bytes + size 1KB-20MB + IHDR dims). `afterAll` rm-rf profile JSON + asset-dir unless `KEEP_SMOKE_ASSETS=1`.
+
+### Config changes
+
+- `package.json` — `"test:live:smoke-all": "vitest run tests/live/workflows-smoke.test.ts"`.
+- `vitest.config.ts` — drop `"tests/live/**"` from exclude list; updated comment to reflect skipIf-based hermeticity.
+
+### Unit test updates (4 files, 1 line each)
+
+- `tests/unit/workflow-{artwork-batch,ad-production,style-transform,aso-screenshots}.test.ts` × 4 — `() => stubDeps` → `(_params) => stubDeps`.
+
+### QA gate (Session #23 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 174 src files, 0 violations (smoke test exempt — scans src/ only)
+test: 497/497 pass + 10 skipped (49 files: 46 passing + 3 live-gated)
+  prior:        497 (Session #22 baseline)
+  live delta:   +10 skipped (gemini-live: 5, vertex-live: 5, smoke-all: 0 when no env)
+  pass delta:   +0 (smokes bro-gated; run count appears when creds set)
+
+bro-gated live run (pending — do after creds):
+  GEMINI_API_KEY=... VERTEX_PROJECT_ID=... VERTEX_SA_PATH=... npm run test:live:smoke-all
+  Est ~$0.92 per full 11-combo run. KEEP_SMOKE_ASSETS=1 preserves PNGs for review.
+```
+
+### Deviations from plan
+
+- **Bundled workflow provider-wiring fix into Step 7 commit (Option A per bro).** Alternative split (Option B) would create a prep commit whose "why" is obvious only in the context of the commit that immediately follows. Bundle keeps intent tight.
+- **Vitest config exclude fix shipped in Step 7 commit.** Not in handoff scope, but Step 7 code-complete cannot demonstrate via `npm run test:live:smoke-all` without it. Trivial; updated comment in config explains the new rationale.
+- **Smoke test file = 391 LOC** (over the 300 src hard cap). Confirmed `scripts/check-loc.ts` walks `src/` only; tests are exempt. No existing violation.
+- **Screenshot upload via multipart** (Q2 (c) implementation) exercises the profile-assets upload route as a side-effect — bonus regression coverage at session-setup time.
+- **No `sharp`/`pngjs` dep added** — manual IHDR parse (24-byte read + 2 `readUInt32BE`) yields width/height. 15-LOC helper.
+- **`describe.sequential`/pool config NOT explicitly set** — Vitest default is within-file sequential, and `test:live:smoke-all` invokes a single file, so serial guarantee is already given. If a future live-test author adds `describe.concurrent`, the serial guarantee breaks — flag for reviewer attention.
+
+### Known pending items (for Phase 4 Step 8 entry — Session #24)
+
+1. **Live suite run itself pending bro creds + ~$1.10 budget.** Once executed, append actual pass/fail + any SDK-specific notes to a Session #23-addendum here.
+2. **Step 8 (Phase 4 close, Session #24)** — includes:
+   - BOOTSTRAP-PHASE4.md session numbering fix (Step 7 listed as Session #24, Step 8 as #25; actual = #23/#24 since Session #21 bundled Steps 4+5).
+   - BOOTSTRAP-PHASE4.md SDK reference fix (`@google-cloud/vertexai@1.10.0` → `@google/genai@1.5.0 vertexai: true`).
+   - Final browser E2E: 4 workflows × 2 real providers, cancel mid-flight, Gallery shows real PNGs.
+   - PHASE-STATUS.md Phase 4 close summary.
+3. **Imagen 1K vs 2K cost tier.** Current `EXPECTED_COSTS` locks the 2K tier ($0.04). If a live smoke ever returns 1K output, cost assertion fails — desirable (catches silent downgrade). Aspect → resolution mapping isn't wired yet.
+4. **Phase 3 carry-forward still deferred** — Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows. Phase 5 territory.
+
+## Next Session (#24) kickoff — Phase 4 Step 8 (Phase 4 close)
+
+1. Read this file (Session #23 entry) + `BOOTSTRAP-PHASE4.md` Step 8 + `MEMORY.md`. Baseline: `npm run regression:full` = 497 pass + 10 skipped.
+2. **If live smokes haven't run yet**: bro runs `npm run test:live:smoke-all` with creds; update PHASE-STATUS with results before Step 8 wrap.
+3. Fix `BOOTSTRAP-PHASE4.md`: session numbering (Step 7 = #23 not #24; Step 8 = #24 not #25) + SDK reference.
+4. Manual browser E2E: 4 workflows × 2 real providers (real keys in Settings); cancel mid-flight; Gallery deep-links.
+5. Write Phase 4 close summary in `PHASE-STATUS.md`.
+
+Est 1-2h.
+
+---
 
 ## Completed in Session #22 (Phase 4 Step 6 — Compatibility warning banner)
 
