@@ -141,6 +141,10 @@ export function useAssets(filter: AssetsFilter, refreshKey: number = 0): ApiStat
   return useFetch<AssetsListResponse>(`/api/assets?${qs.toString()}&_=${refreshKey}`)
 }
 
+export function useAsset(assetId: string | null): ApiState<AssetDto> {
+  return useFetch<AssetDto>(assetId !== null ? `/api/assets/${assetId}` : null)
+}
+
 // Session #20 — /api/keys CRUD + activate + test.
 // `useKeys(refreshKey)` bumps on mutation to re-pull the list.
 // Mutations throw ApiError on non-2xx; callers catch + surface via toast.

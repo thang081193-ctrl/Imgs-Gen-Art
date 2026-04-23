@@ -84,3 +84,27 @@ CREATE TABLE IF NOT EXISTS profile_assets (
 );
 
 CREATE INDEX idx_profile_assets_profile ON profile_assets(profile_id);
+
+-- Phase 5 Step 5b (Session #27b) — PromptLab edit history.
+CREATE TABLE IF NOT EXISTS prompt_history (
+  id TEXT PRIMARY KEY,
+  asset_id TEXT,                         -- source asset (nullable after source delete)
+  result_asset_id TEXT,                  -- new asset from the edit (NULL until complete)
+  parent_history_id TEXT,                -- reserved for v1.1 tree view; always NULL in v1
+  profile_id TEXT NOT NULL,              -- denormalized for profile filter queries
+  prompt_raw TEXT NOT NULL,
+  override_params TEXT NOT NULL,         -- JSON — {addWatermark?, negativePrompt?}
+  created_at TEXT NOT NULL,
+  created_by_session TEXT,               -- optional opaque session identifier (v1: always NULL)
+  status TEXT NOT NULL,                  -- 'pending' | 'complete' | 'failed' | 'cancelled'
+  cost_usd REAL,                         -- denormalized from result asset
+  error_message TEXT,
+  FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE SET NULL,
+  FOREIGN KEY (result_asset_id) REFERENCES assets(id) ON DELETE SET NULL,
+  FOREIGN KEY (parent_history_id) REFERENCES prompt_history(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_history_asset ON prompt_history(asset_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_history_profile ON prompt_history(profile_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_history_created ON prompt_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prompt_history_pending ON prompt_history(status) WHERE status != 'complete';

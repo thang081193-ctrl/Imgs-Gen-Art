@@ -26,10 +26,12 @@ import {
 import {
   createAssetRepo,
   createBatchRepo,
+  createPromptHistoryRepo,
   openAssetDatabase,
   type AssetInsertInput,
   type AssetRepo,
   type BatchRepo,
+  type PromptHistoryRepo,
 } from "@/server/asset-store"
 import { mockProvider } from "@/server/providers/mock"
 import {
@@ -45,6 +47,21 @@ function openDbPair(): { assetRepo: AssetRepo; batchRepo: BatchRepo; close: () =
   return {
     assetRepo: createAssetRepo(db),
     batchRepo: createBatchRepo(db),
+    close: () => db.close(),
+  }
+}
+
+function openDbTriple(): {
+  assetRepo: AssetRepo
+  batchRepo: BatchRepo
+  promptHistoryRepo: PromptHistoryRepo
+  close: () => void
+} {
+  const { db } = openAssetDatabase({ path: ":memory:" })
+  return {
+    assetRepo: createAssetRepo(db),
+    batchRepo: createBatchRepo(db),
+    promptHistoryRepo: createPromptHistoryRepo(db),
     close: () => db.close(),
   }
 }
@@ -441,5 +458,186 @@ describe("executeReplay — provider error", () => {
 
     const batch = batchRepo.findById("batch_err")
     expect(batch?.status).toBe("error")
+  })
+})
+
+// Session #27b Step 5b — prompt_history write paths on the edit-replay flow.
+// Integration coverage for the happy path lives in
+// tests/integration/prompt-history-route.test.ts; here we exercise the two
+// failure transitions (cancelled / failed) that the HTTP harness can't
+// easily trigger without threading an AbortSignal mid-stream.
+describe("executeReplay — prompt_history state transitions (edit flow)", () => {
+  function seedCanonicalEditSource(
+    assetRepo: AssetRepo,
+    batchRepo: BatchRepo,
+  ): string {
+    const batchId = "batch_ph_unit_src"
+    batchRepo.create({
+      id: batchId,
+      profileId: "chartlens",
+      workflowId: "artwork-batch",
+      totalAssets: 1,
+      successfulAssets: 1,
+      status: "completed",
+    })
+    const canonical: ReplayPayload = {
+      version: 1,
+      prompt: "origin",
+      providerId: "mock",
+      modelId: MOCK_MODEL_ID,
+      aspectRatio: "1:1",
+      seed: 11,
+      providerSpecificParams: { addWatermark: false },
+      promptTemplateId: "artwork-batch",
+      promptTemplateVersion: "1",
+      contextSnapshot: {
+        profileId: "chartlens",
+        profileVersion: 1,
+        profileSnapshot: {
+          version: 1,
+          id: "chartlens",
+          name: "ChartLens",
+          tagline: "x",
+          category: "utility",
+          assets: {
+            appLogoAssetId: null,
+            storeBadgeAssetId: null,
+            screenshotAssetIds: [],
+          },
+          visual: {
+            primaryColor: "#111111",
+            secondaryColor: "#ff66cc",
+            accentColor: "#00ccff",
+            tone: "minimal",
+            doList: ["a"],
+            dontList: ["b"],
+          },
+          positioning: { usp: "x", targetPersona: "y", marketTier: "global" },
+          context: { features: [], keyScenarios: [], forbiddenContent: [] },
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        },
+      },
+    }
+    const id = "asset_ph_unit_src"
+    assetRepo.insert({
+      id,
+      profileId: "chartlens",
+      profileVersionAtGen: 1,
+      workflowId: "artwork-batch",
+      batchId,
+      promptRaw: canonical.prompt,
+      promptTemplateId: canonical.promptTemplateId,
+      promptTemplateVersion: canonical.promptTemplateVersion,
+      inputParams: "{}",
+      replayPayload: JSON.stringify(canonical),
+      replayClass: "deterministic",
+      providerId: "mock",
+      modelId: MOCK_MODEL_ID,
+      seed: 11,
+      aspectRatio: "1:1",
+      filePath: `./data/assets/${id}.png`,
+      status: "completed",
+      tags: [],
+    })
+    return id
+  }
+
+  it("updates history to status='failed' + errorMessage when provider.generate throws", async () => {
+    const { assetRepo, batchRepo, promptHistoryRepo, close } = openDbTriple()
+    closeDb = close
+    const sourceId = seedCanonicalEditSource(assetRepo, batchRepo)
+
+    const throwingProvider = {
+      ...mockProvider,
+      generate: async () => {
+        throw new Error("provider boom")
+      },
+    }
+
+    await drain(
+      executeReplay(
+        {
+          assetId: sourceId,
+          newBatchId: "batch_ph_fail",
+          abortSignal: new AbortController().signal,
+          overridePayload: { prompt: "will fail" },
+        },
+        {
+          assetRepo,
+          batchRepo,
+          promptHistoryRepo,
+          resolveProvider: () => throwingProvider,
+          assetsDir: tmpAssetsDir,
+        },
+      ),
+    )
+
+    const history = promptHistoryRepo.listByAsset(sourceId)
+    expect(history).toHaveLength(1)
+    const entry = history[0]
+    if (!entry) throw new Error("history entry missing")
+    expect(entry.status).toBe("failed")
+    expect(entry.errorMessage).toBe("provider boom")
+    expect(entry.resultAssetId).toBeNull()
+  })
+
+  it("updates history to status='cancelled' when abortSignal fires pre-generate", async () => {
+    const { assetRepo, batchRepo, promptHistoryRepo, close } = openDbTriple()
+    closeDb = close
+    const sourceId = seedCanonicalEditSource(assetRepo, batchRepo)
+
+    const ctrl = new AbortController()
+    ctrl.abort()
+
+    await drain(
+      executeReplay(
+        {
+          assetId: sourceId,
+          newBatchId: "batch_ph_cancel",
+          abortSignal: ctrl.signal,
+          overridePayload: { prompt: "will cancel" },
+        },
+        {
+          assetRepo,
+          batchRepo,
+          promptHistoryRepo,
+          resolveProvider: () => mockProvider,
+          assetsDir: tmpAssetsDir,
+        },
+      ),
+    )
+
+    const history = promptHistoryRepo.listByAsset(sourceId)
+    expect(history).toHaveLength(1)
+    const entry = history[0]
+    if (!entry) throw new Error("history entry missing")
+    expect(entry.status).toBe("cancelled")
+    expect(entry.resultAssetId).toBeNull()
+  })
+
+  it("does NOT insert a history row when overridePayload is absent (pure replay)", async () => {
+    const { assetRepo, batchRepo, promptHistoryRepo, close } = openDbTriple()
+    closeDb = close
+    const sourceId = seedSourceAsset(assetRepo, batchRepo)
+
+    await drain(
+      executeReplay(
+        {
+          assetId: sourceId,
+          newBatchId: "batch_ph_pure_unit",
+          abortSignal: new AbortController().signal,
+        },
+        {
+          assetRepo,
+          batchRepo,
+          promptHistoryRepo,
+          resolveProvider: () => mockProvider,
+          assetsDir: tmpAssetsDir,
+        },
+      ),
+    )
+
+    expect(promptHistoryRepo.listByAsset(sourceId)).toEqual([])
   })
 })

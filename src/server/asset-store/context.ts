@@ -13,11 +13,16 @@ import {
   createProfileAssetsRepo,
   type ProfileAssetsRepo,
 } from "./profile-assets-repo"
+import {
+  createPromptHistoryRepo,
+  type PromptHistoryRepo,
+} from "./prompt-history-repo"
 
 let opened: OpenedDatabase | null = null
 let _assetRepo: AssetRepo | null = null
 let _batchRepo: BatchRepo | null = null
 let _profileAssetsRepo: ProfileAssetsRepo | null = null
+let _promptHistoryRepo: PromptHistoryRepo | null = null
 
 export function initAssetStore(options: OpenAssetDatabaseOptions = {}): OpenedDatabase {
   if (opened) {
@@ -27,6 +32,7 @@ export function initAssetStore(options: OpenAssetDatabaseOptions = {}): OpenedDa
   _assetRepo = createAssetRepo(opened.db)
   _batchRepo = createBatchRepo(opened.db)
   _profileAssetsRepo = createProfileAssetsRepo(opened.db)
+  _promptHistoryRepo = createPromptHistoryRepo(opened.db)
   return opened
 }
 
@@ -51,6 +57,13 @@ export function getProfileAssetsRepo(): ProfileAssetsRepo {
   return _profileAssetsRepo
 }
 
+export function getPromptHistoryRepo(): PromptHistoryRepo {
+  if (!_promptHistoryRepo) {
+    throw new Error("asset-store not initialized — call initAssetStore() at boot")
+  }
+  return _promptHistoryRepo
+}
+
 /** Test-only: drop the singleton so a new initAssetStore call can rebind. */
 export function _resetAssetStoreForTests(): void {
   if (opened) opened.db.close()
@@ -58,4 +71,5 @@ export function _resetAssetStoreForTests(): void {
   _assetRepo = null
   _batchRepo = null
   _profileAssetsRepo = null
+  _promptHistoryRepo = null
 }

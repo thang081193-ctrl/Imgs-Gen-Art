@@ -8,10 +8,11 @@
 // /api/workflows/runs/:batchId. For replay batches, DELETE may 404 (replay
 // service doesn't register with abort-registry) — treat as benign.
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AssetDto } from "@/core/dto/asset-dto"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
+import type { OverridePayload } from "@/core/schemas/override-payload"
 
 import { useSSE } from "./use-sse"
 
@@ -23,13 +24,17 @@ export type ReplayState =
   | "cancelled"
   | "error"
 
+export interface StartOptions {
+  overridePayload?: OverridePayload
+}
+
 export interface ReplayHandle {
   state: ReplayState
   batchId: string | null
   result: AssetDto | null
   error: Error | null
   elapsedMs: number
-  start: (assetId: string) => void
+  start: (assetId: string, options?: StartOptions) => void
   cancel: () => Promise<void>
   reset: () => void
 }
@@ -43,6 +48,7 @@ export function useReplay(): ReplayHandle {
   const [error, setError] = useState<Error | null>(null)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [elapsedMs, setElapsedMs] = useState<number>(0)
+  const [overridePayload, setOverridePayload] = useState<OverridePayload | null>(null)
 
   // Mirror latest state so cancel() doesn't capture stale values.
   const stateRef = useRef<ReplayState>("idle")
@@ -96,10 +102,18 @@ export function useReplay(): ReplayHandle {
     }
   }, [])
 
+  const body = useMemo(
+    () =>
+      overridePayload !== null
+        ? { mode: "edit" as const, overridePayload }
+        : {},
+    [overridePayload],
+  )
+
   const sse = useSSE(url, {
     enabled: (state === "dispatching" || state === "streaming") && url !== "",
     method: "POST",
-    body: {},
+    body,
     onEvent: onSSEEvent,
   })
 
@@ -114,16 +128,20 @@ export function useReplay(): ReplayHandle {
     }
   }, [sse.status, sse.error, state])
 
-  const start = useCallback((targetAssetId: string): void => {
-    setBatchId(null)
-    setResult(null)
-    setError(null)
-    setStartedAt(null)
-    setElapsedMs(0)
-    setAssetId(targetAssetId)
-    setState("dispatching")
-    setRunNonce((n) => n + 1)
-  }, [])
+  const start = useCallback(
+    (targetAssetId: string, options: StartOptions = {}): void => {
+      setBatchId(null)
+      setResult(null)
+      setError(null)
+      setStartedAt(null)
+      setElapsedMs(0)
+      setAssetId(targetAssetId)
+      setOverridePayload(options.overridePayload ?? null)
+      setState("dispatching")
+      setRunNonce((n) => n + 1)
+    },
+    [],
+  )
 
   const cancel = useCallback(async (): Promise<void> => {
     if (stateRef.current !== "dispatching" && stateRef.current !== "streaming") {
@@ -149,6 +167,7 @@ export function useReplay(): ReplayHandle {
     setError(null)
     setStartedAt(null)
     setElapsedMs(0)
+    setOverridePayload(null)
   }, [])
 
   return { state, batchId, result, error, elapsedMs, start, cancel, reset }

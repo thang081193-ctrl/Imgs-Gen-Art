@@ -21,6 +21,7 @@ export interface AssetDetailModalProps {
   onClose: () => void
   onFilterBatch: (batchId: string) => void
   onOpenAsset: (asset: AssetDto) => void
+  onEditAsset: (asset: AssetDto) => void
   showToast: ShowToast
 }
 
@@ -29,6 +30,7 @@ export function AssetDetailModal({
   onClose,
   onFilterBatch,
   onOpenAsset,
+  onEditAsset,
   showToast,
 }: AssetDetailModalProps): ReactElement | null {
   useEffect(() => {
@@ -145,6 +147,7 @@ export function AssetDetailModal({
           asset={asset}
           onFilterBatch={onFilterBatch}
           onOpenAsset={onOpenAsset}
+          onEditAsset={onEditAsset}
           showToast={showToast}
         />
       </div>

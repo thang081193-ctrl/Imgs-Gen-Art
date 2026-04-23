@@ -28,14 +28,18 @@ import {
   NoActiveKeyError,
   NotFoundError,
 } from "@/core/shared/errors"
+import type { PromptHistoryOverrideParams } from "@/core/dto/prompt-history-dto"
+import { shortId } from "@/core/shared/id"
 import {
   finalizeBatch,
   getAssetRepo as getAssetRepoDefault,
   getBatchRepo as getBatchRepoDefault,
+  getPromptHistoryRepo as getPromptHistoryRepoDefault,
   toAssetDto,
   type AssetInternal,
   type AssetRepo,
   type BatchRepo,
+  type PromptHistoryRepo,
 } from "@/server/asset-store"
 import { loadStoredKeys } from "@/server/keys/store"
 import { getProvider as getProviderDefault } from "@/server/providers"
@@ -61,6 +65,7 @@ export interface LoadedReplayContext {
 export interface ReplayServiceDeps {
   assetRepo?: AssetRepo
   batchRepo?: BatchRepo
+  promptHistoryRepo?: PromptHistoryRepo
   resolveModel?: (id: string) => ModelInfo | undefined
   resolveProvider?: (id: string) => ImageProvider
   hasActiveKey?: (providerId: string) => boolean
@@ -162,6 +167,34 @@ export async function* executeReplay(
       ? applyOverride(ctx, params.overridePayload)
       : { execute: ctx.execute, newPayloadJson: ctx.storedPayloadJson }
 
+  // Phase 5 Step 5b — log the edit iteration. Mode=edit only: pure replays
+  // are byte-deterministic duplicates and not worth surfacing as a distinct
+  // "iteration" in PromptLab. history repo lookup is lazy (only when edit)
+  // so test setups that don't boot the full asset-store still pass.
+  const historyId =
+    params.overridePayload !== undefined ? shortId("ph", 10) : null
+  const promptHistoryRepo =
+    historyId !== null
+      ? deps.promptHistoryRepo ?? getPromptHistoryRepoDefault()
+      : null
+  if (historyId !== null && promptHistoryRepo !== null) {
+    const src = params.overridePayload ?? {}
+    const overrideParams: PromptHistoryOverrideParams = {
+      ...(src.addWatermark !== undefined ? { addWatermark: src.addWatermark } : {}),
+      ...(src.negativePrompt !== undefined
+        ? { negativePrompt: src.negativePrompt }
+        : {}),
+    }
+    promptHistoryRepo.insert({
+      id: historyId,
+      assetId: ctx.sourceAsset.id,
+      profileId: ctx.sourceAsset.profileId,
+      promptRaw: execute.prompt,
+      overrideParams,
+      createdAt: nowFn().toISOString(),
+    })
+  }
+
   batchRepo.create({
     id: params.newBatchId,
     profileId: ctx.sourceAsset.profileId,
@@ -176,6 +209,9 @@ export async function* executeReplay(
   yield { type: "started", batchId: params.newBatchId, total: 1 }
 
   if (params.abortSignal.aborted) {
+    if (historyId !== null && promptHistoryRepo !== null) {
+      promptHistoryRepo.updateStatus(historyId, { status: "cancelled" })
+    }
     finalizeBatch({
       batchId: params.newBatchId,
       status: "aborted",
@@ -223,6 +259,14 @@ export async function* executeReplay(
       assetRepo,
     )
 
+    if (historyId !== null && promptHistoryRepo !== null) {
+      promptHistoryRepo.updateStatus(historyId, {
+        status: "complete",
+        resultAssetId: newAsset.id,
+        costUsd: generateResult.costUsd ?? null,
+      })
+    }
+
     yield { type: "image_generated", asset: toAssetDto(newAsset), index: 0 }
 
     finalizeBatch({
@@ -235,6 +279,12 @@ export async function* executeReplay(
     yield { type: "complete", assets: [toAssetDto(newAsset)], batchId: params.newBatchId }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    if (historyId !== null && promptHistoryRepo !== null) {
+      promptHistoryRepo.updateStatus(historyId, {
+        status: "failed",
+        errorMessage: message,
+      })
+    }
     yield {
       type: "error",
       error: { message },

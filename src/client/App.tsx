@@ -7,6 +7,7 @@ import type { ReactElement } from "react"
 import { Home } from "@/client/pages/Home"
 import { Workflow } from "@/client/pages/Workflow"
 import { Gallery } from "@/client/pages/Gallery"
+import { PromptLab } from "@/client/pages/PromptLab"
 import { Settings } from "@/client/pages/Settings"
 import { TopNav } from "@/client/components/TopNav"
 import { ToastHost, useToastStack } from "@/client/components/ToastHost"
@@ -28,10 +29,11 @@ export function App(): ReactElement {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <TopNav page={page} onNav={(p) => navigator.go(p)} />
-      {page === "home"     && <Home onNav={navigator.go} />}
-      {page === "workflow" && <Workflow navigator={navigator} showToast={show} />}
-      {page === "gallery"  && <Gallery  navigator={navigator} showToast={show} />}
-      {page === "settings" && <Settings showToast={show} />}
+      {page === "home"       && <Home onNav={navigator.go} />}
+      {page === "workflow"   && <Workflow navigator={navigator} showToast={show} />}
+      {page === "gallery"    && <Gallery  navigator={navigator} showToast={show} />}
+      {page === "prompt-lab" && <PromptLab navigator={navigator} showToast={show} />}
+      {page === "settings"   && <Settings showToast={show} />}
       <ToastHost toasts={toasts} onDismiss={dismiss} />
     </div>
   )

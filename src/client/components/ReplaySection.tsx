@@ -23,6 +23,7 @@ export interface ReplaySectionProps {
   asset: AssetDto
   onFilterBatch: (batchId: string) => void
   onOpenAsset: (asset: AssetDto) => void
+  onEditAsset: (asset: AssetDto) => void
   showToast: ShowToast
 }
 
@@ -30,6 +31,7 @@ export function ReplaySection({
   asset,
   onFilterBatch,
   onOpenAsset,
+  onEditAsset,
   showToast,
 }: ReplaySectionProps): ReactElement {
   const probe = useReplayClass(asset.id)
@@ -58,11 +60,18 @@ export function ReplaySection({
         </p>
       )}
       {probe.data !== null && (
-        <ReplayControl
-          probe={probe.data}
-          replay={replay}
-          onStart={() => replay.start(asset.id)}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <ReplayControl
+            probe={probe.data}
+            replay={replay}
+            onStart={() => replay.start(asset.id)}
+          />
+          <EditReplayButton
+            asset={asset}
+            probe={probe.data}
+            onEdit={() => onEditAsset(asset)}
+          />
+        </div>
       )}
       {replay.state === "complete" && replay.result !== null && (
         <ResultCard
@@ -81,6 +90,46 @@ export function ReplaySection({
 function ProbeSkeleton(): ReactElement {
   return (
     <div className="inline-block h-8 w-56 animate-pulse rounded-md bg-slate-800" />
+  )
+}
+
+// Session #27b — PromptLab entry point. Disabled when the asset is legacy
+// (replay-only, per Q-5b.3 alignment) OR not_replayable. Priority per Q6
+// Refinement 2: not_replayable tooltip wins over legacy-payload tooltip.
+function EditReplayButton({
+  asset,
+  probe,
+  onEdit,
+}: {
+  asset: AssetDto
+  probe: ReplayClassProbe
+  onEdit: () => void
+}): ReactElement {
+  const isNotReplayable = probe.replayClass === "not_replayable"
+  const isLegacy =
+    !isNotReplayable && asset.editable.canEdit === false
+  const disabled = isNotReplayable || isLegacy
+
+  let tooltip: string | undefined
+  if (isNotReplayable) tooltip = notReplayableTooltip(probe.reason)
+  else if (isLegacy)
+    tooltip =
+      "This asset predates the edit & replay feature. Replay is supported but editing is not. Create a new batch to use edit & replay."
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={disabled ? undefined : onEdit}
+      title={tooltip}
+      className={
+        disabled
+          ? "rounded-md border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-500 cursor-not-allowed"
+          : "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+      }
+    >
+      Edit &amp; replay
+    </button>
   )
 }
 

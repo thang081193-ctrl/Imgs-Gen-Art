@@ -135,6 +135,10 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
           setSelected(null)
         }}
         onOpenAsset={setSelected}
+        onEditAsset={(a) => {
+          setSelected(null)
+          navigator.go("prompt-lab", { assetId: a.id })
+        }}
         showToast={showToast}
       />
     </main>
