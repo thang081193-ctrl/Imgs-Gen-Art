@@ -43,6 +43,7 @@ import {
   type StoredKeys,
   type VertexSlot,
 } from "@/server/keys"
+import { getHealthCache } from "@/server/health"
 import { validateBody } from "@/server/middleware/validator"
 import { parseMultipartUpload } from "@/server/middleware/multipart"
 import { getProvider, hasProvider } from "@/server/providers"
@@ -97,6 +98,15 @@ function buildHealthContext(match: SlotMatch): HealthCheckContext {
 }
 
 type KeysEnv = { Variables: { validatedBody: GeminiCreateBody | KeyTestBody } }
+
+function tryInvalidateHealth(providerId: ProviderId): void {
+  // Health cache may not be initialized in edge tests — swallow + skip.
+  try {
+    getHealthCache().invalidate(providerId)
+  } catch {
+    // init happens at boot; tests that don't exercise health can skip it.
+  }
+}
 
 export function createKeysRoute(): Hono<KeysEnv> {
   const route = new Hono<KeysEnv>()
@@ -161,6 +171,8 @@ export function createKeysRoute(): Hono<KeysEnv> {
       }
       writeFileSync(realPath, Buffer.from(parsed.data.file.bytes), "utf8")
       saveStoredKeys(finalStore)
+      // First slot auto-activates (slot-manager.addVertexSlot) — invalidate in case.
+      tryInvalidateHealth("vertex")
       return c.json({ slotId: add.slotId, provider: "vertex" }, 201)
     }
 
@@ -177,6 +189,7 @@ export function createKeysRoute(): Hono<KeysEnv> {
       plaintextKey: body.key,
     })
     saveStoredKeys(next)
+    tryInvalidateHealth("gemini")
     return c.json({ slotId, provider: "gemini" }, 201)
   })
 
@@ -186,6 +199,7 @@ export function createKeysRoute(): Hono<KeysEnv> {
     const match = findSlotAnywhere(store, slotId)
     if (!match) return c.json({ error: "SLOT_NOT_FOUND", slotId }, 404)
     saveStoredKeys(activateSlot(store, match.provider, slotId))
+    tryInvalidateHealth(match.provider)
     return c.json({ activated: true, slotId, provider: match.provider })
   })
 
@@ -203,6 +217,10 @@ export function createKeysRoute(): Hono<KeysEnv> {
       const path = (match.slot as VertexSlot).serviceAccountPath
       if (existsSync(path)) rmSync(path, { force: true })
     }
+
+    // Always invalidate — even for non-active delete the slot inventory changed
+    // (future probe may pick a different active slot or degrade to auth_error).
+    tryInvalidateHealth(match.provider)
 
     if (wasActive) {
       return c.json({

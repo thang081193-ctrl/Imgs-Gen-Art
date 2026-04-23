@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url"
 
 import { createLogger } from "@/core/shared/logger"
 import { initAssetStore } from "@/server/asset-store/context"
+import { initHealthCache } from "@/server/health"
 import { preloadAllTemplates } from "@/server/templates"
 import { createApp } from "./app"
 
@@ -32,6 +33,8 @@ function boot(): void {
     })
     process.exit(1)
   }
+
+  initHealthCache()
 
   try {
     preloadAllTemplates()
