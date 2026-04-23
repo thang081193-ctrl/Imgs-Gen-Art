@@ -146,6 +146,30 @@ export class SafetyFilterError extends AppError {
   }
 }
 
+// Specialization of ProviderError for a known-preventable Vertex failure mode:
+// the slot references an SA file that is no longer on disk (user deleted it,
+// bad restore, etc.). Distinct class so the UI can surface "Service account
+// file was deleted. Re-upload via Settings" instead of the generic 502.
+// sdkCode pinned to "SA_FILE_MISSING" so callers can filter without string-matching
+// the message. Still a 502 via the ProviderError base — the failure is
+// operational upstream-auth, not a request-shape issue.
+export interface ServiceAccountFileMissingDetails extends ProviderErrorDetails {
+  slotId: string
+  expectedPath: string
+}
+
+export class ServiceAccountFileMissingError extends ProviderError {
+  constructor(details: Omit<ServiceAccountFileMissingDetails, "providerId" | "sdkCode">) {
+    super(`Service account file missing for slot ${details.slotId}`, {
+      providerId: "vertex",
+      sdkCode: "SA_FILE_MISSING",
+      slotId: details.slotId,
+      expectedPath: details.expectedPath,
+    })
+    this.name = "ServiceAccountFileMissingError"
+  }
+}
+
 export class ExtractionError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super("EXTRACTION_FAILED", message, 500, details)

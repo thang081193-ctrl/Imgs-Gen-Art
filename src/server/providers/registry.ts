@@ -1,15 +1,18 @@
 // Provider registry — lookup by `providerId`. Throws typed error with structured
 // context (available provider ids) so callers debugging bad IDs see options.
-// Phase 1 registers only Mock; Gemini + Vertex join in Phase 2 Step 8/9.
+// Phase 4: all three real-ish providers registered — Mock + Gemini (Session
+// #18) + Vertex Imagen (Session #19).
 
 import type { ImageProvider } from "@/core/providers/types"
 import { ProviderNotFoundError } from "@/core/shared/errors"
 import { geminiProvider } from "./gemini"
 import { mockProvider } from "./mock"
+import { vertexImagenProvider } from "./vertex-imagen"
 
 const registry: ReadonlyMap<string, ImageProvider> = new Map<string, ImageProvider>([
   [mockProvider.id, mockProvider],
   [geminiProvider.id, geminiProvider],
+  [vertexImagenProvider.id, vertexImagenProvider],
 ])
 
 export function getProvider(id: string): ImageProvider {

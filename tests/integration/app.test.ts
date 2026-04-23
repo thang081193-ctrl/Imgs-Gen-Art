@@ -45,11 +45,13 @@ describe("GET /api/providers", () => {
     const body = await res.json()
     expect(body.providers.map((p: { id: string }) => p.id)).toEqual(["gemini", "vertex", "mock"])
     expect(body.models).toHaveLength(4)
-    // Phase 4 Step 1 (Session #18): gemini joins mock in the registry. Vertex
-    // lands Step 2. Use set-equality (order-agnostic) since registry iteration
-    // order is an implementation detail.
-    expect(body.registeredProviderIds).toEqual(expect.arrayContaining(["mock", "gemini"]))
-    expect(body.registeredProviderIds).not.toContain("vertex")
+    // Phase 4 Step 2 (Session #19): vertex joins gemini + mock. All three
+    // real-ish adapters registered. Use set-equality (order-agnostic) since
+    // registry iteration order is an implementation detail.
+    expect(body.registeredProviderIds).toEqual(
+      expect.arrayContaining(["mock", "gemini", "vertex"]),
+    )
+    expect(body.registeredProviderIds).toHaveLength(3)
   })
 
   it("embeds capability per model entry (sourceUrl + verifiedAt)", async () => {

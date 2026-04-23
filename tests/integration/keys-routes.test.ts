@@ -211,6 +211,47 @@ describe("POST /api/keys/:id/test — Session #14 Q8 + wiring", () => {
     const res = await postJson("/api/keys/ks_ghost/test", {})
     expect(res.status).toBe(404)
   })
+
+  it("returns full response shape against the real vertex adapter (Phase 4 Step 2)", async () => {
+    // Create a Vertex slot via the existing multipart flow so the adapter
+    // sees a real slot on disk with a (fake) SA file. The test key won't
+    // authenticate against real Google, so the adapter lands one of the
+    // 4 non-ok HealthStatusCode branches — "ok" is excluded since the SA
+    // is a throwaway fixture.
+    const serviceAccountJson = JSON.stringify({
+      type: "service_account",
+      project_id: "test-proj",
+      private_key_id: "kid",
+      private_key: "-----BEGIN PRIVATE KEY-----\\nFAKE\\n-----END PRIVATE KEY-----\\n",
+      client_email: "svc@test-proj.iam.gserviceaccount.com",
+      client_id: "123",
+    })
+    const form = new FormData()
+    form.append("label", "vertex-test-slot")
+    form.append("projectId", "test-proj")
+    form.append("location", "us-central1")
+    form.append(
+      "file",
+      new Blob([serviceAccountJson], { type: "application/json" }),
+      "service-account.json",
+    )
+    const create = await fetchApp("/api/keys", { method: "POST", body: form })
+    expect(create.status).toBe(201)
+    const { slotId } = await create.json() as { slotId: string }
+
+    const res = await postJson(`/api/keys/${slotId}/test`, {})
+    expect(res.status).toBe(200)
+    const body = await res.json() as {
+      slotId: string
+      modelId: string
+      status: string
+      checkedAt: string
+    }
+    expect(body.slotId).toBe(slotId)
+    expect(body.modelId).toBeTruthy()     // defaulted from modelsByProvider("vertex")[0]
+    expect(["auth_error", "rate_limited", "quota_exceeded", "down"]).toContain(body.status)
+    expect(body.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
 })
 
 describe("POST /api/keys — vertex multipart upload", () => {
