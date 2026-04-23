@@ -207,10 +207,26 @@ describe("DELETE /api/assets/:id", () => {
   })
 })
 
-describe("POST /api/assets/:id/replay — NOT registered (Phase 5, Q5)", () => {
-  it("returns 404 (route does not exist in Phase 3)", async () => {
-    seedAsset("ast_one")
-    const res = await fetchApp("/api/assets/ast_one/replay", { method: "POST" })
+describe("POST /api/assets/:id/replay — registered (Phase 5 Step 1)", () => {
+  it("returns 404 when source asset does not exist", async () => {
+    const res = await fetchApp("/api/assets/nope/replay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
     expect(res.status).toBe(404)
+  })
+
+  it("returns 400 when source asset has no replay payload stored (Phase 3 seed)", async () => {
+    // Legacy-shaped seedAsset in this file deliberately writes replayPayload:
+    // null — the replay route must refuse it (can't replay without a payload)
+    // rather than route-through to a provider call.
+    seedAsset("ast_one")
+    const res = await fetchApp("/api/assets/ast_one/replay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
   })
 })

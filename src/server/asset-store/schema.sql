@@ -65,8 +65,12 @@ CREATE TABLE IF NOT EXISTS batches (
   status TEXT NOT NULL,                 -- v2.2: NEW — 'running' | 'completed' | 'aborted' | 'error'
   started_at TEXT NOT NULL,
   completed_at TEXT,
-  aborted_at TEXT                       -- v2.2: NEW
+  aborted_at TEXT,                      -- v2.2: NEW
+  replay_of_batch_id TEXT,              -- Phase 5 Step 1 — source batch of a replay run
+  replay_of_asset_id TEXT               -- Phase 5 Step 1 — source asset that triggered the replay
 );
+
+CREATE INDEX IF NOT EXISTS idx_batches_replay_of_batch ON batches(replay_of_batch_id);
 
 -- v2.2 NEW: profile assets registry
 CREATE TABLE IF NOT EXISTS profile_assets (

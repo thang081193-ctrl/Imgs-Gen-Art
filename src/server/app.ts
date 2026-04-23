@@ -16,6 +16,7 @@ import {
 } from "./routes/profile-assets"
 import { createProfilesRoute } from "./routes/profiles"
 import { createProvidersRoute } from "./routes/providers"
+import { createReplayRoute } from "./routes/replay"
 import { createStubsRoute } from "./routes/stubs"
 import { createTemplatesRoute } from "./routes/templates"
 import { createWorkflowRunsRoute } from "./routes/workflow-runs"
@@ -42,6 +43,10 @@ export function createApp(config: AppConfig): Hono {
   app.route("/api/profile-assets", createProfileAssetsRoute())
   app.route("/api/templates", createTemplatesRoute())
   app.route("/api/keys", createKeysRoute())
+  // Replay subapp registered FIRST under /api/assets so its
+  // /:assetId/replay + /:assetId/replay-class paths win over the base
+  // /:id handlers (same pattern as workflow-runs before workflows).
+  app.route("/api/assets", createReplayRoute())
   app.route("/api/assets", createAssetsRoute())
   app.route("/api/debug", createDebugRoute())
   // Workflow-runs mounted FIRST under /api/workflows/runs so its DELETE

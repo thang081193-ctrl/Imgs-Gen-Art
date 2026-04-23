@@ -23,6 +23,8 @@ interface BatchRow {
   started_at: string
   completed_at: string | null
   aborted_at: string | null
+  replay_of_batch_id: string | null
+  replay_of_asset_id: string | null
 }
 
 function rowToBatch(row: BatchRow): BatchInternal {
@@ -37,6 +39,8 @@ function rowToBatch(row: BatchRow): BatchInternal {
     startedAt: row.started_at,
     completedAt: row.completed_at,
     abortedAt: row.aborted_at,
+    replayOfBatchId: row.replay_of_batch_id,
+    replayOfAssetId: row.replay_of_asset_id,
   }
 }
 
@@ -66,8 +70,9 @@ export function createBatchRepo(db: Database.Database) {
     `INSERT INTO batches (
       id, profile_id, workflow_id,
       total_assets, successful_assets, total_cost_usd,
-      status, started_at, completed_at, aborted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+      status, started_at, completed_at, aborted_at,
+      replay_of_batch_id, replay_of_asset_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
   )
   const findByIdStmt = db.prepare(`SELECT * FROM batches WHERE id = ?`)
   const updateStatusStmt = db.prepare(
@@ -92,6 +97,8 @@ export function createBatchRepo(db: Database.Database) {
         input.totalCostUsd ?? null,
         input.status,
         input.startedAt ?? now,
+        input.replayOfBatchId ?? null,
+        input.replayOfAssetId ?? null,
       )
       const row = findByIdStmt.get(input.id) as BatchRow
       return rowToBatch(row)

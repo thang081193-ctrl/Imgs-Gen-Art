@@ -107,6 +107,8 @@ export interface BatchInternal {
   startedAt: string
   completedAt: string | null
   abortedAt: string | null
+  replayOfBatchId: string | null
+  replayOfAssetId: string | null
 }
 
 export interface BatchCreateInput {
@@ -118,4 +120,6 @@ export interface BatchCreateInput {
   totalCostUsd?: number | null
   status: BatchStatus
   startedAt?: string
+  replayOfBatchId?: string | null
+  replayOfAssetId?: string | null
 }
