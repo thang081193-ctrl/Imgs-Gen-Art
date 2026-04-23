@@ -1,9 +1,11 @@
 // Provider + Model pickers + live compatibility hint. Reads:
 //   - `providers` / `models` from /api/providers
 //   - compat matrix from /api/providers/compatibility
-// The compat badge below the dropdowns tells the user when their picked
-// pair is INCOMPATIBLE for the currently-selected workflow (source=override
-// gets a distinct note).
+// The compat badge below the dropdowns gives positive affirmation (green
+// "Compatible" with optional override/recommended note). The incompatible
+// case is surfaced by <CompatibilityWarning> on the Workflow page instead
+// — Session #22 split: selector keeps positive hint, page-level banner
+// owns the hard failure.
 
 import type { ReactElement } from "react"
 import type { ModelInfo, ProviderInfo } from "@/core/model-registry/types"
@@ -67,9 +69,8 @@ export function ProviderModelSelector({
           ))}
         </select>
       </div>
-      {compat !== null && (
+      {compat !== null && compat.status === "compatible" && (
         <CompatBadge
-          status={compat.status}
           source={compat.source}
           {...(compat.reason !== undefined ? { reason: compat.reason } : {})}
           recommended={compat.recommendedForWorkflow === true}
@@ -80,24 +81,14 @@ export function ProviderModelSelector({
 }
 
 function CompatBadge({
-  status,
   source,
   reason,
   recommended,
 }: {
-  status: "compatible" | "incompatible"
   source: "declarative" | "override"
   reason?: string
   recommended: boolean
 }): ReactElement {
-  if (status === "incompatible") {
-    return (
-      <div className="rounded-md border border-red-800 bg-red-950/50 px-3 py-2 text-xs text-red-300">
-        <strong>Incompatible</strong>
-        {reason !== undefined && <> — {reason}</>}
-      </div>
-    )
-  }
   const overrideNote = source === "override" ? " (override)" : ""
   const recommendedNote = recommended ? " · recommended" : ""
   return (

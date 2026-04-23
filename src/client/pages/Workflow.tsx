@@ -16,6 +16,7 @@ import { useWorkflowRun } from "@/client/utils/use-workflow-run"
 import { COLOR_CLASSES, type ColorVariant, type WorkflowId } from "@/core/design"
 import type { AspectRatio, LanguageCode, ModelInfo } from "@/core/model-registry/types"
 import type { ProfileDto } from "@/core/dto/profile-dto"
+import { CompatibilityWarning } from "@/client/components/workflow/compatibility-warning"
 import { ConfirmDialog } from "@/client/components/ConfirmDialog"
 import { EventLog } from "@/client/components/EventLog"
 import { ProfileSelector } from "@/client/components/ProfileSelector"
@@ -138,6 +139,9 @@ export function Workflow({ navigator, showToast }: WorkflowPageProps): ReactElem
               }}
               onModelChange={setModelId}
             />
+            {compat !== null && compat.status === "incompatible" && (
+              <CompatibilityWarning reason={compat.reason} />
+            )}
             <TopLevelSelectors
               model={selectedModel} aspectRatio={aspectRatio} language={language}
               onAspectRatioChange={setAspectRatio} onLanguageChange={setLanguage}
@@ -169,6 +173,7 @@ export function Workflow({ navigator, showToast }: WorkflowPageProps): ReactElem
                 type="button"
                 onClick={run.start}
                 disabled={!canRun}
+                title={!canRun && compat?.status === "incompatible" ? compat.reason : undefined}
                 className={`rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed ${
                   canRun ? COLOR_CLASSES[colorVariant].active : "bg-slate-700"
                 }`}
