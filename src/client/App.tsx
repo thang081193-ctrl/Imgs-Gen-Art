@@ -7,6 +7,7 @@ import type { ReactElement } from "react"
 import { Home } from "@/client/pages/Home"
 import { Workflow } from "@/client/pages/Workflow"
 import { Gallery } from "@/client/pages/Gallery"
+import { Settings } from "@/client/pages/Settings"
 import { TopNav } from "@/client/components/TopNav"
 import { ToastHost, useToastStack } from "@/client/components/ToastHost"
 import type { NavParams, Navigator, Page } from "@/client/navigator"
@@ -30,6 +31,7 @@ export function App(): ReactElement {
       {page === "home"     && <Home onNav={navigator.go} />}
       {page === "workflow" && <Workflow navigator={navigator} showToast={show} />}
       {page === "gallery"  && <Gallery  navigator={navigator} showToast={show} />}
+      {page === "settings" && <Settings showToast={show} />}
       <ToastHost toasts={toasts} onDismiss={dismiss} />
     </div>
   )

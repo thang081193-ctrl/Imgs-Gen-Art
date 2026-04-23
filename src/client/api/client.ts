@@ -64,3 +64,38 @@ export function apiPost<T>(path: string, body: unknown, opts?: ApiOptions): Prom
     ...(opts?.signal ? { signal: opts.signal } : {}),
   })
 }
+
+export function apiPostMultipart<T>(
+  path: string,
+  formData: FormData,
+  opts?: ApiOptions,
+): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: formData,
+    ...(opts?.signal ? { signal: opts.signal } : {}),
+  })
+}
+
+export async function apiDelete<T>(path: string, opts?: ApiOptions): Promise<T | null> {
+  const res = await fetch(path, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    ...(opts?.signal ? { signal: opts.signal } : {}),
+  })
+  if (res.status === 204) return null
+  const contentType = res.headers.get("content-type") ?? ""
+  const isJson = contentType.includes("application/json")
+  if (!res.ok) {
+    if (isJson) {
+      const payload = (await res.json()) as ApiErrorPayload
+      throw new ApiError(res.status, payload)
+    }
+    throw new ApiError(res.status, {
+      code: "HTTP_ERROR",
+      message: `HTTP ${res.status} ${res.statusText}`,
+    })
+  }
+  return isJson ? ((await res.json()) as T) : null
+}

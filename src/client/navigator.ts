@@ -4,7 +4,7 @@
 //
 // Params stay scoped per navigation; `go()` replaces both page and params.
 
-export type Page = "home" | "workflow" | "gallery"
+export type Page = "home" | "workflow" | "gallery" | "settings"
 
 export interface NavParams {
   batchId?: string

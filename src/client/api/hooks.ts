@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from "react"
 import type { ApiError } from "./client"
-import { apiGet } from "./client"
+import { apiDelete, apiGet, apiPost, apiPostMultipart } from "./client"
+import type { KeySlotDto, VertexSlotDto } from "@/core/dto/key-dto"
 import type { ProfileDto, ProfileSummaryDto } from "@/core/dto/profile-dto"
 import type { AssetDto } from "@/core/dto/asset-dto"
 import type {
@@ -138,4 +139,86 @@ export function useAssets(filter: AssetsFilter, refreshKey: number = 0): ApiStat
   qs.set("offset", String(filter.offset ?? 0))
   // refreshKey in path so external triggers re-fetch; query-string dedupe OK.
   return useFetch<AssetsListResponse>(`/api/assets?${qs.toString()}&_=${refreshKey}`)
+}
+
+// Session #20 — /api/keys CRUD + activate + test.
+// `useKeys(refreshKey)` bumps on mutation to re-pull the list.
+// Mutations throw ApiError on non-2xx; callers catch + surface via toast.
+
+export interface KeysListResponse {
+  gemini: { activeSlotId: string | null; slots: KeySlotDto[] }
+  vertex: { activeSlotId: string | null; slots: VertexSlotDto[] }
+}
+
+export function useKeys(refreshKey: number = 0): ApiState<KeysListResponse> {
+  return useFetch<KeysListResponse>(`/api/keys?_=${refreshKey}`)
+}
+
+export interface GeminiCreateInput {
+  label: string
+  key: string
+}
+
+export interface VertexCreateInput {
+  label: string
+  projectId: string
+  location: string
+  file: File
+}
+
+export interface SlotCreatedResponse {
+  slotId: string
+  provider: "gemini" | "vertex"
+}
+
+export interface SlotActivatedResponse {
+  activated: true
+  slotId: string
+  provider: "gemini" | "vertex"
+}
+
+export interface SlotDeletedResponse {
+  deleted: true
+  deactivated: boolean
+  slotId: string
+  provider: "gemini" | "vertex"
+  warning?: string
+}
+
+export interface SlotTestResponse {
+  slotId: string
+  modelId: string
+  status: "ok" | "auth_error" | "rate_limited" | "quota_exceeded" | "down" | "unknown"
+  latencyMs: number
+  checkedAt: string
+  message?: string
+}
+
+export function createGeminiKey(input: GeminiCreateInput): Promise<SlotCreatedResponse> {
+  return apiPost<SlotCreatedResponse>("/api/keys", {
+    provider: "gemini",
+    label: input.label,
+    key: input.key,
+  })
+}
+
+export function createVertexKey(input: VertexCreateInput): Promise<SlotCreatedResponse> {
+  const fd = new FormData()
+  fd.append("label", input.label)
+  fd.append("projectId", input.projectId)
+  fd.append("location", input.location)
+  fd.append("file", input.file, input.file.name)
+  return apiPostMultipart<SlotCreatedResponse>("/api/keys", fd)
+}
+
+export function activateKey(slotId: string): Promise<SlotActivatedResponse> {
+  return apiPost<SlotActivatedResponse>(`/api/keys/${slotId}/activate`, {})
+}
+
+export async function deleteKey(slotId: string): Promise<SlotDeletedResponse | null> {
+  return apiDelete<SlotDeletedResponse>(`/api/keys/${slotId}`)
+}
+
+export function testKey(slotId: string): Promise<SlotTestResponse> {
+  return apiPost<SlotTestResponse>(`/api/keys/${slotId}/test`, {})
 }
