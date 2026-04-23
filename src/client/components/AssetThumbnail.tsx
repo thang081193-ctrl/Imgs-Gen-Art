@@ -7,13 +7,19 @@ import { COLOR_CLASSES } from "@/core/design"
 import { WORKFLOW_COLORS } from "@/core/design/tokens"
 import type { AssetDto } from "@/core/dto/asset-dto"
 import { formatCost } from "@/client/utils/format"
+import { ReplayBadge, ReplayedFromChip } from "./ReplayBadge"
 
 export interface AssetThumbnailProps {
   asset: AssetDto
   onSelect: (asset: AssetDto) => void
+  onOpenSource?: (sourceAssetId: string) => void
 }
 
-export function AssetThumbnail({ asset, onSelect }: AssetThumbnailProps): ReactElement {
+export function AssetThumbnail({
+  asset,
+  onSelect,
+  onOpenSource,
+}: AssetThumbnailProps): ReactElement {
   const tone = COLOR_CLASSES[WORKFLOW_COLORS[asset.workflowId]]
   const failed = asset.status === "error" || asset.imageUrl === null
   return (
@@ -36,6 +42,15 @@ export function AssetThumbnail({ asset, onSelect }: AssetThumbnailProps): ReactE
           className="h-full w-full object-cover"
         />
       )}
+      <div className="absolute top-1 right-1 flex flex-col items-end gap-1">
+        <ReplayBadge replayClass={asset.replayClass} />
+        {asset.replayedFromAssetId !== null && onOpenSource !== undefined && (
+          <ReplayedFromChip
+            sourceAssetId={asset.replayedFromAssetId}
+            onOpenSource={onOpenSource}
+          />
+        )}
+      </div>
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 bg-gradient-to-t from-black/80 to-transparent p-1">
         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${tone.badge}`}>
           {asset.workflowId}

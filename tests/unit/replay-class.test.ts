@@ -8,7 +8,10 @@
 
 import { describe, expect, it } from "vitest"
 
-import { computeReplayClass } from "@/core/shared/replay-class"
+import {
+  computeNotReplayableReason,
+  computeReplayClass,
+} from "@/core/shared/replay-class"
 import type { ProviderCapability } from "@/core/model-registry/types"
 
 const deterministic: ProviderCapability = {
@@ -74,5 +77,44 @@ describe("computeReplayClass", () => {
   it("returns 'best_effort' when providerSpecificParams is undefined", () => {
     const result = computeReplayClass(deterministic, { seed: 42 })
     expect(result).toBe("best_effort")
+  })
+})
+
+// Session #26 (Phase 5 Step 2 fold-in) — reason helper drives the disabled
+// Replay button tooltip copy in AssetDetailModal. Priority order: seed_missing
+// > provider_no_seed_support > watermark_applied (catch-all).
+describe("computeNotReplayableReason", () => {
+  it("returns 'seed_missing' when asset.seed is null (highest priority)", () => {
+    const reason = computeNotReplayableReason({
+      seed: null,
+      capability: deterministic,
+    })
+    expect(reason).toBe("seed_missing")
+  })
+
+  it("returns 'seed_missing' even if capability is undefined (seed check wins)", () => {
+    const reason = computeNotReplayableReason({ seed: null, capability: undefined })
+    expect(reason).toBe("seed_missing")
+  })
+
+  it("returns 'provider_no_seed_support' when capability is undefined (model dropped from registry)", () => {
+    const reason = computeNotReplayableReason({ seed: 42, capability: undefined })
+    expect(reason).toBe("provider_no_seed_support")
+  })
+
+  it("returns 'provider_no_seed_support' when capability.supportsDeterministicSeed is false", () => {
+    const reason = computeNotReplayableReason({
+      seed: 42,
+      capability: nondeterministic,
+    })
+    expect(reason).toBe("provider_no_seed_support")
+  })
+
+  it("returns 'watermark_applied' catch-all when seed present + provider supports seed", () => {
+    const reason = computeNotReplayableReason({
+      seed: 42,
+      capability: deterministic,
+    })
+    expect(reason).toBe("watermark_applied")
   })
 })

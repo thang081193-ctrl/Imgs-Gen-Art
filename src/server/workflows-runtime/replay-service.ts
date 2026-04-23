@@ -21,6 +21,7 @@
 
 import { resolve } from "node:path"
 
+import type { NotReplayableReason } from "@/core/dto/asset-dto"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 import { getModel } from "@/core/model-registry/models"
 import type { ModelInfo } from "@/core/model-registry/types"
@@ -30,6 +31,7 @@ import {
   NoActiveKeyError,
   NotFoundError,
 } from "@/core/shared/errors"
+import { computeNotReplayableReason } from "@/core/shared/replay-class"
 import {
   finalizeBatch,
   getAssetRepo as getAssetRepoDefault,
@@ -129,6 +131,76 @@ export function loadReplayContext(
   }
 
   return { sourceAsset, model, payload: parsed.data }
+}
+
+// Session #26 (Phase 5 Step 2 fold-in) — lightweight probe for the UI button
+// state. Does NOT throw on `not_replayable`: that's an expected, displayable
+// state. The disabled-button-with-tooltip UX needs to distinguish which of
+// the 3 reasons applies. Other preconditions still hard-fail (404 if the
+// asset row is missing — there's nothing to probe).
+//
+// Compared to loadReplayContext used by POST /replay, this path skips:
+//   - payload presence/shape validation (not needed to surface class + reason)
+//   - active-key check for not_replayable (can't replay regardless — still
+//     worth showing the reason to the user rather than a generic 401)
+// For replayable classes (deterministic | best_effort) we DO run the full
+// preconditions so 400/401 surface the same way as POST would.
+export type ReplayProbeResult =
+  | {
+      kind: "replayable"
+      replayClass: "deterministic" | "best_effort"
+      providerId: string
+      modelId: string
+      estimatedCostUsd: number
+      workflowId: string
+    }
+  | {
+      kind: "not_replayable"
+      reason: NotReplayableReason
+      providerId: string
+      modelId: string
+      workflowId: string
+    }
+
+export function probeReplayClass(
+  assetId: string,
+  deps: Pick<ReplayServiceDeps, "assetRepo" | "resolveModel" | "hasActiveKey"> = {},
+): ReplayProbeResult {
+  const assetRepo = deps.assetRepo ?? getAssetRepoDefault()
+  const resolveModel = deps.resolveModel ?? getModel
+
+  const sourceAsset = assetRepo.findById(assetId)
+  if (!sourceAsset) {
+    throw new NotFoundError(`Asset '${assetId}' not found`, { assetId })
+  }
+
+  if (sourceAsset.replayClass === "not_replayable") {
+    // Model lookup is best-effort here — if the stored model has been dropped
+    // from the registry we still want to surface *some* reason (the helper
+    // treats undefined capability as `provider_no_seed_support`).
+    const model = resolveModel(sourceAsset.modelId)
+    const reason = computeNotReplayableReason({
+      seed: sourceAsset.seed,
+      capability: model?.capability,
+    })
+    return {
+      kind: "not_replayable",
+      reason,
+      providerId: sourceAsset.providerId,
+      modelId: sourceAsset.modelId,
+      workflowId: sourceAsset.workflowId,
+    }
+  }
+
+  const ctx = loadReplayContext(assetId, deps)
+  return {
+    kind: "replayable",
+    replayClass: ctx.sourceAsset.replayClass as "deterministic" | "best_effort",
+    providerId: ctx.payload.providerId,
+    modelId: ctx.payload.modelId,
+    estimatedCostUsd: ctx.model.costPerImageUsd,
+    workflowId: ctx.sourceAsset.workflowId,
+  }
 }
 
 export interface ExecuteReplayParams {

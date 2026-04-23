@@ -236,12 +236,56 @@ describe("GET /api/assets/:id/replay-class", () => {
     expect(res.status).toBe(404)
   })
 
-  it("400 when asset is not_replayable", async () => {
+  // Session #26 fold-in: not_replayable is a displayable state, not an error.
+  // Route returns 200 with a discriminated payload carrying `reason` so the
+  // UI can render the disabled-button tooltip copy ("watermark applied" vs
+  // "seed missing" vs "provider doesn't support seed"). POST /replay still
+  // hard-fails 400 on not_replayable because there's nothing to execute.
+  it("200 with reason=seed_missing when asset has no seed", async () => {
     const sourceId = seedSourceAsset({
-      id: "asset_r_nrp",
+      id: "asset_r_nrp_seed",
       replayClass: "not_replayable",
+      seed: null,
     })
     const res = await fetchApp(`/api/assets/${sourceId}/replay-class`)
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      replayClass: string
+      reason: string
+      estimatedCostUsd?: number
+    }
+    expect(body.replayClass).toBe("not_replayable")
+    expect(body.reason).toBe("seed_missing")
+    expect(body.estimatedCostUsd).toBeUndefined()
+  })
+
+  it("200 with reason=provider_no_seed_support when model lacks deterministic seed", async () => {
+    // gemini-3-pro-image-preview has supportsDeterministicSeed=false (capabilities.ts:18)
+    const sourceId = seedSourceAsset({
+      id: "asset_r_nrp_prov",
+      replayClass: "not_replayable",
+      providerId: "gemini",
+      modelId: "gemini-3-pro-image-preview",
+      seed: 42,
+    })
+    const res = await fetchApp(`/api/assets/${sourceId}/replay-class`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { replayClass: string; reason: string }
+    expect(body.replayClass).toBe("not_replayable")
+    expect(body.reason).toBe("provider_no_seed_support")
+  })
+
+  it("200 with reason=watermark_applied when seed present + model supports seed", async () => {
+    const sourceId = seedSourceAsset({
+      id: "asset_r_nrp_wm",
+      replayClass: "not_replayable",
+      modelId: MOCK_MODEL_ID,
+      seed: 42,
+    })
+    const res = await fetchApp(`/api/assets/${sourceId}/replay-class`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { replayClass: string; reason: string }
+    expect(body.replayClass).toBe("not_replayable")
+    expect(body.reason).toBe("watermark_applied")
   })
 })

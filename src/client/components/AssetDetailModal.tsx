@@ -1,22 +1,35 @@
 // Asset detail modal. Click thumbnail → see full image + metadata +
 // "Download" + "Copy ID" + "Filter by batch" affordances. Esc / backdrop
-// dismiss. No mutate actions in Phase 3 (delete wired in Phase 5 polish).
+// dismiss.
+//
+// Session #26 (Phase 5 Step 2): Replay section. Primary Replay button text
+// varies by replayClass probed from /replay-class ("Replay (exact) · $X.XX"
+// vs "Replay (approximate)"). not_replayable → disabled with tooltip-per-
+// reason (Q3). On complete, an inline result section shows thumbnail + cost
+// + [Open ↗] (swap modal to new asset) + [Open in Gallery] (filter by new
+// batchId). Errors surface as toasts with category-specific copy (Q5).
 
 import { useEffect } from "react"
 import type { ReactElement } from "react"
 import type { AssetDto } from "@/core/dto/asset-dto"
 import { formatCost } from "@/client/utils/format"
+import { ReplaySection } from "./ReplaySection"
+import type { ShowToast } from "@/client/components/ToastHost"
 
 export interface AssetDetailModalProps {
   asset: AssetDto | null
   onClose: () => void
   onFilterBatch: (batchId: string) => void
+  onOpenAsset: (asset: AssetDto) => void
+  showToast: ShowToast
 }
 
 export function AssetDetailModal({
   asset,
   onClose,
   onFilterBatch,
+  onOpenAsset,
+  showToast,
 }: AssetDetailModalProps): ReactElement | null {
   useEffect(() => {
     if (asset === null) return undefined
@@ -127,6 +140,13 @@ export function AssetDetailModal({
             </Row>
           </dl>
         </div>
+
+        <ReplaySection
+          asset={asset}
+          onFilterBatch={onFilterBatch}
+          onOpenAsset={onOpenAsset}
+          showToast={showToast}
+        />
       </div>
     </div>
   )

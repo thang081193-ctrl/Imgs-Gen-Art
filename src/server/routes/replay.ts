@@ -22,7 +22,7 @@ import { shortId } from "@/core/shared/id"
 import { validateBody } from "@/server/middleware/validator"
 import {
   executeReplay,
-  loadReplayContext,
+  probeReplayClass,
 } from "@/server/workflows-runtime/replay-service"
 
 import { ReplayBodySchema, type ReplayBody } from "./replay.body"
@@ -34,18 +34,28 @@ export function createReplayRoute(): Hono<ReplayEnv> {
 
   route.get("/:assetId/replay-class", (c) => {
     const assetId = c.req.param("assetId")
-    // loadReplayContext runs ALL 4 preconditions (asset exists, payload
-    // present, class != not_replayable, active key). Any failure bubbles
-    // as a typed error → errorHandler → proper HTTP status. On success
-    // return a tiny probe payload the UI can use for button state + cost.
-    const ctx = loadReplayContext(assetId)
+    // Session #26 fold-in: probe returns a discriminated union so the UI can
+    // render "disabled button + tooltip-per-reason" for not_replayable rather
+    // than getting back a 400 with a generic message. Replayable path still
+    // runs all preconditions (400 data-integrity / 401 no-key / 404).
+    const probe = probeReplayClass(assetId)
+    if (probe.kind === "not_replayable") {
+      return c.json({
+        assetId,
+        replayClass: "not_replayable" as const,
+        reason: probe.reason,
+        providerId: probe.providerId,
+        modelId: probe.modelId,
+        workflowId: probe.workflowId,
+      })
+    }
     return c.json({
-      assetId: ctx.sourceAsset.id,
-      replayClass: ctx.sourceAsset.replayClass,
-      providerId: ctx.payload.providerId,
-      modelId: ctx.payload.modelId,
-      estimatedCostUsd: ctx.model.costPerImageUsd,
-      workflowId: ctx.sourceAsset.workflowId,
+      assetId,
+      replayClass: probe.replayClass,
+      providerId: probe.providerId,
+      modelId: probe.modelId,
+      estimatedCostUsd: probe.estimatedCostUsd,
+      workflowId: probe.workflowId,
     })
   })
 

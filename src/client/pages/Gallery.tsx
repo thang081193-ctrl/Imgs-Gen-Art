@@ -25,7 +25,7 @@ export interface GalleryPageProps {
   showToast: ShowToast
 }
 
-export function Gallery({ navigator }: GalleryPageProps): ReactElement {
+export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElement {
   const [profileId, setProfileId] = useState<string | null>(null)
   const [workflowId, setWorkflowId] = useState<WorkflowId | null>(null)
   const [batchId, setBatchId] = useState<string | null>(navigator.params.batchId ?? null)
@@ -48,6 +48,19 @@ export function Gallery({ navigator }: GalleryPageProps): ReactElement {
   })
 
   const assets = assetsQ.data?.assets ?? []
+  const openSourceAsset = (sourceId: string): void => {
+    const match = assets.find((a) => a.id === sourceId)
+    if (match !== undefined) setSelected(match)
+    else {
+      // Source lives outside the current filtered page — switch filter to the
+      // source's batch isn't ideal either (we don't know it). Fall back to
+      // a toast so the user isn't silently ignored.
+      showToast({
+        variant: "info",
+        message: `Source asset ${sourceId} not in current view. Clear filters or search by id.`,
+      })
+    }
+  }
   const profiles = profilesQ.data?.profiles ?? []
   const workflows = workflowsQ.data?.workflows ?? []
   const batchNotFound = batchId !== null && !assetsQ.loading && assets.length === 0 && page === 0
@@ -96,7 +109,12 @@ export function Gallery({ navigator }: GalleryPageProps): ReactElement {
       {assets.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {assets.map((a) => (
-            <AssetThumbnail key={a.id} asset={a} onSelect={setSelected} />
+            <AssetThumbnail
+              key={a.id}
+              asset={a}
+              onSelect={setSelected}
+              onOpenSource={openSourceAsset}
+            />
           ))}
         </div>
       )}
@@ -116,6 +134,8 @@ export function Gallery({ navigator }: GalleryPageProps): ReactElement {
           setBatchId(id)
           setSelected(null)
         }}
+        onOpenAsset={setSelected}
+        showToast={showToast}
       />
     </main>
   )

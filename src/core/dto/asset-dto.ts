@@ -6,6 +6,15 @@ import type { ReplayPayloadDto } from "./replay-payload-dto"
 export type AssetStatus = "completed" | "error"
 export type ReplayClass = "deterministic" | "best_effort" | "not_replayable"
 
+// Session #26 (Phase 5 Step 2 fold-in) — reason derivation for not_replayable
+// drives the disabled-replay-button tooltip copy in AssetDetailModal. Client
+// discriminates on `replayClass === "not_replayable"` in the /replay-class
+// probe response and maps reason → tooltip copy in replay-errors.ts.
+export type NotReplayableReason =
+  | "seed_missing"
+  | "provider_no_seed_support"
+  | "watermark_applied"
+
 export interface AssetDto {
   id: string
   profileId: string

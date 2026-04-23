@@ -20,7 +20,7 @@
 // they don't actually have.
 
 import type { ProviderCapability } from "../model-registry/types"
-import type { ReplayClass } from "../dto/asset-dto"
+import type { NotReplayableReason, ReplayClass } from "../dto/asset-dto"
 
 export interface ReplayClassInput {
   seed?: number | undefined
@@ -42,4 +42,33 @@ export function computeReplayClass(
     return "deterministic"
   }
   return "best_effort"
+}
+
+// Session #26 (Phase 5 Step 2 fold-in) — reason derivation for assets
+// that were classified as `not_replayable`. Sibling to computeReplayClass:
+// same inputs, different output. Drives the disabled-button tooltip copy
+// in AssetDetailModal so the user learns *why* replay is unavailable.
+//
+// Priority order (first match wins):
+//   1. seed_missing          — no seed on the asset row (hard: no reproducibility)
+//   2. provider_no_seed_support — model capability lookup failed OR flag is false
+//   3. watermark_applied     — catch-all; current asset-writers never set this,
+//                              but future workflows may opt into pixel watermarks
+//
+// Capability may be undefined when the stored modelId has been dropped from the
+// registry — treat that as no-seed-support rather than watermark because the UI
+// message is more accurate ("provider/model no longer supports replay").
+export interface ReplayReasonInput {
+  seed: number | null
+  capability: ProviderCapability | undefined
+}
+
+export function computeNotReplayableReason(
+  input: ReplayReasonInput,
+): NotReplayableReason {
+  if (input.seed === null) return "seed_missing"
+  if (!input.capability || !input.capability.supportsDeterministicSeed) {
+    return "provider_no_seed_support"
+  }
+  return "watermark_applied"
 }
