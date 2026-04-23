@@ -7,9 +7,10 @@
 //   2. `overridePayload` support for body.mode === "edit" — allowlisted via
 //      OverridePayloadSchema (prompt | addWatermark | negativePrompt),
 //      gated by model capability (negativePrompt requires
-//      supportsNegativePrompt). Rejects legacy sources with
-//      LegacyPayloadNotEditableError to prevent silent profileSnapshot
-//      drift (synthesizing from current profile = wrong semantically).
+//      supportsNegativePrompt). Rejects legacy sources to prevent silent
+//      profileSnapshot drift (synthesizing from current profile = wrong
+//      semantically). Override logic lives in `./replay-override` (extracted
+//      in Session #27b — carry-forward #4 from #27a, service was 251 LOC).
 //
 // Probe moved to replay-probe.ts (carry-forward #6 from Session #26 — LOC
 // soft cap was tight; dual reader + override logic would blow past 300).
@@ -24,8 +25,6 @@ import type { OverridePayload } from "@/core/schemas/override-payload"
 import type { ReplayPayload } from "@/core/schemas/replay-payload"
 import {
   BadRequestError,
-  CapabilityNotSupportedError,
-  LegacyPayloadNotEditableError,
   NoActiveKeyError,
   NotFoundError,
 } from "@/core/shared/errors"
@@ -43,6 +42,7 @@ import { getProvider as getProviderDefault } from "@/server/providers"
 
 import { writeReplayAsset } from "./replay-asset-writer"
 import type { ReplayExecuteFields } from "./replay-execute-fields"
+import { applyOverride } from "./replay-override"
 import { normalizePayload, type ReplayPayloadKind } from "./replay-payload-reader"
 
 export { type ReplayExecuteFields } from "./replay-execute-fields"
@@ -132,50 +132,6 @@ export function loadReplayContext(
     canonical,
     storedPayloadJson: sourceAsset.replayPayload,
   }
-}
-
-function applyOverride(
-  ctx: LoadedReplayContext,
-  override: OverridePayload,
-): { execute: ReplayExecuteFields; newPayloadJson: string } {
-  // Legacy source → synthesizing a canonical contextSnapshot from current
-  // profile state would drift from the batch-time profile. Reject loudly
-  // instead of silently corrupting the audit trail.
-  if (ctx.kind === "legacy" || ctx.canonical === null) {
-    throw new LegacyPayloadNotEditableError(ctx.sourceAsset.id)
-  }
-  if (
-    override.negativePrompt !== undefined &&
-    !ctx.model.capability.supportsNegativePrompt
-  ) {
-    throw new CapabilityNotSupportedError("negativePrompt", ctx.model.id)
-  }
-
-  const prompt = override.prompt ?? ctx.execute.prompt
-  const addWatermark =
-    override.addWatermark !== undefined ? override.addWatermark : ctx.execute.addWatermark
-  const negativePrompt =
-    override.negativePrompt !== undefined
-      ? override.negativePrompt
-      : ctx.execute.negativePrompt
-
-  const execute: ReplayExecuteFields = {
-    ...ctx.execute,
-    prompt,
-    addWatermark,
-    ...(negativePrompt !== undefined ? { negativePrompt } : {}),
-  }
-
-  const newCanonical: ReplayPayload = {
-    ...ctx.canonical,
-    prompt,
-    providerSpecificParams: {
-      ...ctx.canonical.providerSpecificParams,
-      addWatermark,
-      ...(negativePrompt !== undefined ? { negativePrompt } : {}),
-    },
-  }
-  return { execute, newPayloadJson: JSON.stringify(newCanonical) }
 }
 
 export interface ExecuteReplayParams {
