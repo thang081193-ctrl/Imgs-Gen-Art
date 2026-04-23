@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Step 2 landed: Replay UI — asset-detail modal primary button with state-dependent copy, Gallery tile EXACT / APPROX / — badge chip, replayed-from chip, `/replay-class` reshape to 200-with-reason for `not_replayable`. 535/545 regression pass — +18 net vs Session #25 close. Phase 4 remains closed.)
-Last updated: 2026-04-23 (Session #26 — Phase 5 Step 2 ship. Bundled: (a) Gap A fold-in: `/replay-class` returns **200** for `not_replayable` with a `reason` discriminator (`seed_missing` | `provider_no_seed_support` | `watermark_applied`) instead of a 400; new sibling `computeNotReplayableReason()` helper + `probeReplayClass()` in replay-service; (b) Replay UI surface — new `useReplay` + `useReplayClass` hooks composing the existing `src/client/utils/use-sse.ts`, new `ReplayBadge` + `ReplayedFromChip` components, new `ReplaySection` split out of `AssetDetailModal` (LOC cap compliance), new `replay-errors.ts` client-side taxonomy mapper (5 categories — `auth|safety|provider_error|network|unknown`; `rate_limit` deferred until backend `RATE_LIMIT` code lands); (c) Gallery tile wiring — `AssetThumbnail` renders `ReplayBadge` directly from `asset.replayClass` (no extra probe per tile, per Q I), and `ReplayedFromChip` when `asset.replayedFromAssetId != null`; (d) cost display — static from the probe payload for v1 (no `cost_updated` SSE event, per Q G — replay is always 1 image so running ≡ final); (e) cancel path — mirrors `useWorkflowRun`: SSE abort + `DELETE /api/workflows/runs/:batchId` (benign 404 for replay batches not in abort-registry); (f) component + hook tests deferred (no jsdom env) — pure-logic unit tests for `classifyReplayError` + `notReplayableTooltip` + `computeNotReplayableReason`. Full regression 535/545 pass (+18 vs Session #25's 517).)
+Current phase: **Phase 5 — IN PROGRESS** (Step 5a landed: canonical payload migration + `mode=edit` backend. 4 workflow asset-writers now persist `ReplayPayloadSchema` shape (`prompt`+`providerSpecificParams`+`promptTemplateId/Version`+`contextSnapshot.profileSnapshot`); dual-reader in replay-service preserves pre-Session-#27 rows (105 legacy rows on bro's home PC still replayable). `POST /api/assets/:id/replay` body grew `overridePayload` field with strict allowlist (`prompt` | `addWatermark` | `negativePrompt`); 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` | `CAPABILITY_NOT_SUPPORTED` | `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD` (500). `AssetDto` gained `editable: { canEdit, reason? }` computed on-the-fly from payload shape. 546/557 regression pass — +11 net vs Session #26 close. Phase 4 remains closed.)
+Last updated: 2026-04-24 (Session #27a — Phase 5 Step 5a ship, backend-only. Bundled: (a) canonical payload migration across all 4 asset-writers (artwork-batch / ad-production / aso-screenshots / style-transform) — workflow-specific fields (`layoutId`, `copyKey`, `featureFocus`, `variantIndex`, `targetLang`, `sourceAssetId`, `styleDnaKey`, `serial`) confirmed still in `inputParams` and dropped from `replayPayload`; writers now also fill `promptTemplateId` (= workflowId literal) + `promptTemplateVersion` (= `"1"` stub) on the asset row; (b) `replay-payload-shape.ts` deleted, stored-shape readers collapsed into a private `replay-payload-reader.ts` that parses canonical first, falls back to inline legacy schema on `promptRaw` key presence, throws `MalformedPayloadError` otherwise; `probeReplayClass` extracted to its own `replay-probe.ts` (carry-forward #6 from Session #26); (c) `overridePayload` wired through `replay.body.ts` → `replay.ts` → `replay-service.ts`; strict Zod allowlist blocks non-editable fields with a field-named `EDIT_FIELD_NOT_ALLOWED` (lifted from the generic Zod BAD_REQUEST at the route layer); negativePrompt against a `supportsNegativePrompt: false` model → `CAPABILITY_NOT_SUPPORTED`; legacy source + mode=edit → `LEGACY_PAYLOAD_NOT_EDITABLE` (prevents silent profileSnapshot drift); (d) `AssetDto.editable` computed in `toAssetDto` via light JSON key-check (no Zod per-row); `editable.canEdit = false + reason: "legacy_payload"` on pre-Session-#27 rows; (e) 11 new integration tests in `tests/integration/edit-and-run.test.ts` (6 core happy+reject + 3 legacy + 1 inputParams audit + 1 HTTP capability `it.todo` deferred — needs active Vertex key); 1 new unit test in `replay-service.test.ts` for the capability gate via dep injection; 2 existing tests updated (replay-route 501→400 for mode=edit without overridePayload; replay-service malformed→MalformedPayloadError). Full regression 546/557 pass + 1 todo (+11 net vs Session #26's 535). `test:live:smoke-all` NOT run this session.)
 
 ## Phase 5 Summary (in progress)
 
@@ -11,7 +11,8 @@ Last updated: 2026-04-23 (Session #26 — Phase 5 Step 2 ship. Bundled: (a) Gap 
 | 2 | Replay UI (modal button + gallery badge) | ✅ Session #26 — 5 new src files (useReplay hook + useReplayClass hook + replay-errors mapper + ReplayBadge + ReplaySection) + 3 src edits (AssetDetailModal slim, AssetThumbnail badge wiring, Gallery prop threading) + Gap A fold-in across 4 server files (asset-dto NotReplayableReason type, replay-class helper, replay-service probeReplayClass, replay.ts route reshape) + 2 test files (5 new unit for reason helper + 11 new unit for error taxonomy) + 1 existing integration test updated (flip 400 → 200 + 3 new reason cases). Pure-logic tests only; hook/component tests deferred (no jsdom). |
 | 3 | Gallery enhancements (tags/date/provider/model/replayClass filters) | pending |
 | 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
-| 5 | PromptLab (dedicated page + history + diff viewer) | pending |
+| 5a | Canonical payload migration + `mode=edit` backend | ✅ Session #27a — 4 writers migrated, dual reader + 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` / `CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD`, `AssetDto.editable` flag, 11 new integration tests + 1 unit. 546/557 pass (+11 net vs Session #26). |
+| 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | **← next: Session #27b** |
 | 6 | AppProfileSchema v2 migration (trigger-driven, defer unless blocked) | pending |
 
 ## Phase 4 Summary
@@ -26,6 +27,156 @@ Last updated: 2026-04-23 (Session #26 — Phase 5 Step 2 ship. Bundled: (a) Gap 
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #27a (Phase 5 Step 5a — canonical payload migration + mode=edit backend)
+
+Session #27 was split per bro's pre-alignment: 27a = backend migration +
+`mode=edit` wiring (this session), 27b = PromptLab UI layer (next). Backend
+shipped independently with clean gates (regression + integration tests)
+before a single client file is touched.
+
+### Scope Qs locked before coding
+
+Per Session #27 kickoff + Q1-Q10 + design-call iteration in chat:
+
+- **Q-A** `promptTemplateId = workflowId` literal (`"artwork-batch"` |
+  `"ad-production"` | `"aso-screenshots"` | `"style-transform"`). A1 option.
+- **Q-B** `promptTemplateVersion = "1"` stub. Inline comment on each write
+  site: bump when workflow prompt-building logic changes in a way that
+  breaks replay semantics. Code event, not data event.
+- **Q-C** Workflow-specific fields (`layoutId`, `copyKey`, `featureFocus`,
+  `variantIndex`, `targetLang`, `sourceAssetId`, `styleDnaKey`, `serial`)
+  dropped from `replayPayload`. Static code audit confirmed 100% coverage
+  in each writer's `buildInputParams`. DB audit: 105 live rows all in
+  `artwork-batch` (no production rows in the other 3 workflows).
+- **Q7** overridePayload validation — strict Zod allowlist on a dedicated
+  `OverridePayloadSchema`, NOT `ReplayPayloadSchema.pick().partial()` (latter
+  would let clients slip keys through `providerSpecificParams.passthrough()`).
+- **Design call** Dual-reader canonical-first; legacy detection gated on
+  `promptRaw` key presence; legacy source + mode=edit → `LEGACY_PAYLOAD_NOT_EDITABLE`
+  (rejected loudly rather than synthesizing a stale `contextSnapshot`).
+  `AssetDto.editable: { canEdit, reason?: "legacy_payload" }` — separate
+  flag, not overloading `replayClass`.
+
+### Files touched (13 src + 4 test)
+
+New files (6):
+- `src/core/schemas/override-payload.ts` (30 LOC) — strict allowlist schema
+  + `OVERRIDE_ALLOWED_FIELDS` const.
+- `src/server/workflows-runtime/replay-probe.ts` (65 LOC) — extracted
+  `probeReplayClass` + `ReplayProbeResult` type. Session #26 carry-forward #6
+  (replay-service LOC soft-cap creep) paid down.
+- `src/server/workflows-runtime/replay-execute-fields.ts` (18 LOC) — shared
+  `ReplayExecuteFields` internal shape used by both normalizer + asset writer.
+- `src/server/workflows-runtime/replay-payload-reader.ts` (95 LOC) —
+  `normalizePayload()` dual reader + private `LegacyReplayPayloadSchema`
+  (replaces the deleted `replay-payload-shape.ts`).
+- `tests/integration/edit-and-run.test.ts` (280 LOC) — 11 tests covering
+  core happy + rejects + legacy + inputParams audit.
+- (No new client files — 27b territory.)
+
+Deleted:
+- `src/server/workflows-runtime/replay-payload-shape.ts` — replaced by the
+  reader; the permissive `StoredReplayPayloadSchema` is no longer exported
+  since nothing outside the replay pipeline reads legacy format.
+
+Edited (11):
+- `src/core/shared/errors.ts` — 3 new error codes + classes
+  (`EditFieldNotAllowedError` 400, `CapabilityNotSupportedError` 400,
+  `LegacyPayloadNotEditableError` 400) + `MalformedPayloadError` 500.
+- `src/core/dto/asset-dto.ts` — `EditableReason` + `EditableFlag` types
+  + `AssetDto.editable` required field.
+- `src/server/asset-store/dto-mapper.ts` — `computeEditable` helper; light
+  JSON key-check (no Zod parse per row on list endpoints).
+- `src/server/workflows-runtime/replay-service.ts` — dropped `StoredReplayPayload*`
+  imports; uses `normalizePayload` + `ReplayExecuteFields`; `executeReplay`
+  grew `overridePayload` param + private `applyOverride` that does capability
+  check + merges canonical payload for the replayed asset. 251 LOC (soft-cap
+  warning, well under 300 hard cap).
+- `src/server/workflows-runtime/replay-asset-writer.ts` — accepts
+  `execute: ReplayExecuteFields` + `replayPayloadJson: string` instead of the
+  old `payload: StoredReplayPayload`.
+- `src/server/routes/replay.ts` — imports `probeReplayClass` from its new
+  home; inline parse with `EditFieldNotAllowedError` lift on Zod
+  `unrecognized_keys`. Dropped the 501 stub for mode=edit.
+- `src/server/routes/replay.body.ts` — `overridePayload` optional +
+  `.strict()` pass-through + `.refine()` enforces mode↔payload symmetry
+  (mode=edit REQUIRES payload; mode=replay REJECTS payload).
+- `src/workflows/{ad-production,artwork-batch,aso-screenshots,style-transform}/asset-writer.ts`
+  — canonical payload shape + `ReplayPayloadSchema.parse()` at write time;
+  `promptTemplateId` + `promptTemplateVersion` now on the DB row.
+
+Updated tests (3):
+- `tests/unit/replay-service.test.ts` — malformed shape test flipped to
+  `MalformedPayloadError`; `ctx.payload.*` → `ctx.execute.*` + `ctx.kind`;
+  new capability-gate test (dep-injected model with flipped
+  `supportsNegativePrompt`).
+- `tests/integration/replay-route.test.ts` — 501 mode=edit guard flipped to
+  400 BAD_REQUEST (refine rejection on missing overridePayload).
+- `tests/unit/workflow-{ad-production,aso-screenshots,style-transform}.test.ts`
+  — profile-fixture hex colors fixed from 3-digit (`#111`, `#0cf`) to
+  6-digit (`#111111`, `#00ccff`). These fixtures previously bypassed
+  `AppProfileSchema` validation via `as AppProfile` cast; now the writer's
+  `ReplayPayloadSchema.parse()` cascades into AppProfileSchema and trips
+  the real (always-valid) invariant. `artwork-batch` fixture already used
+  6-digit hex — no change needed there.
+
+### Test delta
+
+| Category | Before (S#26) | After (S#27a) | Δ |
+|---|---:|---:|---:|
+| pass | 535 | 546 | +11 |
+| skipped | 10 | 10 | 0 |
+| todo | 0 | 1 | +1 (HTTP capability test deferred) |
+| fail | 0 | 0 | 0 |
+| total | 545 | 557 | +12 |
+
+### 3 new error codes wired into `ErrorCode` union
+
+- `EDIT_FIELD_NOT_ALLOWED` — 400 — field-named rejection when
+  `overridePayload` contains a key outside the 3-item allowlist. Message
+  format: `"Field '${field}' cannot be edited. Allowed fields: prompt,
+  addWatermark, negativePrompt."`
+- `CAPABILITY_NOT_SUPPORTED` — 400 — allowlisted field targeting a model
+  that lacks the capability (e.g. `negativePrompt` on any Imagen/Gemini
+  production model — all register `supportsNegativePrompt: false`). Only
+  `mock:mock-fast` registers `true` today (for test coverage).
+- `LEGACY_PAYLOAD_NOT_EDITABLE` — 400 — mode=edit against a source whose
+  payload is pre-Session-#27 shape. Prevents silent `contextSnapshot` drift.
+
+### Session #27a carry-forward
+
+1. **HTTP capability test deferred** (`it.todo` in `edit-and-run.test.ts`) —
+   exercising `CAPABILITY_NOT_SUPPORTED` through the HTTP layer needs an
+   active Vertex/Gemini key (otherwise the 401 `NoActiveKeyError` precedes
+   the 400 capability check). The dep-injected unit test in
+   `replay-service.test.ts` covers the gate logic end-to-end. Fold-in for a
+   future session: seed a mocked keys-store or a lightweight vertex stub.
+2. **`EDIT_REQUIRES_PROMPT` ErrorCode unused** — noticed during the audit;
+   leftover placeholder in `errors.ts`. Safe to drop in a cleanup pass
+   (unreferenced literal-union member), but not in 27a scope.
+3. **Legacy row profileSnapshot best-effort reconstruction** — for replay
+   (not edit), the dual reader synthesizes nothing; it just extracts the
+   execute fields. PromptLab (27b) will have no way to show a historical
+   profile snapshot for legacy assets — either disable the Edit button (per
+   the `editable.canEdit = false + reason: legacy_payload` flag) OR surface
+   a tooltip explaining the limitation. Bro-decision for 27b.
+4. **`replay-service.ts` at 251 LOC** — past the 250 soft cap by 1. Further
+   splits possible if 27b needs to extend the service; otherwise the
+   `applyOverride` helper could move to `replay-override.ts` later. Not
+   urgent.
+5. **Carry-forward #7 from Session #26 (visual UI smoke for Step 2)** —
+   deferred again; unchanged by 27a since UI wasn't touched.
+
+### Gates run in Session #27a
+
+- `npm run typecheck` (server + client) — clean.
+- `npm run lint` — clean.
+- `npm run check-loc` — 0 hard-cap violations; 1 soft-cap warning
+  (`replay-service.ts` at 251 LOC).
+- `npm run test` — 546 pass / 10 skipped / 1 todo / 557 total.
+- `npm run regression:full` — all gates green.
+- `test:live:smoke-all` — **NOT** run (no need for 27a; bro-gated on cost).
 
 ## Completed in Session #26 (Phase 5 Step 2 — Replay UI)
 
