@@ -1,7 +1,119 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — COMPLETE ✅** (9 of 9 steps shipped, 378/378 regression green (full suite), DTO audit tripwire + 4-workflow E2E + HTTP-layer cancel + profile/keys CRUD narratives locked)
-Last updated: 2026-04-23 (Session #17 close — Phase 3 Step 9 DONE; +33 new integration tests; MOCK_DELAY_MS env override + BANNED_KEYS expanded to 20 entries + CONTRIBUTING Rule 11 amended with audit-list policy; Phase 4 entry = real Gemini + Vertex provider adapters)
+Current phase: **Phase 4 — IN PROGRESS ⏳** (1 of 8 steps shipped; Gemini adapter live w/ lazy-import SDK, client cache, safety-filter typed error, gated live smokes; 410/410 regression green)
+Last updated: 2026-04-23 (Session #18 close — Phase 4 Step 1 DONE; Gemini NB Pro + NB 2 adapter shipped as file trio (gemini + errors + extract), 32 new unit tests against mocked SDK, 5 live smokes gated by GEMINI_API_KEY, 2 integration tests updated to match Phase 4 reality; `@modelcontextprotocol/sdk@1.29.0` installed as devDep (peer of `@google/genai` range `^1.11.0`) AND lazy dynamic import retained as defensive fallback against upstream SDK bug recurrence)
+
+## Phase 4 Summary
+
+| Step | Title | Status |
+|---|---|---|
+| 1 | Gemini adapter (NB Pro + NB 2) | ✅ Session #18 — 3 src files + 1 test file + 1 live file + 2 existing test updates + `@modelcontextprotocol/sdk` peer-dep workaround (+32 unit tests) |
+| 2 | Vertex Imagen adapter | ⏳ Session #19 |
+| 3 | Key management UI (KeySlotDropdown + KeyAddModal + Settings) | ⏳ Session #20 |
+| 4 | `/api/providers/health` live wiring + 60s cache | ⏳ Session #21 |
+| 5 | Cost tracking per asset + batch | ⏳ Session #22 |
+| 6 | Compatibility warning banner (client) | ⏳ Session #23 |
+| 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #24 |
+| 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #25 |
+
+## Completed in Session #18 (Phase 4 Step 1 — Gemini adapter)
+
+### Scope decisions locked Session #18 (7 + 3 bonuses, all applied verbatim)
+
+- **Q1 — Gemini ONLY (Session #19 for Vertex).** Single `src/server/providers/gemini.ts` handles both NB Pro + NB 2. Shared auth, client cache, error map, image extract, abort wiring; the only call-site variance is `modelId`. Vertex SA-file flow + deterministic-seed + language-translation semantics differ enough to warrant separate session.
+- **Q2 — Trust DECISIONS A3 model IDs + add boot-time observability.** Hardcoded `GEMINI_MODEL_IDS = [NB_PRO, NB_2]` matches `MODEL_IDS.GEMINI_*`. Module-load-time `logger.info("Gemini adapter initialized", {models, sdkVersion: "1.5.0", verifiedAt: "2026-04-20"})` fires once (guarded by `adapterInitLogged` flag so tests don't flood stdout; `LOG_LEVEL=warn` in vitest.config gates it out anyway). If SDK throws `INVALID_MODEL`, `mapSdkErrorToHealthStatus` surfaces it loudly — no silent retry. Bump `VERIFIED_AT` + `SDK_VERSION` constants when bro re-verifies.
+- **Q3 — `health()` via `models.list()` + presence check.** Iterates `Pager<Model>` via `for await`, caps at `HEALTH_PAGE_SCAN_CAP * 50 = 250` items defensively. `normalizeModelName()` strips the `models/` resource-name prefix the API returns. Model-unavailable → `status: "down"` + descriptive message (NOT a new enum value — respect the 5-code HealthStatusCode union from Session #14). No `apiKey` / no active slot → `status: "auth_error"` with `latencyMs: 0` (health is advisory; never throws).
+- **Q4 — AbortSignal pass-through into `config.abortSignal`.** SDK's `GenerateContentParameters` doesn't take a second arg — abortSignal lives inside `config: GenerateContentConfig`. Adapter builds `config = {responseModalities: ["image"], abortSignal?, seed?}`. Unit test asserts ref-equality: the signal the caller passed into `params.abortSignal` IS the exact same ref in the SDK's `config.abortSignal`. Live smoke verifies pre-abort throws without billable call.
+- **Q5 — Unit (mocked SDK) + 2 gated live smokes.** `tests/unit/providers.gemini.test.ts` (32 tests): contract × 5 + capability registry × 1 + client cache × 2 + health flows × 4 + generate wiring × 4 + extract pure × 5 + error-map × 7 + mapSdkErrorToThrown × 4. `tests/live/providers.gemini-live.test.ts` (5 tests, all gated by `process.env.GEMINI_API_KEY`): NB Pro health + generate (30s timeout), NB 2 health + generate + pre-abort (15s timeout). Budget per run: ~$0.20. `test:live` script added; excluded from `regression:full` via vitest config `exclude: [..., "tests/live/**"]`.
+- **Q6 — `BOOTSTRAP-PHASE4.md` created first.** 8-step outline mirroring BOOTSTRAP-PHASE3 format. Per-step goals + deliverables + QA gates + known-deferrals. Step 1 entry documents every Session #18 decision. Referenced by the Phase 4 kickoff in PHASE-STATUS.
+- **Q7 — Test setup via `slot-manager` direct.** `vi.mock("@/server/keys/store", ...)` returns a stubbed `StoredKeys` with one active slot. `vi.mock("@/server/keys/crypto", ...)` stubs `decrypt` as identity so `slot.keyEncrypted` IS the plaintext. Real client Keys UI comes Step 3 (Session #20).
+
+### Pre-code alignment resolutions (bro-approved before first edit)
+
+- **Bonus A — `extractImageFromResponse()` pure fn with 3-mode guard.** Lives in `src/server/providers/gemini-extract.ts`. Reads `response.promptFeedback.blockReason` FIRST (throws `SafetyFilterError` with `{providerId, modelId, reason, prompt: truncated}`); then `candidates[0].content.parts` for `inlineData.data` base64 → Buffer; throws `ProviderError` for empty candidates, missing inlineData, or non-PNG/JPEG mimeType (3-MIME allowlist). Also exports `readPngDimensions(bytes): {width, height}` — decodes the PNG IHDR at bytes 16-23 (big-endian uint32) so the adapter can populate `GenerateResult.width/height` for callers. Returns `{0,0}` for JPEG (SOF0 parse deferred; Gemini's primary modality is PNG).
+- **Bonus B — `clientCache: Map<string, GoogleGenAI>`.** Module-level Map keyed by plaintext apiKey. `getClient(apiKey)` returns cached instance or constructs + caches. Exported `_resetClientCacheForTests()` underscore affordance clears cache + `sdkModulePromise` + `adapterInitLogged` between test cases (same pattern as other test-only hooks in Session #10). Cache invalidation on slot deletion: deferred hook for Phase 4 Step 4 (`/providers/health` caching) — no scope creep.
+- **Bonus C — `SafetyFilterError` subclass of `AppError`.** Added to `src/core/shared/errors.ts`: extends `AppError` with `code: "SAFETY_FILTER"`, `status: 422`, `details: {providerId, modelId, reason, prompt?}`. Distinct from generic `ProviderError` (code: "PROVIDER_ERROR", status: 502) — the 422/502 split matches HTTP semantics (request valid but refused vs. upstream failed). `ErrorCode` union + `error-handler.ts` status cast updated to include 422 + 502.
+
+### New src files (3 files, 440 LOC total, all under 300 hard cap)
+
+- **`src/server/providers/gemini.ts`** (228 LOC) — the adapter itself. `geminiProvider: ImageProvider` singleton. Module-level logger + `logAdapterInit()` once-guard. `clientCache: Map<string, GoogleGenAIClass>`. `sdkModulePromise` memoized dynamic import (see "@google/genai peer dep hole" below). `resolveApiKey(context?)` reads `context.apiKey` first, then active Gemini slot from store + decrypt. `health()` + `generate()` wired to extract + error-map helpers. `_resetClientCacheForTests()` exported.
+- **`src/server/providers/gemini-errors.ts`** (99 LOC) — `mapSdkErrorToHealthStatus(err, startMs): HealthStatus` (5-branch classification via HTTP status + message fallback for quota/auth keywords) + `mapSdkErrorToThrown(err, {modelId}): never` (preserves `AbortError` + `SafetyFilterError` + `ProviderError` identity; wraps rest in `ProviderError`). Pure — no SDK imports, mapped via structural error shape.
+- **`src/server/providers/gemini-extract.ts`** (113 LOC) — `extractImageFromResponse()` + `readPngDimensions()` + `GeminiResponseShape` typed fixture. Zero SDK coupling (tests hand-craft response objects).
+
+### Src changes (5 existing files)
+
+- **`src/core/shared/errors.ts`** — added `PROVIDER_ERROR` + `SAFETY_FILTER` to `ErrorCode` union; `ProviderError` class (502) + `SafetyFilterError` class (422) + typed details interfaces (`ProviderErrorDetails`, `SafetyFilterDetails`).
+- **`src/core/providers/types.ts`** — `HealthCheckContext.abortSignal?: AbortSignal` added (extends Session #14 contract). Enables cancel-mid-probe on `POST /keys/:id/test` client disconnect; backwards compatible (optional field, no existing implementor sets it yet).
+- **`src/server/middleware/error-handler.ts`** — status cast widened to include `422 | 502` alongside existing `400 | 401 | 404 | 409 | 410 | 500 | 501`.
+- **`src/server/providers/registry.ts`** — `geminiProvider` joins `mockProvider` in the registry Map. Order preserved for determinism.
+- **`src/server/providers/index.ts`** — re-exports `./gemini` alongside `./mock` + `./registry`.
+- **`vitest.config.ts`** — `exclude: [..., "tests/live/**"]` added.
+- **`package.json`** — `"test:live": "vitest run tests/live"` script added.
+
+### New test files (2 files, 504 LOC total)
+
+- **`tests/unit/providers.gemini.test.ts`** (419 LOC, 32 tests) — `vi.mock("@google/genai", ...)` hoisted at file top returns a class with `models.generateContent` + `models.list` vi.fns. `runProviderContract("gemini", ...)` satisfies the 5 canonical contract cases (id/displayName/supportedModels, health ISO+valid status, PNG magic + dimensions, pre-abort rejects, mid-abort rejects). Plus: capability × 1, client caching × 2, health flows × 4 (ok / down on missing model / abortSignal propagation / auth_error on no slot — last uses `vi.resetModules` + scoped `vi.doMock` in try/finally to rebind just `keys/store` + `keys/crypto` while preserving the top-level SDK mock), generate wiring × 4 (abortSignal ref-equality / seed forwarding + echo / ProviderError wrap / NoActiveKeyError via fresh-module-import), extract × 5 (valid + safety-block + empty candidates + no-inlineData + unsupported mime), error-map × 7 (HTTP status × 5 + message fallback + ISO checkedAt), mapSdkErrorToThrown × 4 (AbortError / ProviderError / SafetyFilterError re-throw + generic wrap with sdkCode).
+- **`tests/live/providers.gemini-live.test.ts`** (85 LOC, 5 tests) — `describe.skipIf(!HAS_KEY)`. NB Pro: health ok (15s) + generate PNG (45s). NB 2: health ok (15s) + generate PNG (30s) + pre-abort rejects (5s). Uses `context.apiKey` flow so slot-manager is bypassed entirely.
+
+### Existing test updates (2 files, minimal deltas)
+
+- **`tests/integration/app.test.ts`** — `"returns full catalog with mock registered"` renamed to `"returns full catalog with registered providers"`; `registeredProviderIds` assertion widened to `arrayContaining(["mock", "gemini"])` + explicit `not.toContain("vertex")` guard (Step 2 flips this).
+- **`tests/integration/keys-routes.test.ts`** — `"POST /keys/:id/test"` expectation updated: Phase 3 asserted literal `status: "unknown"` + `message: /phase 4/i`; Phase 4 Step 1 now asserts real adapter behavior (`status` ∈ `{auth_error, rate_limited, quota_exceeded, down}` — `"ok"` excluded since fake key never authenticates + the `@modelcontextprotocol/sdk` missing-peer issue routes to `down` until Session #19's decision on the install). Rest of the response shape (slotId / modelId / checkedAt) unchanged.
+
+### Doc changes (2 files)
+
+- **`BOOTSTRAP-PHASE4.md`** (NEW, 240 LOC) — 8-step Phase 4 plan. Step 1 entry documents every Session #18 decision; Steps 2-8 stubbed with goals, deliverables, estimated sessions. "What's NOT in Phase 4" section defers replay UI / CMS rich editor / Gallery tag filter to Phase 5.
+- **`PHASE-STATUS.md`** (this edit) — Phase 4 Summary table + Session #18 decisions + carry-over for Session #19.
+
+### QA gate (Session #18 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 156 src files (was 153; +gemini.ts +gemini-errors.ts +gemini-extract.ts), 0 violations
+test: 410/410 pass (40 files; full `regression:full` suite)
+  breakdown: unit 263 + integration 134 + extraction 13
+  prior:   378 (Session #17 baseline)
+  new:     +32 (all in tests/unit/providers.gemini.test.ts)
+  live:    +5 gated (tests/live/providers.gemini-live.test.ts — skip without GEMINI_API_KEY)
+  regression: clean; 2 existing integration tests updated to match Phase 4 adapter-real-call reality (app.test.ts + keys-routes.test.ts)
+build: not re-run (no client bundle changes)
+```
+
+### Deviations from plan
+
+- **`@modelcontextprotocol/sdk` optional-peer-dep hole (discovered during regression).** `@google/genai` 1.5.0 declares `@modelcontextprotocol/sdk` as an optional peer dep (`peerDependenciesMeta.optional: true`) BUT the built entrypoint `dist/node/index.mjs` imports it UNCONDITIONALLY at top-level (`import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'`). This is an upstream SDK packaging bug — without the peer installed, Node's ESM loader throws `ENOENT` the moment anything evaluates `@google/genai`. Landing `gemini.ts` with a static `import` would've broken all 378 prior tests because `registry.ts` transitively imports the adapter. **Fix: lazy dynamic import.** `gemini.ts` uses `import type { GoogleGenAI }` (compile-time only, erased) + module-level `sdkModulePromise` memoized via `import("@google/genai")` inside `loadSdk()` + `getClient` is now async. Vitest `vi.mock` intercepts dynamic imports, so unit tests work unchanged. Non-Gemini routes never evaluate the SDK. Live smokes + production usage WILL ENOENT until the peer is installed — bro needs to decide in Session #19: (a) install `@modelcontextprotocol/sdk` as devDep/peer; (b) patch `@google/genai` locally; (c) wait for upstream fix. Current state: lazy-import hides the issue from non-Gemini callers; real Gemini calls still need the peer.
+- **`HealthCheckContext.abortSignal` added (Session #14 contract extension, not breaking).** Bro's Q3 pseudocode included `signal: context?.abortSignal`, but Session #14 shipped the context with `{apiKey, serviceAccount, skipCache}` only — no abortSignal. Added as optional field. Backwards compatible: no existing provider reads it, no existing call site sets it. Mock ignores it. Gemini adapter reads it in `health()` and forwards to `models.list({config: {abortSignal}})`.
+- **`mapSdkErrorToThrown` signature uses `never` return instead of `throw` call site.** TS stricter: the caller does `mapSdkErrorToThrown(err, ctx)` WITHOUT `throw` — the function itself throws, and `never` return tells TS that execution doesn't continue past that line. Clean + matches Rust's `!` / Python's `NoReturn` ergonomics. Alternative (`throw mapSdkErrorToX(...)`) makes the call site duplicate the throw keyword.
+- **PNG width/height inferred from IHDR bytes instead of returning 0 sentinels.** Contract test asserts `width > 0` + `height > 0`; stubbing 0 violates. `readPngDimensions(bytes)` decodes 4+4 big-endian bytes from offset 16 — ~10 LOC in `gemini-extract.ts`. Future: JPEG SOF0 decode if workflows hit JPEG responses; current primary format is PNG per Gemini docs.
+- **`tests/live/` is a NEW directory** (didn't exist before). Gated-by-env pattern chosen over a separate CI job because: (1) test files colocated with rest of the test suite, (2) bro can toggle with one env, (3) `test:live` script keeps the intent explicit.
+- **`@modelcontextprotocol/sdk@1.29.0` installed as devDep (Session #18 late move).** Bro locked ITEM-1 decision: verify peer range → `^1.11.0` → `npm view` showed latest `1.29.0` satisfies → `npm install --save-dev --save-exact @modelcontextprotocol/sdk@1.29.0`. `node -e "require('@modelcontextprotocol/sdk/package.json')"` resolves cleanly. Regression remains 410/410 green. Lazy dynamic import in `gemini.ts` RETAINED as defensive fallback — if upstream SDK patches the bug + we ever drop the peer, the lazy path still works; if upstream regresses again, we notice during a live smoke instead of every test run. Pattern documented in `memory/patterns.md` "External SDK bug workarounds".
+
+### Known pending items (for Phase 4 Step 2 entry)
+
+1. **`@modelcontextprotocol/sdk@1.29.0` installed as devDep** — CLOSED Session #18 late move. Live smokes can now run end-to-end once bro provides `GEMINI_API_KEY`.
+2. **Vertex adapter (Step 2, Session #19)** — mirrors Gemini's shape (adapter + errors + extract), uses `@google-cloud/vertexai` 1.10.0 + SA-file loading from `keys/vertex-{slotId}.json`. Will reuse the `loadSdk()` lazy-import pattern defensively.
+3. **Phase 4 known pending #3 (cache invalidation on key rotation)** — REMAINS Step 4. Client cache + provider-health cache both need a hook fired from `slot-manager.activateSlot` / `removeSlot`.
+4. **Phase 3 known pending #2-#7 still carried forward** (Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows). Phase 5 territory mostly.
+5. **PNG JPEG dimension decode** — `readPngDimensions()` returns {0,0} for JPEG. If Phase 4 Step 7's 11-smoke sweep surfaces a workflow that relies on accurate dims from a JPEG response, ship SOF0 parse then.
+
+## Next Session (#19) kickoff — Phase 4 Step 2 (Vertex Imagen adapter)
+
+1. Read this file (Session #18 entry) + `BOOTSTRAP-PHASE4.md` Step 2 + `MEMORY.md`. Verify baseline `npm run regression:full` = 410/410.
+2. Read PLAN-v2.2.1.md §6.2 Vertex entry (Imagen 4 capability: `supportsDeterministicSeed: true`, 9-lang support, `supportsNegativePrompt: false` per v2.2 correction).
+3. Scope decisions for bro before coding:
+   - **SA file loading path** — same as Session #14 `POST /keys` vertex multipart? Confirm `keys/vertex-{slotId}.json` layout.
+   - **Deterministic seed E2E** — two generates with same seed + `addWatermark: false` should produce identical bytes per Vertex docs. Add a dedicated smoke test (cost: 2×$0.04 = $0.08).
+   - **Language-translation default** — Vertex translates the prompt per `language` param. Default pass-through (no translation) vs. always translate? PLAN §6.2 lists 9 supported langs; outside those, translation fails. Rec: pass the `language` field through, let SDK decide; capability check rejects out-of-list langs upstream.
+4. Est 4-5h. Expected regression: 410 + ~25-30 new unit tests (Vertex contract + extract + SA load + deterministic seed unit).
+
+**Carry-over from Session #18:**
+- Lazy-import pattern proven for Gemini; Vertex adapter reuses it (defensive even though MCP peer is now installed).
+- `_resetClientCacheForTests` export pattern is the template for Vertex's version.
+- `HealthCheckContext.abortSignal` now available for Vertex health probes.
+
+---
 
 ## Phase 3 Summary
 
