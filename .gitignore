@@ -41,8 +41,9 @@ images-gen-art.db-shm
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings (user-specific permissions)
+# Claude Code local settings (user-specific permissions + preview config)
 .claude/settings.local.json
+.claude/launch.json
 
 # Logs
 *.log

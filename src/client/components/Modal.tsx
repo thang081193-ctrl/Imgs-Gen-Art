@@ -43,19 +43,35 @@ export function Modal({
   showCloseButton = true,
 }: ModalProps): ReactElement | null {
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  // Stash onClose in a ref so the keydown effect does NOT re-subscribe on
+  // every parent render (parents typically recreate their `close` handler
+  // closure each render — if that went into deps, the effect would re-run
+  // on every keystroke and `firstTabbable.focus()` would steal focus from
+  // whichever input the user is typing into).
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  // Initial autofocus: ONLY when open transitions false → true. Not part of
+  // the keydown effect so re-renders during typing don't re-focus.
+  useEffect(() => {
+    if (!open) return
+    const dialog = dialogRef.current
+    if (dialog === null) return
+    const firstTabbable = dialog.querySelector<HTMLElement>(TABBABLE_SELECTOR)
+    firstTabbable?.focus()
+  }, [open])
 
   useEffect(() => {
     if (!open) return undefined
     const dialog = dialogRef.current
     if (dialog === null) return undefined
 
-    const firstTabbable = dialog.querySelector<HTMLElement>(TABBABLE_SELECTOR)
-    firstTabbable?.focus()
-
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
         e.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== "Tab") return
@@ -77,14 +93,14 @@ export function Modal({
 
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
+      onClick={() => onCloseRef.current()}
       role="presentation"
     >
       <div
@@ -102,7 +118,7 @@ export function Modal({
           {showCloseButton && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => onCloseRef.current()}
               className="text-slate-400 hover:text-slate-200 text-lg leading-none"
               aria-label="Close"
             >
