@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (5 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI; 492/492 regression green)
-Last updated: 2026-04-23 (Session #21 close — Phase 4 Steps 4+5 BUNDLED; `/providers/health` live wiring + TTL-by-status cache + in-flight dedup + invalidate hook fired from keys.ts; cost tracking end-to-end — GenerateResult.costUsd required, 3 adapters stamp via per-module COST tables, finalizeBatch helper derives batch totals from asset ledger, formatCost util + Gallery thumbnail chip + detail modal cost row + header page-total. Schema already had cost columns so no migration needed. Regression 460 → 492 green. Gallery UI smoke via Claude_Preview MCP: $0 rows correctly hidden on thumbnails + header; detail modal shows "$0.00".)
+Current phase: **Phase 4 — IN PROGRESS ⏳** (6 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI + compat warning banner; 497/497 regression green)
+Last updated: 2026-04-23 (Session #22 close — Phase 4 Step 6 DONE. New `CompatibilityWarning` component at `src/client/components/workflow/` with `getBannerMessage` pure-fn fallback. Wired into Workflow page BELOW `ProviderModelSelector` (same section, causal locality). Stripped `incompatible` branch from `CompatBadge` inside `ProviderModelSelector` — badge now owns positive affirmation only (green "Compatible · recommended"); banner owns hard failure. Run button got `title={compat.reason}` tooltip when disabled for compat reason. +5 unit tests for pure-fn fallback/passthrough/whitespace handling. 492 → 497 regression green. Smoke via Claude_Preview MCP: style-transform × Imagen 4 → red banner with server reason "model missing required capability supportsImageEditing" + Run disabled + tooltip; switch to Gemini NB Pro → banner hidden + green badge appears.)
 
 ## Phase 4 Summary
 
@@ -12,9 +12,85 @@ Last updated: 2026-04-23 (Session #21 close — Phase 4 Steps 4+5 BUNDLED; `/pro
 | 3 | Key management UI (Modal primitive + KeyAddModal × 2 + KeysTable + TestButton + Settings) | ✅ Session #20 — 6 new src files (Modal + 4 under `components/keys/` + Settings page) + 4 small edits (App + TopNav + navigator + api hooks/client) + 0 new tests (no jsdom in repo) |
 | 4 | `/api/providers/health` live wiring + TTL-by-status cache | ✅ Session #21 — 4 new src files in `src/server/health/` (cache + probe + context + barrel) + keys.ts invalidate hooks + providers.ts route rewrite + 16 unit tests + 3 wiring integration tests + 3 added /health integration cases |
 | 5 | Cost tracking per asset + batch | ✅ Session #21 (bundled) — GenerateResult.costUsd + 3 adapter COST tables + finalizeBatch helper + all 4 workflow run.ts refactored + 4 asset-writers + client formatCost util + thumbnail chip + detail modal + Gallery page-total header + 10 unit tests |
-| 6 | Compatibility warning banner (client) | ⏳ Session #23 |
-| 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #24 |
-| 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #25 |
+| 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
+| 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #23 |
+| 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #24 |
+
+## Completed in Session #22 (Phase 4 Step 6 — Compatibility warning banner)
+
+Pure-client UI session. Closes the UX gap where user got a silently-disabled Run button when picking an incompatible `(workflow, provider:model)` triple. Banner surfaces server-authored reason prominently; tooltip catches hover eyes.
+
+### Scope decisions locked Session #22 (4 Qs + 1 design reveal)
+
+- **Q1 — Banner placement: BELOW `ProviderModelSelector`** (same section). Causal locality — selector change → warning visible in reading order. DOM order matches announcement order (`role="alert"` + `aria-live="polite"`).
+- **Q2 — Binary red only** (no tri-state). `CompatibilityResult.status` is `"compatible" | "incompatible"`; no middle state in server contract. Mock "warning" case is dev-only and not worth the extra variant.
+- **Q3 — Copy source: server `reason` verbatim** with fallback `"This provider and model combination is not compatible with the selected workflow."` for rare `reason === undefined` branch (stale client vs. new server shape). No client-side translation or composition.
+- **Q4 — Run button: add `title={compat.reason}` tooltip** (only when disabled AND incompat is the blocker). Native `title=` sufficient for hover + keyboard focus. Undefined when enabled removes attr cleanly.
+- **Reveal (bro-raised mid-session): duplicate red box.** `ProviderModelSelector.CompatBadge` already rendered its own red `"Incompatible — {reason}"` box. Adding banner below → 2 red rectangles, reason repeated twice. **Resolution: strip the `incompatible` branch from `CompatBadge`.** Badge now owns POSITIVE affirmation only (green "Compatible · recommended" with optional override note). Banner owns hard failure. Clean separation of concerns.
+
+### Test-strategy decision
+
+- **No jsdom / testing-library added.** Session #16/#20 convention: React components verified via typecheck + `Claude_Preview` browser smoke; Modal / AssetThumbnail / TestButton all follow this. Adding jsdom for one banner component would set a new infra precedent that'd demand back-filling every existing component. Instead: **extract `getBannerMessage(reason)` as a pure function** → trivially testable in Node env.
+- **+5 unit tests** in `tests/unit/compatibility-warning.test.ts` pin: passthrough verbatim / undefined fallback / empty-string fallback / whitespace-only fallback / passthrough trims surrounding whitespace.
+
+### New src files (1 file, ~40 LOC, under 300 hard cap)
+
+- **`src/client/components/workflow/compatibility-warning.tsx`** (~40 LOC) — exports `CompatibilityWarning({ reason })` React component + `getBannerMessage(reason)` pure fn + `COMPAT_FALLBACK_REASON` constant. Component: `role="alert"` + `aria-live="polite"` + `⛔` Unicode icon (matches project convention — Workflow.tsx RunStatusBadge uses `⚠ ✗ ✓`) + two-line layout (bold "Incompatible combination" heading + thin reason body) + ad-hoc red Tailwind (`border-red-500/50 bg-red-500/10 p-4`). NOT added to the 5-variant `COLOR_CLASSES` table (would break `design-tokens.test`).
+
+### Src changes (2 edits)
+
+- **`src/client/pages/Workflow.tsx`** — (a) import `CompatibilityWarning`, (b) mount `{compat !== null && compat.status === "incompatible" && <CompatibilityWarning reason={compat.reason} />}` between `<ProviderModelSelector>` and `<TopLevelSelectors>` inside the same Provider+model section, (c) add `title={!canRun && compat?.status === "incompatible" ? compat.reason : undefined}` on the Run button. `compat === null` guard (workflowId null OR matrix loading) → banner hidden, no flicker.
+- **`src/client/components/ProviderModelSelector.tsx`** — strip `incompatible` branch from the internal `CompatBadge` sub-component. Badge render now gated to `compat.status === "compatible"` only. Header comment updated to reflect the Session #22 split.
+
+### New test files (1 file, 5 tests)
+
+- **`tests/unit/compatibility-warning.test.ts`** — 5 unit tests for `getBannerMessage`: passthrough / undefined / empty-string / whitespace-only / whitespace-trim. Pure-function assertions in Node env, no DOM required.
+
+### QA gate (Session #22 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 174 src files (+1 compatibility-warning.tsx), 0 violations
+test: 497/497 pass (46 files)
+  prior:   492 (Session #21 baseline)
+  new:     +5 (compatibility-warning getBannerMessage)
+  total:   +5
+
+manual smoke (Claude_Preview MCP):
+  style-transform × Vertex/Imagen 4 (incompat):
+    - Red banner appears with ⛔ + "Incompatible combination" + server reason "model missing required capability supportsImageEditing" ✓
+    - No green "Compatible" badge shown (strip successful) ✓
+    - Run button disabled + tooltip = server reason verbatim ✓
+  style-transform × Gemini/NB Pro (compat):
+    - Banner hidden (alertCount=0) ✓
+    - Green "Compatible · recommended" badge shown ✓
+    - Run button tooltip empty (disabled for other reasons: formInput null) ✓
+  No console errors during provider transitions ✓
+```
+
+### Deviations from plan
+
+- **Banner font/icon**: used Unicode `⛔` instead of AlertCircle SVG (bro's skeleton had `<AlertCircle>` from Lucide). Repo has no icon lib; adding `lucide-react` for one icon = new dep bro didn't approve. Unicode matches existing RunStatusBadge convention (`⚠ Aborted ✗ Error ✓ Completed`).
+- **Test count refined down**: handoff estimated 4-6 tests (mix of unit + integration). Actual = 5 pure-fn tests only. Integration tests for Workflow-page banner behavior would've required jsdom — punted per Option A alignment.
+- **Run button enable-during-matrix-load**: bro left this as my call. Chose **conservative (keep disabled during load)** — matches existing `compatibleOK` semantics; latency <300ms, user rarely notices; avoids server 409 round-trip on optimistic submit.
+
+### Known pending items (for Phase 4 Step 7 entry)
+
+1. **Manual browser smoke for full click-through still pending** — only compat-banner paths exercised. Full workflow run + Gallery navigation not re-verified this session (no code in those paths changed).
+2. **Step 7 (11 live smokes, Session #23)** — needs real `GEMINI_API_KEY` + `VERTEX_PROJECT_ID` + `VERTEX_SA_PATH`. Budget ~$1.10/full run. Bro-gated.
+3. **Step 8 (Phase 4 close, Session #24)** — includes BOOTSTRAP-PHASE4 SDK reference fix (`@google-cloud/vertexai@1.10.0` → `@google/genai@1.5.0 vertexai: true`) + final browser E2E + PHASE-STATUS close.
+4. **Phase 3 carry-forward items still deferred** — Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows. Phase 5 territory.
+
+## Next Session (#23) kickoff — Phase 4 Step 7 (11 live smoke tests)
+
+1. Read this file (Session #22 entry) + `BOOTSTRAP-PHASE4.md` Step 7 + `MEMORY.md`. Verify baseline `npm run regression:full` = 497/497.
+2. Bro-gate before coding: real credentials in `.env` + ~$1.10 budget approval for a full 11-pair run.
+3. Live smokes: Σ compatible pairs per PLAN §7.4 — NB Pro × {artwork-batch, ad-production, style-transform, aso-screenshots} + NB 2 × {4 workflows} + Imagen × {artwork-batch, ad-production, aso-screenshots} = 11 pairs.
+4. Est 2-3h including key setup + per-pair 1-asset smoke. Expected regression: 497 → 497 (live suite excluded from `regression:full` per vitest config).
+
+---
 
 ## Completed in Session #21 (Phase 4 Steps 4 + 5 — health cache + cost tracking)
 
