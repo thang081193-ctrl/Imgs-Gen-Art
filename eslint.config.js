@@ -6,7 +6,6 @@ import tsPlugin from "@typescript-eslint/eslint-plugin"
 
 const SERVER_ONLY_PACKAGES = [
   "@google/genai",
-  "@google-cloud/vertexai",
   "better-sqlite3",
 ]
 

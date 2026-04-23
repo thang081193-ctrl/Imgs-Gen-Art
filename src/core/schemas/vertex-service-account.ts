@@ -1,8 +1,8 @@
 // Zod schema for a parsed GCP service-account JSON (Vertex auth).
 // Mirrors the `VertexServiceAccount` interface in @/core/providers/types but
 // adds runtime validation — the adapter Zod-parses the file content before
-// handing it to @google-cloud/vertexai, so malformed / wrong-type JSON on
-// disk surfaces as a typed error (SafetyFilterError / ProviderError family)
+// handing it to @google/genai (Vertex mode), so malformed / wrong-type JSON
+// on disk surfaces as a typed error (SafetyFilterError / ProviderError family)
 // instead of an opaque SDK crash.
 //
 // `.passthrough()` keeps unknown fields (token_uri, auth_provider_x509_cert_url,
