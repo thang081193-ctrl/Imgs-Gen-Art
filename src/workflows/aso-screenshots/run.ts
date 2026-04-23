@@ -133,6 +133,7 @@ export function createAsoScreenshotsRun(
               aspectRatio: params.aspectRatio,
               seed: assetSeed,
               abortSignal: params.abortSignal,
+              providerSpecificParams: { addWatermark: false },
               ...(params.language !== undefined ? { language: params.language } : {}),
             })
 

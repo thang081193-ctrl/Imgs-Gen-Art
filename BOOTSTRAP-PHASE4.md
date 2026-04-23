@@ -86,20 +86,20 @@ GEMINI_API_KEY=xxx npm run test:live         # 2 real PNG generations + 2 health
 
 **Session:** #19
 
-**Goal:** Imagen 4 via `@google-cloud/vertexai` 1.10.0. Supports deterministic seed + `addWatermark: false` opt-out (required for `replayClass === "deterministic"` per Session #15). Language translation via `?language=` param (§6.2 lists 9 supported langs).
+**Goal:** Imagen 4 via `@google/genai` 1.5.0 (unified SDK with `vertexai: true` flag — NOT `@google-cloud/vertexai`). Supports deterministic seed + `addWatermark: false` opt-out (required for `replayClass === "deterministic"` per Session #15). Language translation via `?language=` param (§6.2 lists 9 supported langs).
 
 **Deliverables:**
 - [ ] `src/server/providers/vertex-imagen.ts` — uses `VertexAI` + `serviceAccount` context. Loads SA JSON from `keys/vertex-{slotId}.json` via existing `src/server/keys/` helpers.
 - [ ] `src/server/providers/vertex-errors.ts` — SA file not found / 401 / region errors → HealthStatus map.
 - [ ] Register in `providers/registry.ts`.
 - [ ] Unit tests `tests/unit/providers.vertex.test.ts` — mocked SDK + contract.
-- [ ] Gated live smokes `tests/live/providers.vertex-live.test.ts` — requires `VERTEX_SERVICE_ACCOUNT_PATH` + `VERTEX_PROJECT_ID` env.
+- [ ] Gated live smokes `tests/live/providers.vertex-live.test.ts` — requires `VERTEX_SA_PATH` + `VERTEX_PROJECT_ID` env.
 - [ ] **Deterministic seed E2E:** two calls with same seed + `addWatermark:false` + same prompt → byte-identical output (or near-identical within Imagen's determinism guarantees per Vertex docs).
 
 **QA gate:**
 ```bash
 npm run test:unit -- providers.vertex        # green
-VERTEX_SERVICE_ACCOUNT_PATH=... npm run test:live  # 1 Imagen generate + 1 deterministic seed check
+VERTEX_SA_PATH=... VERTEX_PROJECT_ID=... npm run test:live  # 1 Imagen generate + 1 deterministic seed check
 ```
 
 ---
@@ -140,7 +140,7 @@ VERTEX_SERVICE_ACCOUNT_PATH=... npm run test:live  # 1 Imagen generate + 1 deter
 
 ## Step 5 — Cost tracking per asset + batch (1-2h)
 
-**Session:** #22 (or bundled with #21)
+**Session:** #21 (bundled with Step 4)
 
 **Goal:** Each persisted asset records its `costUsd` from `ModelInfo.costPerImageUsd`. Batch-level aggregate in `batch` table. Gallery card shows per-asset cost.
 
@@ -158,7 +158,7 @@ VERTEX_SERVICE_ACCOUNT_PATH=... npm run test:live  # 1 Imagen generate + 1 deter
 
 ## Step 6 — Compatibility warning banner (1-2h)
 
-**Session:** #23
+**Session:** #22
 
 **Goal:** Workflow page warns when user selects an INCOMPATIBLE provider:model (grey-out is not enough — explicit banner explains why).
 
@@ -173,7 +173,7 @@ VERTEX_SERVICE_ACCOUNT_PATH=... npm run test:live  # 1 Imagen generate + 1 deter
 
 ## Step 7 — 11 live smoke tests (= Σ compatible pairs) (2-3h)
 
-**Session:** #24
+**Session:** #23
 
 **Goal:** Every compatible (workflow, provider, model) combination has a gated live smoke that generates 1 asset. Exercises real SDK paths end-to-end. Catches regressions on SDK version bump.
 
@@ -197,7 +197,7 @@ VERTEX_SERVICE_ACCOUNT_PATH=... npm run test:live  # 1 Imagen generate + 1 deter
 
 ## Step 8 — Phase 4 close + PHASE-STATUS (1-2h)
 
-**Session:** #25
+**Session:** #24
 
 **Deliverables:**
 - [ ] Full `npm run regression:full` green (378 + ~30-50 new = ~410+).

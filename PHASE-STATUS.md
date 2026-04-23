@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (7 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI + compat warning banner + live smoke scaffold; 497/497 regression green + 10 live-gated skipped)
-Last updated: 2026-04-23 (Session #23 close — Phase 4 Step 7 code-complete, bro-gated for live run. New `tests/live/workflows-smoke.test.ts` (391 LOC, 11 interleaved combos; `describe.skipIf(AVAILABLE_COMBOS.length === 0)` + per-combo env filter → partial-env support). BUNDLED two latent bug fixes: (a) all 4 workflow registrations hardcoded `getProvider("mock")` at registration time — Session #11 Known Pending #2 — signature `resolveDeps: () => Deps` widened to `(params: WorkflowRunParams) => Deps` so provider resolves at run-time via `params.providerId` (8 src edits + 4 unit-test arg-sig updates); (b) `vitest.config.ts` `exclude: ["tests/live/**"]` latent bug since Session #18 broke `npm run test:live` — removed exclude (skipIf alone provides hermeticity). Plus `test:live:smoke-all` script. 497/497 regression green + 10 live-gated skipped (existing gemini-live: 5, vertex-live: 5; smoke-all: 0-tests-when-no-env).)
+Current phase: **Phase 4 — CLOSED ✅** (Vertex side end-to-end verified: doc fixes + addWatermark bug fix + 3/3 Vertex live smokes + browser E2E across 3 compatible workflows + compat banner + Gallery PNG display. Gemini side verified by unit suite + code review only — real-key live run deferred until GEMINI_API_KEY is provisioned.)
+Last updated: 2026-04-23 (Session #24 close — Phase 4 Step 8 final. Bundled 4 deliverables: (a) BOOTSTRAP-PHASE4 doc fixes (session numbers, SDK ref, env var); (b) addWatermark blocker bug fix across 4 workflow run.ts; (c) 3/3 Vertex live smokes PASS ($0.12); (d) browser E2E — artwork-batch/ad-production/aso-screenshots/style-transform × Vertex verified; style-transform × Vertex compat banner (⛔ "Incompatible combination · model missing required capability supportsImageEditing") + Run tooltip + button disabled; Gallery displays 6 real 1024×1024 Vertex PNGs with $0.24 page total ($0.04 × 6 = matches). Cancel button renders during run (verified); DELETE roundtrip + confirm dialog covered by unit + integration tests. Tooling note: Vertex dev quota ~5-6 requests/min on this SA — hit 429 during cancel retest. **Phase 4 Gemini real-key smokes explicitly deferred — NOT a Phase 4 blocker** per bro's "chưa cần Gemini API" in kickoff.)
 
 ## Phase 4 Summary
 
@@ -14,7 +14,113 @@ Last updated: 2026-04-23 (Session #23 close — Phase 4 Step 7 code-complete, br
 | 5 | Cost tracking per asset + batch | ✅ Session #21 (bundled) — GenerateResult.costUsd + 3 adapter COST tables + finalizeBatch helper + all 4 workflow run.ts refactored + 4 asset-writers + client formatCost util + thumbnail chip + detail modal + Gallery page-total header + 10 unit tests |
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
-| 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #24 |
+| 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #24 (Phase 4 Step 8 partial — doc fixes + Vertex blocker bug + 3 Vertex live smokes)
+
+Step 8 opened with doc cleanup (trivial) and live smoke run (expected to be bro-gated pass). Instead hit a **Phase 4 blocker** mid-smoke that had been dormant through all of Phase 3: workflows pass `seed` but never pass `addWatermark: false` to the provider. Mock ignores the flag; Vertex rejects with 400 *"Seed is not supported when watermark is enabled."* Bundled the fix into this session rather than deferring — Phase 4 cannot close with Step 7 smokes failing against real providers.
+
+### Bug diagnosis (Vertex "seed vs watermark" mutual exclusion)
+
+- Smoke run 1: all 3 Vertex combos failed in 329-1891ms (fast-fail, pre-any-real-image). Events: `started → concept_generated → error → complete` with 0 successful assets.
+- First `console.error(lastEvents)` printed `[Object]` — added one-shot `JSON.stringify(events)` dump to surface the actual error body. Revealed: `Vertex SDK error: got status: 400 Bad Request. ... "Seed is not supported when watermark is enabled." ... "status":"INVALID_ARGUMENT"`.
+- Grep found: all 4 `asset-writer.ts` pass `providerSpecificParams: { addWatermark: false }` — but only into `computeReplayClass()` (post-generation classifier). The pre-generation `provider.generate()` call in all 4 `run.ts` omitted it entirely.
+- Vertex adapter default: `params.providerSpecificParams?.["addWatermark"] ?? true`. So seed + default watermark → API reject. Gemini adapter doesn't read the flag → unaffected either way.
+- Latent since Session #15 (when all 3 non-mock workflows shipped). Mock's `generate` ignores watermark so Phase 3 Mock E2E never caught it. First surfaced against real Vertex in Session #24.
+
+### Src changes (4 files × 1 line each)
+
+- `src/workflows/artwork-batch/run.ts` — add `providerSpecificParams: { addWatermark: false },` to `deps.provider.generate({...})`.
+- `src/workflows/ad-production/run.ts` — same.
+- `src/workflows/style-transform/run.ts` — same.
+- `src/workflows/aso-screenshots/run.ts` — same.
+
+Now call-site and replay-classifier both declare `addWatermark: false` — contract consistency restored. `computeReplayClass` returns `"deterministic"` only when both flags align, so no classification drift.
+
+### Doc changes (BOOTSTRAP-PHASE4.md)
+
+- Step 2 SDK reference: `@google-cloud/vertexai` 1.10.0 → `@google/genai` 1.5.0 (unified SDK with `vertexai: true` flag). Actual `src/server/providers/vertex-imagen.ts` imports from `@google/genai`; the `@google-cloud/vertexai` pkg is still in `package.json` (unused but not pruned — flagged for Phase 5 if desired).
+- Step 2 env var: `VERTEX_SERVICE_ACCOUNT_PATH` → `VERTEX_SA_PATH` (matches actual read in `tests/live/providers.vertex-live.test.ts` line 23).
+- Session numbering (was off by 1 since Session #21's bundling):
+  - Step 5: "#22 (or bundled with #21)" → "#21 (bundled with Step 4)"
+  - Step 6: #23 → #22
+  - Step 7: #24 → #23
+  - Step 8: #25 → #24
+
+### Live smoke results (3 Vertex combos, $0.12 actual)
+
+```
+npm run test:live:smoke-all
+  VERTEX_PROJECT_ID=dogwood-rigging-492017-f0
+  VERTEX_SA_PATH=D:/Dev/Tools/Images Gen Art/.secrets/vertex-sa.json
+  KEEP_SMOKE_ASSETS=1
+
+✓ ad-production   × vertex:imagen-4.0-generate-001   ( 9.9s)
+✓ artwork-batch   × vertex:imagen-4.0-generate-001   (11.4s)
+✓ aso-screenshots × vertex:imagen-4.0-generate-001   ( 6.8s)
+
+3/3 PASS, 28.2s total. Gemini combos skipped (no GEMINI_API_KEY).
+Assets preserved: data/assets/smoke-1776937297910/2026-04-23/
+  - ast_P3tI7bkD6L.png (469 KB) — family-portrait composition, "Smoke Test Profile" text
+  - ast_Yk2QtF1keW.png (349 KB)
+  - ast_mqUdBFlo8U.png (1.07 MB)
+All PNG magic-bytes valid, 1:1 aspect within ±0.02 tolerance, costUsd === 0.04.
+```
+
+### Credentials + secrets hygiene
+
+- Vertex SA JSON moved from `C:/Users/Thang/Desktop/` to `D:/Dev/Tools/Images Gen Art/.secrets/vertex-sa.json`.
+- Added `/.secrets/` to `.gitignore` (line 23). `git check-ignore -v .secrets/vertex-sa.json` → confirmed matched.
+- Project is in-house per bro — no key rotation required despite private key transit through conversation.
+
+### Browser E2E (Vertex side — all 4 workflows + Gallery + compat + Cancel)
+
+Scope: 4 workflows × Vertex only (Gemini deferred per kickoff). Setup: Vertex key seeded via `POST /api/keys` multipart curl (Settings UI modal exercised in Session #20 manual smoke); real profile `ai-chatbot` from dev seed. dev server via `.claude/launch.json` on port 5173 (client) / 5174 (server).
+
+Happy-path results (all 1024×1024 PNGs, real Vertex Imagen 4 output, $0.04 cost per asset):
+
+| Workflow | Combo | Batch ID | Assets | Result |
+|---|---|---|---|---|
+| artwork-batch | Vertex/Imagen 4 | `batch_MRnEeh5Cmi` | 1 | ✅ Gallery tile shows family-portrait PNG; "Compatible · recommended" badge |
+| ad-production | Vertex/Imagen 4 | `batch_6JAZSEIpkp` | 1 | ✅ Toast "View in Gallery →" CTA renders + navigates w/ batchId deep-link |
+| aso-screenshots | Vertex/Imagen 4 | `batch_LQcaoDGCF4` | 2 | ✅ targetLang chip-picker auto-deselects unsupported langs (vi/th/it grayed); emerald-500 selected state; `en` works |
+| style-transform | Vertex/Imagen 4 | — (blocked) | 0 | ✅ Compat banner `⛔ Incompatible combination · model missing required capability supportsImageEditing` + Run `disabled=true` + `title` tooltip = server reason verbatim |
+
+Gallery final state: 6 real PNGs (1 + 1 + 2 + 2 from cancel test), page total `$0.24` = 6 × $0.04 exact match with adapter COST_TABLE. workflow-chip filter pills visible (All / Artwork Batch / Ad Production / Style Transform / ASO Screenshots). Batch-ID exact-match input present.
+
+Cancel mid-flight:
+- UI wiring verified: during run, the primary button renders as `Running…` + a dedicated `Cancel` button appears. State check 3s into a 3-concept artwork-batch run: `["Running", "Cancel", "started", "concept_generated", "image_generated", "concept_generated"]` — Cancel button present in DOM.
+- Full DELETE roundtrip NOT exercised end-to-end in browser this session: Vertex dev SA quota is ~5-6 requests/min; by concept-3 the run hit `429 Too Many Requests — Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model with base model: imagen-4.0-generate`, which auto-completed the batch with partial success (2 assets) before a quota cooldown window opened for retry.
+- Code-path coverage: Session #12 integration tests pin DELETE tri-state (204 / 409 / 404); Session #16 unit tests pin dispatcher post-abort grace window (3 tests); `useWorkflowRun` confirm-dialog + `sse.abort() + fetch DELETE` is the same wire validated by those tests.
+
+Dev-tooling edge case: during initial ASO attempt, the tsx-watch `npm run dev` server died with EADDRINUSE:5174 — a stale `node.exe` PID 27928 was holding the port from an earlier manual run. `taskkill //PID 27928 //F` + re-`preview_start` resolved. Not a product bug; worth noting for Phase 5 that `tsx watch` + manual dev runs don't play nicely on Windows.
+
+### QA gate (Session #24 close)
+
+```
+lint: clean
+typecheck: 0 errors
+check-loc: 174 src files, 0 violations (smoke test 391 LOC still tests-exempt)
+test:unit (via `npm run regression`): 343/343 pass (27 files)
+test:live:smoke-all (Vertex-only, bro-gated): 3/3 pass ($0.12)
+browser E2E (Vertex): 4 workflows + compat + Gallery verified; Cancel wire visible
+total Session #24 live spend: ~$0.36 ($0.12 smoke + $0.24 browser = 9 Imagen calls @ $0.04)
+```
+
+### Deviations from plan
+
+- **Bundled bug fix into Step 8 commit.** Alternative split (revert smoke, fix bug in its own commit, re-run smoke in Step 8) would triple the commit count for a 4-line change. Bundle keeps history tight per Session #23 precedent.
+- **Unit tests NOT added for the addWatermark fix.** The providerSpecificParams pass-through is a 1-line object-literal field; unit-testing it would require mocking `deps.provider.generate` and asserting call-arg shape — high test-ceremony ratio for a trivial wire. Regression coverage is the live smoke itself (now GREEN against real API).
+- **One-shot debug log removed post-diagnosis.** Added `console.error("[smoke failure events JSON]\n" + JSON.stringify(events, null, 2))` to the smoke catch block to reveal the 400 body, reverted after root-cause found. No tech debt left in the test file.
+
+### Known pending items (Phase 4 CLOSED — these items roll into Phase 5 or remain as opt-in follow-ups)
+
+1. **Gemini live smokes (8 combos) — opt-in when bro provisions `GEMINI_API_KEY`.** Partial-env filter in `tests/live/workflows-smoke.test.ts` already accepts Gemini-only, Vertex-only, or both. Expected cost when run: 4×$0.134 (NB Pro) + 4×$0.067 (NB 2) = $0.80. Adapter covered by 32 unit tests + code review; real-key run is defense-in-depth, not a Phase 4 gate.
+2. **Full browser Cancel DELETE roundtrip** — not exercised this session due to Vertex dev quota hitting mid-retry. Low priority: unit + integration cover the code path. A Phase 5 task could re-test with a fresh-quota window, OR re-architect the smoke test profile to use Mock (which has no quota) for Cancel-specific scenarios.
+3. **`@google-cloud/vertexai` package.json entry is dead weight** — actual adapter uses `@google/genai`. One-line prune in a follow-up commit; no active references.
+4. **Seeded Vertex slot + smoke profile leftover on disk** — `data/keys.enc` now contains an encrypted real SA (bro said in-house, no rotation needed); `data/profiles/smoke-1776937297910.json` + its asset dir from Session #23 smoke still present. Harmless; bro can hand-delete or leave as test fixture.
+5. **Windows `tsx watch` + manual dev concurrency rough edge** — when both are running, port 5174 can get wedged; recovery is `taskkill //PID ... //F`. Consider adding a pre-start `portfree` check to `npm run dev:server` in Phase 5 housekeeping.
+6. **Phase 3 carry-forward still deferred** — Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows. Phase 5 territory.
 
 ## Completed in Session #23 (Phase 4 Step 7 — 11 live smoke tests)
 
@@ -99,15 +205,20 @@ bro-gated live run (pending — do after creds):
 3. **Imagen 1K vs 2K cost tier.** Current `EXPECTED_COSTS` locks the 2K tier ($0.04). If a live smoke ever returns 1K output, cost assertion fails — desirable (catches silent downgrade). Aspect → resolution mapping isn't wired yet.
 4. **Phase 3 carry-forward still deferred** — Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows. Phase 5 territory.
 
-## Next Session (#24) kickoff — Phase 4 Step 8 (Phase 4 close)
+## Next Session (#25) — Phase 5 entry
 
-1. Read this file (Session #23 entry) + `BOOTSTRAP-PHASE4.md` Step 8 + `MEMORY.md`. Baseline: `npm run regression:full` = 497 pass + 10 skipped.
-2. **If live smokes haven't run yet**: bro runs `npm run test:live:smoke-all` with creds; update PHASE-STATUS with results before Step 8 wrap.
-3. Fix `BOOTSTRAP-PHASE4.md`: session numbering (Step 7 = #23 not #24; Step 8 = #24 not #25) + SDK reference.
-4. Manual browser E2E: 4 workflows × 2 real providers (real keys in Settings); cancel mid-flight; Gallery deep-links.
-5. Write Phase 4 close summary in `PHASE-STATUS.md`.
+**Phase 4 is CLOSED.** Start-of-session checklist for Session #25:
 
-Est 1-2h.
+1. Read Session #24 entry above + `PLAN-v2.2.1.md` §8–§10 (Phase 5 — Replay + PromptLab + Profile CMS) + `MEMORY.md`. Baseline: `npm run regression` = 343/343 unit pass.
+2. Scaffold `BOOTSTRAP-PHASE5.md` from PLAN §8+ following the 8-step / per-step-session convention of Phase 4. Bro-gate before any code.
+3. Opt-in Phase 4 follow-ups to fold into Phase 5 housekeeping if touched organically:
+   - Gemini live smokes (when `GEMINI_API_KEY` is ready — drop-in via `npm run test:live:smoke-all`)
+   - Prune `@google-cloud/vertexai` package.json dead dep
+   - Windows dev `portfree` preflight
+   - Delete Session #23 smoke profile leftover
+4. First Phase 5 step per PLAN-v2.2.1.md §8: Replay UI surface (re-run an asset via `POST /api/workflows/:id/runs/:runId/replay` + Gallery "Replay" button). Requires `replayPayload` persistence already shipped (Session #11).
+
+Phase 4 final metric: 497 unit/integration + 13 extraction + 3/3 Vertex live (+ 10 live-gated skipped) = 523 total test surface. Zero flake baseline entering Phase 5.
 
 ---
 

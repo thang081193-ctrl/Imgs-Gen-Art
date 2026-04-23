@@ -135,6 +135,7 @@ export function createStyleTransformRun(
             aspectRatio: params.aspectRatio,
             seed: concept.seed,
             abortSignal: params.abortSignal,
+            providerSpecificParams: { addWatermark: false },
             ...(params.language !== undefined ? { language: params.language } : {}),
           })
 

@@ -19,6 +19,9 @@ dist/
 # Service accounts (never commit) — anchored: top-level keys/ only, do not match src/server/keys/
 /keys/
 
+# Local secrets (SA JSON, API keys, etc.) — never commit
+/.secrets/
+
 # SQLite DB
 artforge.db
 artforge.db-wal
