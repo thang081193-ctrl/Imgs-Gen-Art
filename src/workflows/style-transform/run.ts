@@ -37,14 +37,14 @@ export interface StyleTransformOptions {
 }
 
 export function createStyleTransformRun(
-  resolveDeps: () => StyleTransformDeps,
+  resolveDeps: (params: WorkflowRunParams) => StyleTransformDeps,
   options: StyleTransformOptions = {},
 ): (params: WorkflowRunParams) => AsyncGenerator<WorkflowEvent> {
   const assetsDir = options.assetsDir ?? DEFAULT_ASSETS_DIR
   const nowFn = options.now ?? (() => new Date())
 
   return async function* run(params: WorkflowRunParams): AsyncGenerator<WorkflowEvent> {
-    const deps = resolveDeps()
+    const deps = resolveDeps(params)
     const input = params.input as StyleTransformInput
     const locale = params.language ?? "en"
     const batchSeed = input.seed ?? Date.now()

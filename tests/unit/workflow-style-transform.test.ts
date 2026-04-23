@@ -102,7 +102,7 @@ function buildTestRun(opts?: { assetsDir?: string; seedScreenshot?: boolean }) {
   const profileAssetsRepo = createProfileAssetsRepo(db)
   if (opts?.seedScreenshot !== false) seedScreenshot(profileAssetsRepo, profile.id)
   const run = createStyleTransformRun(
-    () => ({ assetRepo, batchRepo, profileAssetsRepo, provider: mockProvider }),
+    (_params) => ({ assetRepo, batchRepo, profileAssetsRepo, provider: mockProvider }),
     { now: fixedClock(), ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}) },
   )
   return { run, db, assetRepo, batchRepo, profileAssetsRepo }

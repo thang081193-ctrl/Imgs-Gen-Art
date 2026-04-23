@@ -2,8 +2,8 @@
 //
 // Identical factory-pattern to artwork-batch/index.ts (Q4): deps resolved
 // lazily via getters from the asset-store context + provider registry.
-// Phase 3 hardcodes `getProvider("mock")`; Phase 4 switches to
-// `getProvider(params.providerId)` — single-line diff.
+// Session #23 (Phase 4 Step 7) — provider resolved from `params.providerId`
+// at run time; unblocks live smoke matrix against real Gemini/Vertex.
 
 import type { WorkflowDefinition } from "@/workflows/types"
 import { getAssetRepo, getBatchRepo } from "@/server/asset-store/context"
@@ -40,9 +40,9 @@ export const adProductionWorkflow: WorkflowDefinition = {
   },
   compatibilityOverrides: adProductionOverrides,
   inputSchema: AdProductionInputSchema,
-  run: createAdProductionRun(() => ({
+  run: createAdProductionRun((params) => ({
     assetRepo: getAssetRepo(),
     batchRepo: getBatchRepo(),
-    provider: getProvider("mock"),
+    provider: getProvider(params.providerId),
   })),
 }

@@ -42,10 +42,10 @@ export const styleTransformWorkflow: WorkflowDefinition = {
   },
   compatibilityOverrides: styleTransformOverrides,
   inputSchema: StyleTransformInputSchema,
-  run: createStyleTransformRun(() => ({
+  run: createStyleTransformRun((params) => ({
     assetRepo: getAssetRepo(),
     batchRepo: getBatchRepo(),
     profileAssetsRepo: getProfileAssetsRepo(),
-    provider: getProvider("mock"),
+    provider: getProvider(params.providerId),
   })),
 }

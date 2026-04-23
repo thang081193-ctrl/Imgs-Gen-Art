@@ -31,9 +31,9 @@ export const artworkBatchWorkflow: WorkflowDefinition = {
   },
   compatibilityOverrides: [],
   inputSchema: ArtworkBatchInputSchema,
-  run: createArtworkBatchRun(() => ({
+  run: createArtworkBatchRun((params) => ({
     assetRepo: getAssetRepo(),
     batchRepo: getBatchRepo(),
-    provider: getProvider("mock"),
+    provider: getProvider(params.providerId),
   })),
 }

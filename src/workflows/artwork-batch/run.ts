@@ -34,14 +34,14 @@ export interface ArtworkBatchOptions {
 }
 
 export function createArtworkBatchRun(
-  resolveDeps: () => ArtworkBatchDeps,
+  resolveDeps: (params: WorkflowRunParams) => ArtworkBatchDeps,
   options: ArtworkBatchOptions = {},
 ): (params: WorkflowRunParams) => AsyncGenerator<WorkflowEvent> {
   const assetsDir = options.assetsDir ?? DEFAULT_ASSETS_DIR
   const nowFn = options.now ?? (() => new Date())
 
   return async function* run(params: WorkflowRunParams): AsyncGenerator<WorkflowEvent> {
-    const deps = resolveDeps()
+    const deps = resolveDeps(params)
     const input = params.input as ArtworkBatchInput  // validated by precondition #8
     const locale = params.language ?? "en"
     const batchSeed = input.seed ?? Date.now()

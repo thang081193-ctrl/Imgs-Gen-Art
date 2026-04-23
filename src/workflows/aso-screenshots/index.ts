@@ -35,9 +35,9 @@ export const asoScreenshotsWorkflow: WorkflowDefinition = {
   },
   compatibilityOverrides: asoScreenshotsOverrides,
   inputSchema: AsoScreenshotsInputSchema,
-  run: createAsoScreenshotsRun(() => ({
+  run: createAsoScreenshotsRun((params) => ({
     assetRepo: getAssetRepo(),
     batchRepo: getBatchRepo(),
-    provider: getProvider("mock"),
+    provider: getProvider(params.providerId),
   })),
 }

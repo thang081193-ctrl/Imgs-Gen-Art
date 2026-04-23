@@ -108,7 +108,7 @@ function buildTestRun(opts?: { assetsDir?: string }) {
   const assetRepo = createAssetRepo(db)
   const batchRepo = createBatchRepo(db)
   const run = createAsoScreenshotsRun(
-    () => ({ assetRepo, batchRepo, provider: mockProvider }),
+    (_params) => ({ assetRepo, batchRepo, provider: mockProvider }),
     { now: fixedClock(), ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}) },
   )
   return { run, db, assetRepo, batchRepo }
