@@ -51,6 +51,8 @@ export interface HealthCheckContext {
   serviceAccount?: VertexServiceAccount
   /** Bypass any provider-internal health-result cache (Phase 4+). */
   skipCache?: boolean
+  /** Cancel the probe (e.g. client disconnect on POST /keys/:id/test). */
+  abortSignal?: AbortSignal
 }
 
 export interface GenerateParams {

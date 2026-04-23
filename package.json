@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:live": "vitest run tests/live",
     "regression": "npm run lint && npm run typecheck && npm run check-loc && npm run test:unit",
     "regression:full": "npm run lint && npm run typecheck && npm run check-loc && npm run test"
   },

@@ -39,13 +39,17 @@ describe("GET /api/health", () => {
 })
 
 describe("GET /api/providers", () => {
-  it("returns full catalog with mock registered", async () => {
+  it("returns full catalog with registered providers", async () => {
     const res = await fetchApp("/api/providers")
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.providers.map((p: { id: string }) => p.id)).toEqual(["gemini", "vertex", "mock"])
     expect(body.models).toHaveLength(4)
-    expect(body.registeredProviderIds).toEqual(["mock"])
+    // Phase 4 Step 1 (Session #18): gemini joins mock in the registry. Vertex
+    // lands Step 2. Use set-equality (order-agnostic) since registry iteration
+    // order is an implementation detail.
+    expect(body.registeredProviderIds).toEqual(expect.arrayContaining(["mock", "gemini"]))
+    expect(body.registeredProviderIds).not.toContain("vertex")
   })
 
   it("embeds capability per model entry (sourceUrl + verifiedAt)", async () => {

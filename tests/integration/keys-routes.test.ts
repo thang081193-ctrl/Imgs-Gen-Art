@@ -181,7 +181,7 @@ describe("DELETE /api/keys/:id — Q7 semantics", () => {
 })
 
 describe("POST /api/keys/:id/test — Session #14 Q8 + wiring", () => {
-  it("returns full response shape (Phase 3 degrades gemini to status=unknown)", async () => {
+  it("returns full response shape against the real gemini adapter (Phase 4)", async () => {
     const slotId = await createGeminiSlot("test-slot", "api-key-abc")
     const res = await postJson(`/api/keys/${slotId}/test`, {})
     expect(res.status).toBe(200)
@@ -194,9 +194,11 @@ describe("POST /api/keys/:id/test — Session #14 Q8 + wiring", () => {
     }
     expect(body.slotId).toBe(slotId)
     expect(body.modelId).toBeTruthy()       // defaulted from modelsByProvider("gemini")[0]
-    expect(body.status).toBe("unknown")     // Phase 3 fallback
+    // Phase 4 Step 1: gemini is live; with a fake API key the real SDK call
+    // resolves to one of the 5 canonical HealthStatusCode branches. "ok"
+    // would only occur with a valid key, which this test doesn't provide.
+    expect(["auth_error", "rate_limited", "quota_exceeded", "down"]).toContain(body.status)
     expect(body.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-    expect(body.message).toMatch(/phase 4/i)
   })
 
   it("rejects explicit modelId that does not belong to slot's provider → 400", async () => {

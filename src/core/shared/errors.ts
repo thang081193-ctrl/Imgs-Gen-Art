@@ -10,6 +10,8 @@ export type ErrorCode =
   | "NO_ACTIVE_KEY"
   | "PROVIDER_UNAVAILABLE"
   | "PROVIDER_NOT_FOUND"
+  | "PROVIDER_ERROR"
+  | "SAFETY_FILTER"
   | "NOT_REPLAYABLE"
   | "EDIT_REQUIRES_PROMPT"
   | "EXTRACTION_FAILED"
@@ -104,6 +106,43 @@ export class ProviderNotFoundError extends AppError {
       { ...context },
     )
     this.name = "ProviderNotFoundError"
+  }
+}
+
+// Generic provider-adapter failure — SDK error, malformed response, network glitch.
+// Maps 502 (Bad Gateway) because the root cause is the upstream provider service,
+// not Images Gen Art's own logic. Details carry the minimum debug context:
+// providerId + modelId + optional sdkCode so logs trace back to the exact call.
+export interface ProviderErrorDetails {
+  providerId: string
+  modelId?: string
+  sdkCode?: string
+  [key: string]: unknown
+}
+
+export class ProviderError extends AppError {
+  constructor(message: string, details: ProviderErrorDetails) {
+    super("PROVIDER_ERROR", message, 502, details)
+    this.name = "ProviderError"
+  }
+}
+
+// Raised when a Gemini/Vertex response carries a content-safety block.
+// Maps 422 (Unprocessable Entity) — the request itself was valid, the output
+// was refused by the model's safety filter. Surfaces a distinct UI affordance
+// ("prompt blocked, try rephrasing") instead of the generic "provider error".
+export interface SafetyFilterDetails {
+  providerId: string
+  modelId?: string
+  reason: string
+  prompt?: string          // caller may truncate before passing in
+  [key: string]: unknown
+}
+
+export class SafetyFilterError extends AppError {
+  constructor(message: string, details: SafetyFilterDetails) {
+    super("SAFETY_FILTER", message, 422, details)
+    this.name = "SafetyFilterError"
   }
 }
 

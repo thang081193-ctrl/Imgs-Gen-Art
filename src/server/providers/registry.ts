@@ -4,10 +4,12 @@
 
 import type { ImageProvider } from "@/core/providers/types"
 import { ProviderNotFoundError } from "@/core/shared/errors"
+import { geminiProvider } from "./gemini"
 import { mockProvider } from "./mock"
 
 const registry: ReadonlyMap<string, ImageProvider> = new Map<string, ImageProvider>([
   [mockProvider.id, mockProvider],
+  [geminiProvider.id, geminiProvider],
 ])
 
 export function getProvider(id: string): ImageProvider {

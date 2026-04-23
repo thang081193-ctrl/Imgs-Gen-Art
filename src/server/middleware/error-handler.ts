@@ -33,7 +33,7 @@ export const errorHandler: ErrorHandler = (err, c) => {
         ...(err.details ? { details: err.details } : {}),
       })
     }
-    return c.json(body, err.status as 400 | 401 | 404 | 409 | 410 | 500 | 501)
+    return c.json(body, err.status as 400 | 401 | 404 | 409 | 410 | 422 | 500 | 501 | 502)
   }
 
   if (err instanceof ZodError) {

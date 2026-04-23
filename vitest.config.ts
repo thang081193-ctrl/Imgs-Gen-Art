@@ -6,7 +6,10 @@ export default defineConfig({
     globals: false,
     environment: "node",
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
-    exclude: ["node_modules", "dist", "vendor"],
+    // tests/live runs against real external APIs (Gemini, Vertex). Excluded
+    // from the default run so `regression:full` stays hermetic + CI-safe.
+    // Invoke explicitly via `npm run test:live`.
+    exclude: ["node_modules", "dist", "vendor", "tests/live/**"],
     reporters: ["default"],
     pool: "threads",
     env: {
