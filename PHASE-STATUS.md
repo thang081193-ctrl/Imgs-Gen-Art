@@ -1,14 +1,14 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Step 1 landed: Replay API `POST /api/assets/:id/replay` + `GET /:id/replay-class`, generic workflow-agnostic service, batches.replay_of_{batch,asset}_id linkage, 19 new tests all green. Phase 4 remains closed.)
-Last updated: 2026-04-23 (Session #25 — Phase 5 Step 1 ship + housekeeping chore. Bundled: (a) HK1 prune unused `@google-cloud/vertexai` dep + eslint guard cleanup; (b) Replay API surface (`POST /api/assets/:assetId/replay` SSE + `GET /:assetId/replay-class` probe) backed by a generic replay-service (workflow-agnostic — no 4-runner modification per Session #25 chat decision); (c) migration `2026-04-23-replay-support.sql` adding `batches.replay_of_batch_id` + `replay_of_asset_id` + index; (d) 11 new unit tests (replay-service determinism + 4 preconditions + abort + provider-error paths) + 8 new integration tests (SSE happy + 4 error HTTP statuses + probe happy + probe errors); (e) 1 pre-existing Phase 3 guard test in `assets-routes.test.ts` updated to reflect that replay endpoint is now registered. Full regression 517/517 pass (up from 497 at Phase 4 close).)
+Current phase: **Phase 5 — IN PROGRESS** (Step 2 landed: Replay UI — asset-detail modal primary button with state-dependent copy, Gallery tile EXACT / APPROX / — badge chip, replayed-from chip, `/replay-class` reshape to 200-with-reason for `not_replayable`. 535/545 regression pass — +18 net vs Session #25 close. Phase 4 remains closed.)
+Last updated: 2026-04-23 (Session #26 — Phase 5 Step 2 ship. Bundled: (a) Gap A fold-in: `/replay-class` returns **200** for `not_replayable` with a `reason` discriminator (`seed_missing` | `provider_no_seed_support` | `watermark_applied`) instead of a 400; new sibling `computeNotReplayableReason()` helper + `probeReplayClass()` in replay-service; (b) Replay UI surface — new `useReplay` + `useReplayClass` hooks composing the existing `src/client/utils/use-sse.ts`, new `ReplayBadge` + `ReplayedFromChip` components, new `ReplaySection` split out of `AssetDetailModal` (LOC cap compliance), new `replay-errors.ts` client-side taxonomy mapper (5 categories — `auth|safety|provider_error|network|unknown`; `rate_limit` deferred until backend `RATE_LIMIT` code lands); (c) Gallery tile wiring — `AssetThumbnail` renders `ReplayBadge` directly from `asset.replayClass` (no extra probe per tile, per Q I), and `ReplayedFromChip` when `asset.replayedFromAssetId != null`; (d) cost display — static from the probe payload for v1 (no `cost_updated` SSE event, per Q G — replay is always 1 image so running ≡ final); (e) cancel path — mirrors `useWorkflowRun`: SSE abort + `DELETE /api/workflows/runs/:batchId` (benign 404 for replay batches not in abort-registry); (f) component + hook tests deferred (no jsdom env) — pure-logic unit tests for `classifyReplayError` + `notReplayableTooltip` + `computeNotReplayableReason`. Full regression 535/545 pass (+18 vs Session #25's 517).)
 
 ## Phase 5 Summary (in progress)
 
 | Step | Title | Status |
 |---|---|---|
 | 1 | Replay API (`POST /api/assets/:id/replay` + `GET /:id/replay-class`) | ✅ Session #25 — 5 new src files (replay-service + replay-asset-writer + stored-payload-shape + replay.ts + replay.body.ts) + migration + 3 DB-layer edits (types + batch-repo + schema.sql) + app.ts wire + 2 test files (11 unit + 8 integration) + 1 existing test update + 1 housekeeping commit. Generic workflow-agnostic service — does NOT modify the 4 workflow runners (per bro's B-option chat decision). |
-| 2 | Replay UI (modal button + gallery badge) | pending |
+| 2 | Replay UI (modal button + gallery badge) | ✅ Session #26 — 5 new src files (useReplay hook + useReplayClass hook + replay-errors mapper + ReplayBadge + ReplaySection) + 3 src edits (AssetDetailModal slim, AssetThumbnail badge wiring, Gallery prop threading) + Gap A fold-in across 4 server files (asset-dto NotReplayableReason type, replay-class helper, replay-service probeReplayClass, replay.ts route reshape) + 2 test files (5 new unit for reason helper + 11 new unit for error taxonomy) + 1 existing integration test updated (flip 400 → 200 + 3 new reason cases). Pure-logic tests only; hook/component tests deferred (no jsdom). |
 | 3 | Gallery enhancements (tags/date/provider/model/replayClass filters) | pending |
 | 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
 | 5 | PromptLab (dedicated page + history + diff viewer) | pending |
@@ -26,6 +26,167 @@ Last updated: 2026-04-23 (Session #25 — Phase 5 Step 1 ship + housekeeping cho
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #26 (Phase 5 Step 2 — Replay UI)
+
+Step 2 shipped the Replay UX on top of Session #25's API per PLAN §8/§9 and
+bro's Q1-Q5 + F-K refinements. One src+test commit (feat), one docs commit
+(this file).
+
+### Session #26 Step 1 verify — Gap A / B / C audit
+
+Before coding, 3 API-shape gaps vs bro's UI spec surfaced:
+
+- **Gap A (contract mismatch, folded in):** `/replay-class` for `not_replayable`
+  was returning **400** with a generic message (thrown by `loadReplayContext`)
+  — no way for the UI to render disabled-button-with-tooltip-per-reason. Folded
+  in: new discriminated 200 response `{ replayClass: "not_replayable", reason,
+  providerId, modelId, workflowId }` (no `estimatedCostUsd`). 400 still stands
+  for real data-integrity failures (payload missing / malformed / shape-fail).
+  `POST /replay` on a not_replayable asset is unchanged (still 400 — nothing
+  to execute).
+- **Gap B (partial, client-only mapper):** backend `ErrorCode` union covers
+  `NO_ACTIVE_KEY | SAFETY_FILTER | PROVIDER_ERROR | PROVIDER_UNAVAILABLE`
+  cleanly but does NOT emit a `RATE_LIMIT` code today. Client-side mapper
+  handles 5/6 categories (auth / safety / provider_error / network / unknown);
+  rate-limit errors currently collapse into `provider_error`. Not a blocker —
+  once provider adapters grow 429-detection we add the code + extend the
+  mapper. Listed in carry-forward.
+- **Gap C (no SSE cost event):** bro's G decision called for a `cost_updated`
+  stream event during replay. Replay-service emits only
+  `started → image_generated → complete` — and since replay is always
+  1-image-per-call, cost at start == cost at end (static from
+  `model.costPerImageUsd`). The UI displays the estimated cost from
+  `/replay-class` during streaming as "$X.XX running" and the same value on
+  complete. No `cost_updated` wiring needed.
+
+### Gap A fold-in (server-side, ~30 src LOC + 8 tests)
+
+- **Edit:** `src/core/dto/asset-dto.ts` — new `NotReplayableReason` union
+  (`seed_missing | provider_no_seed_support | watermark_applied`).
+- **Edit:** `src/core/shared/replay-class.ts` — new
+  `computeNotReplayableReason({ seed, capability })` sibling to the existing
+  classifier. Priority order: `seed_missing` (asset.seed is null) >
+  `provider_no_seed_support` (capability undefined or
+  `supportsDeterministicSeed=false`) > `watermark_applied` (catch-all,
+  currently unreachable because no asset-writer opts into pixel watermarks
+  yet). 5 new unit cases in `tests/unit/replay-class.test.ts`.
+- **Edit:** `src/server/workflows-runtime/replay-service.ts` — new
+  `probeReplayClass(assetId, deps?)` function returning a discriminated
+  `ReplayProbeResult`. For `not_replayable` assets it looks up the model
+  best-effort (undefined capability is fine — helper handles it as
+  `provider_no_seed_support`) and skips the active-key check (the user still
+  sees the reason regardless of key state). For replayable classes it falls
+  through to the existing `loadReplayContext` → same 400/401 behavior as
+  `POST /replay`.
+- **Edit:** `src/server/routes/replay.ts` — `GET /replay-class` handler now
+  uses `probeReplayClass` and branches on `probe.kind`. Replayable shape
+  unchanged. New shape for not_replayable includes `reason`, omits
+  `estimatedCostUsd`.
+- **Test update:** `tests/integration/replay-route.test.ts` — the "400 when
+  asset is not_replayable" case flipped to "200 with reason=<X>" across 3
+  reason branches (seed null, gemini-3-pro-image-preview which has
+  `supportsDeterministicSeed=false`, mock-fast+seed+no-watermark catch-all).
+
+### UI deliverables (~420 LOC src + 1 new test file)
+
+All 11 decisions (Q1-Q5 + F-K) landed as approved or with the refinement bro
+called out:
+
+- **`src/client/utils/use-replay-class.ts`** (new, ~85 LOC) — `useReplayClass(assetId)`.
+  Probe fetch against `/api/assets/:id/replay-class`. Q4: Infinity staleTime
+  via a module-scoped `Map<assetId, ReplayClassProbe>` (no React Query in
+  this project — plain Map suffices; `_resetReplayClassCacheForTests` export
+  for unit cleanup). Returns discriminated `ReplayClassProbe`.
+- **`src/client/utils/use-replay.ts`** (new, ~155 LOC) — `useReplay()` composes
+  `useSSE` for event consumption. State machine:
+  `idle → dispatching → streaming → complete | cancelled | error`. Tracks
+  `batchId` (from `started`), `result` (from `image_generated`), `elapsedMs`
+  (100ms interval while streaming — drives the "Replaying… 1.2s · $0.04
+  running" label). `cancel()` aborts SSE + fires `DELETE
+  /api/workflows/runs/:batchId` (benign 404 for replay batches — replay-service
+  doesn't register with the abort-registry; client-disconnect propagates the
+  abort signal server-side anyway). `reset()` returns to idle.
+- **`src/client/lib/replay-errors.ts`** (new, ~100 LOC) — `classifyReplayError`
+  + `notReplayableTooltip`. Maps `NO_ACTIVE_KEY → auth`, `SAFETY_FILTER →
+  safety`, `PROVIDER_ERROR | PROVIDER_UNAVAILABLE → provider_error`,
+  `TypeError(/fetch|network/) → network`, else `unknown`. Tooltip copy per
+  `NotReplayableReason` is Q3-approved verbatim.
+- **`src/client/components/ReplayBadge.tsx`** (new, ~80 LOC) — Gallery tile
+  badge (`EXACT` green / `APPROX` amber / `—` muted with tooltips from
+  bro's Q2 verbatim copy) + `ReplayedFromChip` (↩ link to source asset).
+  Consumed by `AssetThumbnail`. Q I decision respected: no per-tile
+  /replay-class call — badge renders purely from `asset.replayClass` on the
+  existing AssetDto.
+- **`src/client/components/ReplaySection.tsx`** (new, ~205 LOC) — extracted
+  from `AssetDetailModal` to stay under the 300 LOC hard cap. Renders probe
+  skeleton → `ReplayControl` (button with state-dependent copy + disabled
+  tooltip for not_replayable per Q3) → `ResultCard` (thumbnail + cost + Open↗
+  + Open-in-Gallery buttons per Q2 refinement).
+- **`src/client/components/AssetDetailModal.tsx`** (edit) — wires
+  `<ReplaySection />` below the existing metadata grid. Props grew:
+  `onOpenAsset` (Open↗ → setSelected(newAsset) in Gallery),  `showToast`.
+- **`src/client/components/AssetThumbnail.tsx`** (edit) — renders
+  `<ReplayBadge />` top-right, `<ReplayedFromChip />` below it when applicable.
+  New optional `onOpenSource` prop wired via Gallery.
+- **`src/client/pages/Gallery.tsx`** (edit) — threads `showToast` +
+  `onOpenAsset` down to the modal; threads `onOpenSource` into the
+  thumbnail grid (falls back to info-toast if source asset is outside the
+  current filter view).
+
+### Test changes (2 new files, 1 update; +18 net tests)
+
+- **New:** `tests/unit/replay-errors.test.ts` — 11 cases across
+  `classifyReplayError` (auth / safety / provider_error twice / unknown
+  fallthrough / network TypeError / generic Error / non-Error throw) and
+  `notReplayableTooltip` (all 3 reasons).
+- **Update:** `tests/unit/replay-class.test.ts` — +5 cases for
+  `computeNotReplayableReason` (priority ordering + undefined-capability
+  fallback + catch-all).
+- **Update:** `tests/integration/replay-route.test.ts` — replaced the 1
+  not_replayable case (400 → 200) and added 3 reason-branch cases
+  (seed_missing, provider_no_seed_support via gemini-3-pro,
+  watermark_applied catch-all via mock-fast+seed).
+
+`npm run regression:full` → **535 passed + 10 skipped** (52 files). Up from
+Session #25's 517. Typecheck clean, ESLint clean, `npx tsx
+scripts/check-loc.ts` OK (`replay-service.ts` 252 LOC over soft cap 250,
+under hard cap 300 — acceptable, noted in carry-forward).
+
+### Phase 5 Step 2 carry-forward
+
+1. **Component + hook tests deferred (no jsdom).** `useReplay` state machine,
+   `AssetDetailModal` / `ReplaySection` rendering paths, `AssetThumbnail`
+   badge placement, `ReplayBadge` tooltip wiring — all currently verified only
+   via dev-server smoke. Stand up `@testing-library/react` + `jsdom` (both
+   peer-compat with Vitest 2.1.9) and add component tests in a follow-up.
+2. **Backend `RATE_LIMIT` error code.** Client mapper has a slot for
+   `rate_limit` but no backend path emits it today. Fold in when Gemini /
+   Vertex adapters grow 429-detection + retryAfter parsing.
+3. **`replay-service.ts` soft-cap creep (252 LOC).** The `probeReplayClass`
+   addition pushed the file past the 250 soft cap. Split candidates:
+   `probeReplayClass` → its own file alongside `loadReplayContext`, or merge
+   `StoredReplayPayloadSchema` back into the canonical schema (carry-forward
+   #1 from Session #25).
+4. **Manual UI smoke pending bro.** Chrome extension not connected during
+   Session #26 close, so visual verification of the badges / button states /
+   result card was not captured. Server contracts validated end-to-end via
+   `curl` against the running dev server (200 on deterministic `/replay-class`
+   + full `started → image_generated → complete` SSE on `POST /replay`) and
+   `vite build` completed cleanly (75 modules, 320KB gzip). Bro to run the
+   golden-path smoke (open Gallery → click tile → see badge → Replay button →
+   complete → Open↗ / Open-in-Gallery) and flag any visual issues for a Step
+   2 polish commit.
+
+### Session #26 commit discipline
+
+Two commits in order:
+
+1. `feat(replay-ui): Phase 5 Step 2 — Replay UI + /replay-class 200-with-reason`
+   — all src + test changes (16 files modified, 5 new).
+2. `docs: Phase 5 Step 2 close — PHASE-STATUS Session #26` — this file.
+
+---
 
 ## Completed in Session #25 (Phase 5 Step 1 — Replay API + housekeeping)
 
