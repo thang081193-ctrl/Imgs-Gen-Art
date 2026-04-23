@@ -180,5 +180,64 @@ Three distinct model IDs. Nano Banana 2 is the newest (launched 2026-02-26), 50%
 
 ---
 
-*Last updated: 2026-04-20 with PLAN-v2.2.1.*
-*Status: scaffold-ready (all Codex round 4 blockers resolved).*
+---
+
+## Session #27b — Phase 5 Step 5b (PromptLab v1 scope)
+
+**Inline-only diff viewer (side-by-side deferred).** DiffViewer renders a
+single prose block with `<del>/<ins>` semantic HTML + `+/−` text markers
+for colorblind users. A side-by-side two-pane layout would require scroll
+sync + wider breakpoint handling, which is noise for prompt-sized inputs
+(typically <500 tokens). Polish backlog.
+
+**Per-asset history only (no cross-profile browser).** `GET /api/assets/
+:id/prompt-history` is the single read endpoint in v1. The Q2 schema
+lock reserves `profile_id` + `parent_history_id` columns but the Session
+#27b writer always sets `parent_history_id = NULL` and no route exposes
+`?profileId=`. Tree view + cross-asset history browser deferred to a
+polish release when there's a concrete UX for them.
+
+**Legacy asset = edit blocked, replay allowed.** Assets persisted before
+Session #27a carry a legacy payload shape (`promptRaw` + primitives, no
+`contextSnapshot.profileSnapshot`). The dual-reader still makes them
+replayable, but mode=edit rejects with `LEGACY_PAYLOAD_NOT_EDITABLE` —
+synthesizing a profileSnapshot from the current profile would silently
+drift from the batch-time profile (data corruption by optimism). The
+PromptLab entry button ships the verbatim tooltip copy Pham approved.
+
+**negativePrompt universally hidden except on mock.** All real v1
+providers (Gemini NB Pro, Gemini NB 2, Imagen 4) register
+`supportsNegativePrompt: false` — Imagen 4 dropped the feature in
+3.0-generate-002+; Gemini image adapters never supported it. The
+PromptEditor reads `model.capability.supportsNegativePrompt` and only
+renders the field when true. The backend capability gate
+(`CAPABILITY_NOT_SUPPORTED`) stays the authoritative check — the client
+hide is a second layer so users don't see an input they can't submit.
+The mock model keeps `supportsNegativePrompt: true` so unit + integration
+tests can exercise both the happy edit path and the capability gate.
+
+**Edit-only history log.** `prompt_history` rows are created exclusively
+when `mode=edit` (overridePayload present). Pure replays (mode=replay)
+skip the log — they produce deterministic (or best-effort) duplicates
+of the source, not distinct iterations. This keeps the PromptLab sidebar
+focused on the edit lineage and avoids cluttering it with byte-identical
+replays. Unit + integration tests enforce both sides of the boundary.
+
+**Prefill is a hint, not a clobber.** Clicking a history entry in the
+PromptLab sidebar shows a dismissible prefill hint below the editor
+instead of overwriting the textarea contents. Two reasons: (1) the user
+may have in-flight edits they'd lose to a click-to-load; (2) the textarea
+is a controlled React input and a programmatic value write would fight
+the user's next keystroke. The hint pattern lets the user manually copy/
+paste, keeping intent explicit.
+
+**`EDIT_REQUIRES_PROMPT` dropped.** The ErrorCode literal survived
+Session #27a as dead code (no emit site). Session #27b removes it from
+the union; the grep-for-dead-code audit catches this class of drift.
+Listed here so future greps on the name return the rationale, not just
+the absence.
+
+---
+
+*Last updated: 2026-04-24 with Session #27b (Phase 5 Step 5b — PromptLab).*
+*Status: Phase 5 Step 5 (5a + 5b) closed. Steps 3 / 4 / 6 pending.*

@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Step 5a landed: canonical payload migration + `mode=edit` backend. 4 workflow asset-writers now persist `ReplayPayloadSchema` shape (`prompt`+`providerSpecificParams`+`promptTemplateId/Version`+`contextSnapshot.profileSnapshot`); dual-reader in replay-service preserves pre-Session-#27 rows (105 legacy rows on bro's home PC still replayable). `POST /api/assets/:id/replay` body grew `overridePayload` field with strict allowlist (`prompt` | `addWatermark` | `negativePrompt`); 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` | `CAPABILITY_NOT_SUPPORTED` | `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD` (500). `AssetDto` gained `editable: { canEdit, reason? }` computed on-the-fly from payload shape. 546/557 regression pass — +11 net vs Session #26 close. Phase 4 remains closed.)
-Last updated: 2026-04-24 (Session #27a — Phase 5 Step 5a ship, backend-only. Bundled: (a) canonical payload migration across all 4 asset-writers (artwork-batch / ad-production / aso-screenshots / style-transform) — workflow-specific fields (`layoutId`, `copyKey`, `featureFocus`, `variantIndex`, `targetLang`, `sourceAssetId`, `styleDnaKey`, `serial`) confirmed still in `inputParams` and dropped from `replayPayload`; writers now also fill `promptTemplateId` (= workflowId literal) + `promptTemplateVersion` (= `"1"` stub) on the asset row; (b) `replay-payload-shape.ts` deleted, stored-shape readers collapsed into a private `replay-payload-reader.ts` that parses canonical first, falls back to inline legacy schema on `promptRaw` key presence, throws `MalformedPayloadError` otherwise; `probeReplayClass` extracted to its own `replay-probe.ts` (carry-forward #6 from Session #26); (c) `overridePayload` wired through `replay.body.ts` → `replay.ts` → `replay-service.ts`; strict Zod allowlist blocks non-editable fields with a field-named `EDIT_FIELD_NOT_ALLOWED` (lifted from the generic Zod BAD_REQUEST at the route layer); negativePrompt against a `supportsNegativePrompt: false` model → `CAPABILITY_NOT_SUPPORTED`; legacy source + mode=edit → `LEGACY_PAYLOAD_NOT_EDITABLE` (prevents silent profileSnapshot drift); (d) `AssetDto.editable` computed in `toAssetDto` via light JSON key-check (no Zod per-row); `editable.canEdit = false + reason: "legacy_payload"` on pre-Session-#27 rows; (e) 11 new integration tests in `tests/integration/edit-and-run.test.ts` (6 core happy+reject + 3 legacy + 1 inputParams audit + 1 HTTP capability `it.todo` deferred — needs active Vertex key); 1 new unit test in `replay-service.test.ts` for the capability gate via dep injection; 2 existing tests updated (replay-route 501→400 for mode=edit without overridePayload; replay-service malformed→MalformedPayloadError). Full regression 546/557 pass + 1 todo (+11 net vs Session #26's 535). `test:live:smoke-all` NOT run this session.)
+Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/5a/5b CLOSED. Step 5b landed: full PromptLab UI on top of Session #27a's `mode=edit` backend — new `prompt_history` SQLite log + `GET /api/assets/:id/prompt-history` endpoint + `/prompt-lab?assetId=X` page with 3-column layout (source card / editor + prediction strip / diff + history sidebar). Edit-replay iterations logged as pending → complete / failed / cancelled with denormalized costUsd; pure replays skip the log. Inline word-level diff viewer (hand-rolled LCS + regex tokenizer, zero deps). `[Edit & replay]` entry point on AssetDetailModal — disabled with tooltip when `editable.canEdit=false` (legacy) or `replayClass=not_replayable` (not-replayable wins priority). 573 pass / 10 skipped / 1 todo / 584 total regression (+27 net vs Session #27a). Phase 4 remains closed; Step 3 Gallery filters + Step 4 Profile CMS remain pending.)
+Last updated: 2026-04-24 (Session #27b — Phase 5 Step 5b ship + 27a carry-forward #2 + #4 paydown. Commit chain: (1) `refactor(replay)` extracts `applyOverride` → `src/server/workflows-runtime/replay-override.ts` and drops the unused `EDIT_REQUIRES_PROMPT` ErrorCode literal; replay-service drops 1 LOC past the soft cap it was carrying; 9 new replay-override unit tests cover reject paths + happy edge cases + input-mutation invariant. (2) `feat(prompt-lab)` ships the full Step 5b: new `scripts/migrations/2026-04-25-prompt-history.sql` + canonical schema mirror; new `prompt-history-repo.ts` + DTO + `GET /api/assets/:assetId/prompt-history` route (mounted before base assets route, 404 when source missing); replay-service edit-only history write path (pending → complete/failed/cancelled, cost_usd denormalized from result asset); new client modules `diff-words.ts` (LCS + `(\s+|[.,!?;:]|[^\s.,!?;:]+)` tokenizer), `DiffViewer.tsx` (inline `<ins>/<del>` + `+/−` colorblind markers + aria-labels), `PromptEditor.tsx` (textarea + addWatermark + capability-gated negativePrompt), `PromptHistorySidebar.tsx` (flat DESC list + status chips + override badges), `PromptLab.tsx` (3-col layout, assetId from navigator, recomputes predicted replayClass on addWatermark toggle only), `PromptLabSourceCard.tsx` + `PromptLabPredictionStrip.tsx` (extracted for LOC cap), `use-prompt-history.ts` (imperative refresh after SSE complete), `useAsset` hook, extended `useReplay.start(id, {overridePayload?})`. Entry: `[Edit & replay]` secondary button in ReplaySection + AssetDetailModal plumbs `onEditAsset` → Gallery → `navigator.go("prompt-lab", {assetId})`. 6 new integration tests in `prompt-history-route.test.ts` + 3 new unit tests in `replay-service.test.ts` (failed / cancelled / no-insert-on-replay) + 9 new unit tests in `diff-words.test.ts`. 573/584 regression pass (+18 vs 27b commit #1's 555, +27 vs 27a's 546). 1 cross-test flake observed on 1 of 3 full-regression runs (same pre-existing health-cache + zz-pa-test-profile race; unrelated to Step 5b). `test:live:smoke-all` NOT run. Manual UI smoke deferred — batched with Session #26 Step 2 smoke in a dedicated Chrome MCP session per Session #27b Q-CF.3.)
 
 ## Phase 5 Summary (in progress)
 
@@ -12,7 +12,7 @@ Last updated: 2026-04-24 (Session #27a — Phase 5 Step 5a ship, backend-only. B
 | 3 | Gallery enhancements (tags/date/provider/model/replayClass filters) | pending |
 | 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
 | 5a | Canonical payload migration + `mode=edit` backend | ✅ Session #27a — 4 writers migrated, dual reader + 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` / `CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD`, `AssetDto.editable` flag, 11 new integration tests + 1 unit. 546/557 pass (+11 net vs Session #26). |
-| 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | **← next: Session #27b** |
+| 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | ✅ Session #27b — 2 commits (refactor extracts `applyOverride` + drops `EDIT_REQUIRES_PROMPT` dead code; feat ships `prompt_history` table + repo + `GET /api/assets/:id/prompt-history` route + replay-service edit-only history writes + PromptLab page + PromptEditor + DiffViewer + PromptHistorySidebar + `diff-words.ts` LCS util + `useAsset` + `usePromptHistory` + `useReplay.start({overridePayload?})` ext + `[Edit & replay]` entry on AssetDetailModal). 573/584 regression pass (+27 net vs Session #27a). |
 | 6 | AppProfileSchema v2 migration (trigger-driven, defer unless blocked) | pending |
 
 ## Phase 4 Summary
@@ -27,6 +27,183 @@ Last updated: 2026-04-24 (Session #27a — Phase 5 Step 5a ship, backend-only. B
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #27b (Phase 5 Step 5b — PromptLab UI + 27a CF#2 + CF#4)
+
+Closes out Phase 5 Step 5. Session scope locked pre-alignment (Plan A in
+bro's message): two 27a carry-forwards folded into commit #1, full Step 5b
+in commit #2, docs in this commit #3. Steps 3 (Gallery filters), 4 (Profile
+CMS), and 6 (AppProfileSchema v2 trigger) remain pending for Session #28+.
+
+### Scope Qs locked before coding (all from Session #27b handoff)
+
+Bro re-locked Plan A at session start + confirmed the 3 Step 5b Qs + 2 CF Qs
+that were flagged in the opening audit:
+
+- **Q-5b.1** Inline-only DiffViewer v1 with regex tokenizer
+  `/(\s+|[.,!?;:]|[^\s.,!?;:]+)/g`, `<del>/<ins>` semantic HTML, aria-label
+  for screen readers, `+/−` text markers for colorblind a11y. Side-by-side
+  deferred to polish backlog.
+- **Q-5b.2** Per-asset history only; `GET /api/assets/:id/prompt-history`
+  returns flat DESC list. No `?profileId=` endpoint v1. Tree view via
+  `parent_history_id` deferred to polish (column exists, writes always NULL).
+- **Q-5b.3** Legacy asset edit disabled with verbatim tooltip copy: "This
+  asset predates the edit & replay feature. Replay is supported but editing
+  is not. Create a new batch to use edit & replay." Replay stays enabled.
+- **Q-CF.1** Drop unused `EDIT_REQUIRES_PROMPT` ErrorCode literal; fold
+  into CF#4 refactor commit.
+- **Q-CF.2** Extract `applyOverride` → `replay-override.ts` + 4 edge-case
+  tests (`addWatermark: false` explicit, `negativePrompt: ""` explicit,
+  empty override round-trip, providerSpecificParams passthrough merge).
+- **Q-CF.3** Visual smoke deferred — bundled with Session #26 Step 2
+  smoke in a dedicated Chrome MCP session operated by bro.
+
+### Commit chain (3 commits)
+
+1. `d9c9529 refactor(replay): extract applyOverride to its own module + drop
+   EDIT_REQUIRES_PROMPT` — CF#4 + CF#2 paydown. 4 files changed: new
+   `replay-override.ts` (pure fn + structurally-typed input for cycle-free
+   import), new `replay-override.test.ts` (9 tests — 3 reject + 4 edge-case
+   + 1 immutability + 1 combined), replay-service.ts drops 50 LOC of local
+   applyOverride + stale imports, errors.ts drops `EDIT_REQUIRES_PROMPT`.
+2. `52b7d91 feat(prompt-lab): Phase 5 Step 5b — PromptLab UI with
+   edit-and-replay` — 27 files changed (14 new, 13 modified). See §"Files
+   touched" below.
+3. This commit — docs.
+
+### Files touched (14 new, 13 modified — excl. docs)
+
+New (14):
+- `scripts/migrations/2026-04-25-prompt-history.sql` — `prompt_history`
+  table + 4 indexes (incl. partial on status != 'complete').
+- `src/core/dto/prompt-history-dto.ts` — DTO shape + status + override
+  params types. `created_by_session` kept internal.
+- `src/server/asset-store/prompt-history-repo.ts` — `insert / findById /
+  listByAsset / updateStatus`. Narrow surface, no findAll.
+- `src/server/routes/prompt-history.ts` — `GET /api/assets/:assetId/
+  prompt-history`. 404 when source asset missing.
+- `src/client/pages/PromptLab.tsx` — page orchestrator. `/prompt-lab?
+  assetId=X`. 3-col layout (lg+), assetId from navigator.
+- `src/client/components/PromptEditor.tsx` — textarea + addWatermark
+  checkbox + capability-gated negativePrompt field.
+- `src/client/components/DiffViewer.tsx` — inline word-level diff
+  render.
+- `src/client/components/PromptHistorySidebar.tsx` — flat DESC list +
+  status chips + override badges.
+- `src/client/components/PromptLabSourceCard.tsx` — left column
+  (extracted from PromptLab for LOC cap).
+- `src/client/components/PromptLabPredictionStrip.tsx` — predicted
+  replayClass + est. cost + SSE state + "Open result in Gallery" CTA.
+- `src/client/utils/diff-words.ts` — hand-rolled LCS + regex tokenizer
+  + adjacent-op merge. Zero new deps.
+- `src/client/utils/use-prompt-history.ts` — `usePromptHistory(assetId)`
+  + imperative `refresh()` called after `replay.state === "complete"`.
+- `tests/integration/prompt-history-route.test.ts` — 6 cases covering
+  empty list / 404 / happy edit writes / DESC ordering / override
+  round-trip / pure replay skips log.
+- `tests/unit/diff-words.test.ts` — 9 cases for tokenizer + LCS + merge
+  invariants.
+
+Modified (13):
+- `src/server/asset-store/schema.sql` — canonical reference mirrors the
+  new migration.
+- `src/server/asset-store/context.ts` + `src/server/asset-store/index.ts`
+  — singleton getter + barrel export for `createPromptHistoryRepo`.
+- `src/server/app.ts` — `createPromptHistoryRoute()` mounted before
+  `createAssetsRoute()` on `/api/assets` (same precedence pattern as
+  replay).
+- `src/server/workflows-runtime/replay-service.ts` — `executeReplay`
+  gained optional `promptHistoryRepo` dep + edit-only history write
+  path (pending → complete / failed / cancelled). Pure replay skips.
+  257 LOC (past 250 soft cap by 7, well under 300 hard cap; carry-
+  forward).
+- `src/client/api/hooks.ts` — new `useAsset(id)` hook.
+- `src/client/utils/use-replay.ts` — `start(id, {overridePayload?})`
+  extension. Backwards-compatible — ReplaySection's call unchanged.
+- `src/client/navigator.ts` — `prompt-lab` page + `assetId?` NavParam.
+- `src/client/App.tsx` — PromptLab routed.
+- `src/client/pages/Gallery.tsx` — wires `onEditAsset` → navigator.
+- `src/client/components/AssetDetailModal.tsx` — grew `onEditAsset`
+  prop, forwards to ReplaySection.
+- `src/client/components/ReplaySection.tsx` — new `EditReplayButton`
+  sibling to existing Replay button; disabled priority: not_replayable
+  wins over legacy-payload.
+- `tests/unit/replay-service.test.ts` — +3 cases for history state
+  transitions: `failed` on provider throw, `cancelled` on pre-generate
+  abort, no-insert on pure replay.
+
+### Test delta
+
+| Category | S#27a | S#27b (commit #1) | S#27b (commit #2) | Δ vs 27a |
+|---|---:|---:|---:|---:|
+| pass | 546 | 555 | 573 | +27 |
+| skipped | 10 | 10 | 10 | 0 |
+| todo | 1 | 1 | 1 | 0 |
+| fail | 0 | 0 | 0 | 0 |
+| total | 557 | 566 | 584 | +27 |
+
+New tests: +9 replay-override (commit #1), +6 prompt-history-route,
++3 replay-service history transitions, +9 diff-words = +27 total.
+
+### Gates run in Session #27b
+
+- `npm run typecheck` (server + client) — clean.
+- `npm run lint` — clean.
+- `npm run check-loc` — 0 hard-cap violations; 1 soft-cap warning
+  (`replay-service.ts` at 257 LOC, was 251 pre-session; net +6 after
+  CF#4 extract -50 LOC / prompt_history wire +56 LOC).
+- `npm run regression:full` (commit #1) — 555/566.
+- `npm run regression:full` (commit #2) — 573/584 on clean runs; 1 of
+  3 full regression runs surfaced a pre-existing cross-test flake
+  (health-cache init + zz-pa-test-profile race across parallel
+  integration files; isolated runs always pass; unrelated to these
+  changes).
+- `npm run build` (vite) — 83 modules, 336 KB / 97 KB gzip.
+- `test:live:smoke-all` — NOT run (no new provider surface; bro-gated).
+
+### Carry-forward (→ Session #28+)
+
+1. **Visual UI smoke** (Q-CF.3 deferred, Session #26 Step 2 + Session
+   #27b Step 5b combined): spin up dev server on bro's home PC, open
+   Gallery → click asset → see badge + `[Edit & replay]` button state
+   → click Edit → verify PromptLab 3-col layout renders + diff updates
+   on keystroke + Run streams + history sidebar refreshes + Open-in-
+   Gallery returns to batch view. Chrome MCP operator session.
+2. **HTTP capability test** (27a-CF#1) — still deferred; needs active
+   Vertex/Gemini key to exercise 400 `CAPABILITY_NOT_SUPPORTED` through
+   the full HTTP stack.
+3. **Component + hook tests** (26-CF#1) — still deferred; needs
+   `@testing-library/react` + `jsdom` peer-install. PromptLab, editor,
+   diff viewer, history sidebar all currently covered only by dev-
+   server smoke + pure-logic unit tests.
+4. **`replay-service.ts` 257 LOC** — 7 over soft cap. If Session #28
+   extends the service, move the history write block to its own helper
+   (`replay-history-writer.ts`?) alongside `replay-override.ts`.
+5. **Tree view via parentHistoryId** — v1 writes always NULL; polish
+   backlog.
+6. **Side-by-side diff panel** — inline-only v1 per Q-5b.1; polish
+   backlog.
+7. **PromptLab standalone entry** (no assetId) — deferred per Q5;
+   Phase 6 polish backlog.
+8. **Phase 5 Step 3 Gallery filters** — not scheduled; Session #28
+   candidate.
+9. **Phase 5 Step 4 Profile CMS** — not scheduled; Session #29 candidate.
+10. **Phase 5 Step 6 AppProfileSchema v2 migration** — defer unless
+    a schema change forces the issue.
+
+### Session #27b commit discipline
+
+Three commits in order (per bro's pre-alignment):
+
+1. `refactor(replay): extract applyOverride to its own module + drop
+   EDIT_REQUIRES_PROMPT` — CF#4 + CF#2 paydown.
+2. `feat(prompt-lab): Phase 5 Step 5b — PromptLab UI with edit-and-replay`
+   — 27 files (14 new + 13 modified) + 18 new tests.
+3. `docs: Phase 5 Step 5b close — PHASE-STATUS Session #27b + Session
+   #28 handoff + DECISIONS.md addendum` — this file + DECISIONS.md +
+   HANDOFF-SESSION28.md.
+
+---
 
 ## Completed in Session #27a (Phase 5 Step 5a — canonical payload migration + mode=edit backend)
 
