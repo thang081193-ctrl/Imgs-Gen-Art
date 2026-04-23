@@ -1,0 +1,5 @@
+- [User profile](user_profile.md) — Pham, Android dev in Hanoi, VN+EN mix, prefers "bro"
+- [Vendor Genart repos](vendor_genart_repos.md) — vendor/genart-{1,2,3} clone URLs (gitignored, manual clone required on fresh machine)
+- [Node toolchain on this box](node_toolchain.md) — fnm + Node 20 LTS (project engines >=20.0.0; Node 24 stale on PATH)
+- [Phase 3 close + Phase 4 entry](phase3_close.md) — Session #17 shipped Phase 3 Step 9; Phase 4 Step 1 = real Gemini adapter
+- [Feedback — show evidence before claiming done](feedback_show_evidence.md) — HANDOFF rule #7 bro enforces
