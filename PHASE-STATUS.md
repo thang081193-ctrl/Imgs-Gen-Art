@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (3 of 8 steps shipped; Gemini + Vertex adapters live + Settings page + key slot UI; 460/460 regression green)
-Last updated: 2026-04-23 (Session #20 close — Phase 4 Step 3 DONE; Key management UI shipped — Modal primitive + KeyAddModalGemini + KeyAddModalVertex + KeysTable + TestButton + Settings page + navigator + TopNav "Settings" link; `apiDelete` / `apiPostMultipart` added to client fetch wrapper; `useKeys` + `createGeminiKey` / `createVertexKey` / `activateKey` / `deleteKey` / `testKey` helpers; full CRUD curl smoke verified end-to-end against real Gemini adapter (create→activate→list→test→delete→empty); 0 new unit tests (project has no jsdom / testing-library; pattern from Session #16 — client components covered by typecheck + manual browser smoke); 460/460 regression still green)
+Current phase: **Phase 4 — IN PROGRESS ⏳** (5 of 8 steps shipped; Gemini + Vertex adapters live + Settings + health cache wiring + cost tracking UI; 492/492 regression green)
+Last updated: 2026-04-23 (Session #21 close — Phase 4 Steps 4+5 BUNDLED; `/providers/health` live wiring + TTL-by-status cache + in-flight dedup + invalidate hook fired from keys.ts; cost tracking end-to-end — GenerateResult.costUsd required, 3 adapters stamp via per-module COST tables, finalizeBatch helper derives batch totals from asset ledger, formatCost util + Gallery thumbnail chip + detail modal cost row + header page-total. Schema already had cost columns so no migration needed. Regression 460 → 492 green. Gallery UI smoke via Claude_Preview MCP: $0 rows correctly hidden on thumbnails + header; detail modal shows "$0.00".)
 
 ## Phase 4 Summary
 
@@ -10,11 +10,126 @@ Last updated: 2026-04-23 (Session #20 close — Phase 4 Step 3 DONE; Key managem
 | 1 | Gemini adapter (NB Pro + NB 2) | ✅ Session #18 — 3 src files + 1 test file + 1 live file + 2 existing test updates + `@modelcontextprotocol/sdk` peer-dep workaround (+32 unit tests) |
 | 2 | Vertex Imagen adapter | ✅ Session #19 — 4 src files + 1 unit file + 1 live file + 1 Zod schema + 1 typed error + registry wire + 2 integration test updates (+49 unit + 1 integration) |
 | 3 | Key management UI (Modal primitive + KeyAddModal × 2 + KeysTable + TestButton + Settings) | ✅ Session #20 — 6 new src files (Modal + 4 under `components/keys/` + Settings page) + 4 small edits (App + TopNav + navigator + api hooks/client) + 0 new tests (no jsdom in repo) |
-| 4 | `/api/providers/health` live wiring + 60s cache | ⏳ Session #21 |
-| 5 | Cost tracking per asset + batch | ⏳ Session #22 |
+| 4 | `/api/providers/health` live wiring + TTL-by-status cache | ✅ Session #21 — 4 new src files in `src/server/health/` (cache + probe + context + barrel) + keys.ts invalidate hooks + providers.ts route rewrite + 16 unit tests + 3 wiring integration tests + 3 added /health integration cases |
+| 5 | Cost tracking per asset + batch | ✅ Session #21 (bundled) — GenerateResult.costUsd + 3 adapter COST tables + finalizeBatch helper + all 4 workflow run.ts refactored + 4 asset-writers + client formatCost util + thumbnail chip + detail modal + Gallery page-total header + 10 unit tests |
 | 6 | Compatibility warning banner (client) | ⏳ Session #23 |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #24 |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #25 |
+
+## Completed in Session #21 (Phase 4 Steps 4 + 5 — health cache + cost tracking)
+
+Bundled 2 steps per bro kickoff ("make toàn bộ 5 session cho phase 4?" → "chỉ Steps 4+5 khả thi trong 1 session, 6-8 cần bro"). Step order: 4 first (independent, warm-up), 5 second (DB-touching, riskier). Context fit: comfortable.
+
+### Scope decisions locked Session #21 (11 Qs, all applied verbatim)
+
+**Step 4 — /providers/health wiring:**
+
+- **Q1 — TTL-by-status map** (not flat 60s): `ok=60s, rate_limited=30s, down=60s, quota_exceeded=5min, auth_error=10min`. Auth-error long TTL prevents spamming user-action-required states; quota long TTL respects daily reset semantics. Cache entry carries `probedAt` for "checked Xs ago" UI.
+- **Q2 — Invalidation fires from `keys.ts` route** (not slot-manager DI). Slot-manager stays pure functional; the hook lives at the route-layer where save happens. `tryInvalidateHealth(providerId)` helper swallows `getHealthCache()` throws so edge tests that don't init cache still pass. Fires on: create gemini, create vertex, activate, delete.
+- **Q3 — 4 query modes**: no filter → matrix; `?provider=X` → subtree; `?provider=X&model=Y` → flat HealthStatus; `?model=Y` alone → 400 `MODEL_REQUIRES_PROVIDER`. Added `?forceRefresh=true` for UI "Retry" button — bypasses cache for that request only.
+- **Q4 — Block + in-flight dedup**: cache miss → `Map<key, Promise>` so 10 concurrent `/health` requests share 1 probe. Simpler than stale-while-revalidate; correctness first.
+- **Q5 — No-active-slot → `auth_error`** with user-facing message `"No active {providerId} key. Add and activate a slot in Settings."`. No new enum value — UI differentiates via message content.
+- **Q6 — `Promise.allSettled` (not `Promise.all`)**: one provider SDK crash doesn't break whole matrix. Crashed target → `status: "down", message: "Probe crashed: ..."`. Confirmed by integration test "provider crash (probe rejects) → 'down' entry in matrix, not 500".
+- **Q7 — Mock included in matrix**: uniformity for client iteration. Cost <5ms, always "ok".
+
+**Step 5 — Cost tracking:**
+
+- **Q8 — Migration SKIPPED.** `scripts/migrations/2026-04-20-initial.sql` already declared `cost_usd REAL` + `total_cost_usd REAL` columns from Session #9 (Phase 1 scaffolding). No ALTER, no new migration file. Documented in commit body.
+- **Q9 — `GenerateResult.costUsd` REQUIRED `number`** + per-adapter `COST_TABLE` constants:
+  - `src/server/providers/mock.ts` → 0
+  - `src/server/providers/gemini.ts` → `GEMINI_COST = {NB_PRO: 0.134, NB_2: 0.067}`
+  - `src/server/providers/vertex-imagen.ts` → `VERTEX_COST = {IMAGEN_4: 0.04}` (1K/2K tier split deferred — aspect-ratio→resolution mapping not wired yet)
+  - Shape: required `number`, adapter-filled. Future resolution tiers land here without ModelInfo churn.
+- **Q10 — `finalizeBatch` helper, derives from asset ledger**. New file `src/server/asset-store/finalize-batch.ts`: queries `assetRepo.findByBatch(batchId)`, filters `status === "completed"`, sums `costUsd ?? 0`, writes `updateStatus({status, successfulAssets, totalCostUsd, completedAt|abortedAt})`. Replaces the manual `totalCost += model.costPerImageUsd` accumulators in all 4 workflow `run.ts`. Asset-level is the ledger; batch total is derived = safer.
+- **Q11 — `formatCost(usd, precision?)`**: 3 decimals for `asset` (default), 2 decimals for `aggregate`, `$0 → "$0.00"` short-circuit, `null/undefined → "—"`, negative clamps to 0. Asset-level precision distinguishes NB Pro $0.134 vs NB 2 $0.067 at a glance.
+
+### New src files (8 files, all under 300 LOC cap)
+
+**Step 4 (4 files):**
+- **`src/server/health/cache.ts`** (~100 LOC) — `createHealthCache({probe, now?})` factory. Map-backed + in-flight dedup. `get(pid, mid, {forceRefresh?})` → `Promise<HealthStatus>`. `peek()` / `invalidate(pid)` (colon-anchored prefix match) / `invalidateAll()`. `TTL_BY_STATUS` table exported for test assertions.
+- **`src/server/health/probe.ts`** (~60 LOC) — `probeTarget(pid, mid)`: no-slot → `auth_error`; unregistered → `down`; SDK exception → `down` with `"Probe crashed: ..."`. Never throws.
+- **`src/server/health/context.ts`** (~40 LOC) — singleton `initHealthCache/getHealthCache` + `_resetHealthCacheForTests`. Mirrors asset-store/context.ts pattern.
+- **`src/server/health/index.ts`** — barrel.
+
+**Step 5 (1 file new + 1 util):**
+- **`src/server/asset-store/finalize-batch.ts`** (~55 LOC) — the derived-totals helper. Returns `{totalAssets, successfulAssets, totalCostUsd}` so callers can log/stream.
+- **`src/client/utils/format.ts`** (~15 LOC) — `formatCost(usd, precision)` util.
+
+### Src changes
+
+**Step 4 edits:**
+- `src/server/index.ts` — `initHealthCache()` at boot (after DB init, before template preload).
+- `src/server/routes/keys.ts` — `tryInvalidateHealth(providerId)` fires after 4 save sites.
+- `src/server/routes/providers.ts` — `/health` route rewritten from stub to cache-backed. `Promise.allSettled` + per-target entry defensive fallback.
+
+**Step 5 edits:**
+- `src/core/providers/types.ts` — `GenerateResult.costUsd: number` required.
+- `src/server/providers/mock.ts` / `gemini.ts` / `vertex-imagen.ts` — stamp `costUsd` in `generate()`.
+- All 4 `src/workflows/*/run.ts` — drop inline `totalCost` accumulator; call `finalizeBatch({...})` at abort + complete.
+- All 4 `src/workflows/*/asset-writer.ts` — use `input.generateResult.costUsd` (was `input.model.costPerImageUsd`).
+- `src/server/asset-store/index.ts` — re-export `finalize-batch`.
+- `src/client/components/AssetDetailModal.tsx` — `formatCost()` for Cost row.
+- `src/client/components/AssetThumbnail.tsx` — cost chip bottom-right, hidden when cost=0.
+- `src/client/pages/Gallery.tsx` — header page-total via `useMemo`, hidden when 0.
+
+### New test files (4 files, 32 new tests)
+
+- **`tests/unit/health-cache.test.ts`** (16 tests) — cold miss / warm hit within TTL / expired re-probe / forceRefresh bypass / TTL-by-status table × 5 codes / 10-concurrent dedup / in-flight clears on settle / invalidate scope (provider-only, colon-anchored safety) / invalidateAll / peek.
+- **`tests/integration/health-cache-wiring.test.ts`** (3 tests) — POST /api/keys creates gemini slot → gemini entries invalidated; POST /activate → re-probe on next GET; DELETE /:id → re-probe.
+- **`tests/unit/finalize-batch.test.ts`** (4 tests) — sums cost_usd for completed only (error rows excluded); aborted stamps abortedAt not completedAt; empty batch zeros; null cost_usd defensive.
+- **`tests/unit/format-cost.test.ts`** (6 tests) — precision branches, zero short-circuit, null/undefined, negative clamp, large numbers.
+
+### Existing test updates
+
+- **`tests/integration/providers-routes.test.ts`** — rewritten to use `initHealthCache({probe: vi.fn})` stub per-test (was stubbed server-side). Added 3 new cases: cache hit skips probe, forceRefresh bypass, probe crash → down entry. 6 → 10 tests.
+
+### QA gate (Session #21 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 173 src files (+5 Step 4 + 1 finalize-batch + 1 formatCost util), 0 violations
+test: 492/492 pass (45 files)
+  prior:   460 (Session #20 baseline)
+  Step 4:  +16 unit (health-cache) +3 wiring + 4 /health integration delta
+  Step 5:  +4 finalize-batch + 6 format-cost
+  total:   +32 new
+
+manual smoke (Claude_Preview MCP):
+  Gallery loads 50 Mock assets → no cost chips (all $0, gated) ✓
+  Header page 1 displayed; no "page total" text (pageCostTotal=0 gate) ✓
+  Asset detail modal → Cost row shows "$0.00" via formatCost($0) short-circuit ✓
+```
+
+### Deviations from plan
+
+- **Migration file skipped** — schema.sql pre-declared both columns. Would've been a no-op migration file blocking nothing. Documented in commit + this entry.
+- **Health cache singleton uses `initHealthCache()` at boot, not DI into `createApp()`.** Mirrors asset-store pattern (Session #11 convention). Alternative would've required threading the cache through every route factory. Singleton + test-reset hook keeps routes clean.
+- **Stale-while-revalidate NOT implemented** — Q4 chose simpler block-on-miss + in-flight dedup. SWR becomes interesting only when UI polls at high frequency (>1 Hz); current polling is user-initiated. Deferred to Phase 6 if needed.
+- **Imagen 1K/2K cost tier split NOT wired** — aspect ratio → resolution mapping doesn't exist yet. `VERTEX_COST = {IMAGEN_4: 0.04}` matches PLAN §3's 2K default. Session #24 live smoke might surface if we need differentiation; then add `costByResolution` map in vertex-imagen.
+- **`total_cost_usd` in batch row remains `REAL` nullable** per schema.sql (existing). `finalizeBatch` always writes a number (including 0); nullable is legacy compat.
+- **Health cache invalidation on `POST /api/keys` (create) fires too** — not strictly required if slot isn't active yet, but defensive against first-slot auto-activate edge. Low cost (bumps one probe) and removes a subtle race.
+
+### Known pending items (for Phase 4 Step 6 entry)
+
+1. **Manual browser E2E full click-through pending** — smoke covered `$0` paths only. Non-zero cost paths need real Gemini/Vertex keys to exercise. Recommend Session #24 after live-smoke step flushes real assets.
+2. **Step 6 (compat warning banner, Session #22)** — client-side explicit banner when user picks INCOMPATIBLE pair in Workflow page. Server already 409s (dispatcher precondition #4); UI should block earlier with reason text.
+3. **Step 7 (11 live smokes, Session #23)** — needs real `GEMINI_API_KEY` + `VERTEX_PROJECT_ID` + `VERTEX_SA_PATH`. Budget ~$1.10/full run. Bro-gated.
+4. **Step 8 (Phase 4 close + browser E2E, Session #24)** — includes BOOTSTRAP-PHASE4 SDK reference fix (`@google-cloud/vertexai@1.10.0` → `@google/genai@1.5.0 vertexai: true`).
+5. **Phase 3 known pending #2-#7 still carried forward** (Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows). Phase 5 territory.
+
+## Next Session (#22) kickoff — Phase 4 Step 6 (Compatibility warning banner)
+
+1. Read this file (Session #21 entry) + `BOOTSTRAP-PHASE4.md` Step 6 + `MEMORY.md`. Verify baseline `npm run regression:full` = 492/492.
+2. Scope decisions for bro before coding:
+   - Banner placement — above input form or inline with ProviderModelSelector?
+   - Compat source — existing `useCompatibility()` hook caches matrix at mount; refresh on model change?
+   - Disable Run button when incompat (client-side block vs let server 409)?
+   - Copy — pull `reason` from `CompatibilityOverride` or generate from failed requirements?
+3. Est 1-2h. Expected regression: 492 → ~495 (likely no new tests; UI verified via smoke).
+
+---
 
 ## Completed in Session #20 (Phase 4 Step 3 — Key management UI)
 
