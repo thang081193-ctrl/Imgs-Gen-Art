@@ -1,7 +1,18 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — CLOSED ✅** (Vertex side end-to-end verified: doc fixes + addWatermark bug fix + 3/3 Vertex live smokes + browser E2E across 3 compatible workflows + compat banner + Gallery PNG display. Gemini side verified by unit suite + code review only — real-key live run deferred until GEMINI_API_KEY is provisioned.)
-Last updated: 2026-04-23 (Session #24 close — Phase 4 Step 8 final. Bundled 4 deliverables: (a) BOOTSTRAP-PHASE4 doc fixes (session numbers, SDK ref, env var); (b) addWatermark blocker bug fix across 4 workflow run.ts; (c) 3/3 Vertex live smokes PASS ($0.12); (d) browser E2E — artwork-batch/ad-production/aso-screenshots/style-transform × Vertex verified; style-transform × Vertex compat banner (⛔ "Incompatible combination · model missing required capability supportsImageEditing") + Run tooltip + button disabled; Gallery displays 6 real 1024×1024 Vertex PNGs with $0.24 page total ($0.04 × 6 = matches). Cancel button renders during run (verified); DELETE roundtrip + confirm dialog covered by unit + integration tests. Tooling note: Vertex dev quota ~5-6 requests/min on this SA — hit 429 during cancel retest. **Phase 4 Gemini real-key smokes explicitly deferred — NOT a Phase 4 blocker** per bro's "chưa cần Gemini API" in kickoff.)
+Current phase: **Phase 5 — IN PROGRESS** (Step 1 landed: Replay API `POST /api/assets/:id/replay` + `GET /:id/replay-class`, generic workflow-agnostic service, batches.replay_of_{batch,asset}_id linkage, 19 new tests all green. Phase 4 remains closed.)
+Last updated: 2026-04-23 (Session #25 — Phase 5 Step 1 ship + housekeeping chore. Bundled: (a) HK1 prune unused `@google-cloud/vertexai` dep + eslint guard cleanup; (b) Replay API surface (`POST /api/assets/:assetId/replay` SSE + `GET /:assetId/replay-class` probe) backed by a generic replay-service (workflow-agnostic — no 4-runner modification per Session #25 chat decision); (c) migration `2026-04-23-replay-support.sql` adding `batches.replay_of_batch_id` + `replay_of_asset_id` + index; (d) 11 new unit tests (replay-service determinism + 4 preconditions + abort + provider-error paths) + 8 new integration tests (SSE happy + 4 error HTTP statuses + probe happy + probe errors); (e) 1 pre-existing Phase 3 guard test in `assets-routes.test.ts` updated to reflect that replay endpoint is now registered. Full regression 517/517 pass (up from 497 at Phase 4 close).)
+
+## Phase 5 Summary (in progress)
+
+| Step | Title | Status |
+|---|---|---|
+| 1 | Replay API (`POST /api/assets/:id/replay` + `GET /:id/replay-class`) | ✅ Session #25 — 5 new src files (replay-service + replay-asset-writer + stored-payload-shape + replay.ts + replay.body.ts) + migration + 3 DB-layer edits (types + batch-repo + schema.sql) + app.ts wire + 2 test files (11 unit + 8 integration) + 1 existing test update + 1 housekeeping commit. Generic workflow-agnostic service — does NOT modify the 4 workflow runners (per bro's B-option chat decision). |
+| 2 | Replay UI (modal button + gallery badge) | pending |
+| 3 | Gallery enhancements (tags/date/provider/model/replayClass filters) | pending |
+| 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
+| 5 | PromptLab (dedicated page + history + diff viewer) | pending |
+| 6 | AppProfileSchema v2 migration (trigger-driven, defer unless blocked) | pending |
 
 ## Phase 4 Summary
 
@@ -15,6 +26,124 @@ Last updated: 2026-04-23 (Session #24 close — Phase 4 Step 8 final. Bundled 4 
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #25 (Phase 5 Step 1 — Replay API + housekeeping)
+
+Step 1 shipped the back-end replay surface per PLAN §8 / §10 and Session #25 chat
+alignment. Two commits total: `chore(deps): remove unused @google-cloud/vertexai`
+followed by `feat(replay): Phase 5 Step 1 — Replay API`.
+
+### Session #25 Q1 alignment (new batch per replay)
+
+Q1 answered: **each replay triggers a NEW batch**, linked back via
+`batches.replay_of_batch_id` + `batches.replay_of_asset_id`. Asset-level
+linkage already existed via `assets.replayed_from`. Migration
+`scripts/migrations/2026-04-23-replay-support.sql` adds the two batch columns
++ an index on `replay_of_batch_id`. Canonical `schema.sql` updated to mirror.
+
+### Scope deviation from original implementation order (chat-approved "B")
+
+Bro's Step 1 spec prescribed modifying all 4 workflow runners (`src/workflows/
+<id>/run.ts`) to accept a `replayContext` param. Proposed + approved on chat:
+instead, ship a single **generic workflow-agnostic replay-service**
+(`src/server/workflows-runtime/replay-service.ts`) that reuses source-asset
+metadata + the stored payload without re-running concept-generation logic.
+Rationale — replay is fundamentally not workflow-specific since the stored
+payload holds the fully-resolved prompt; the 4 runners only diverge in
+concept generation + per-workflow tagging, neither of which is needed on
+replay. This keeps the 4 working runners untouched + their regression green,
+and puts all replay logic in one testable file.
+
+### Src changes (5 new files, 3 edits, 1 wire)
+
+- **New:** `src/server/workflows-runtime/replay-service.ts` (~150 content LOC) —
+  `loadReplayContext(assetId, deps?)` runs the 4 preconditions (asset exists;
+  replay_payload present; `replayClass !== "not_replayable"`; active key) and
+  returns `{ sourceAsset, model, payload }`. `executeReplay({assetId,
+  newBatchId, abortSignal}, deps?)` is an AsyncGenerator yielding the standard
+  WorkflowEvent stream (`started → image_generated → complete` / `error +
+  complete` / `started → aborted`).
+- **New:** `src/server/workflows-runtime/replay-asset-writer.ts` (~50 content
+  LOC) — writes the replay PNG + inserts the new asset row with `replayedFrom:
+  sourceAsset.id`, inheriting `profileId`, `profileVersionAtGen`, `workflowId`,
+  `variantGroup`, `tags`, `promptTemplateId/Version` from the source asset.
+- **New:** `src/server/workflows-runtime/replay-payload-shape.ts` — permissive
+  Zod schema matching what the 4 existing asset-writers currently persist
+  (`promptRaw` + primitives, no `providerSpecificParams` / `promptTemplateId`
+  / `contextSnapshot`). Aligning the stored shape to the canonical
+  `ReplayPayloadSchema` (`src/core/schemas/replay-payload.ts`) remains a
+  deferred workstream — see "Phase 5 Step 1 carry-forward" below.
+- **New:** `src/server/routes/replay.ts` (~80 content LOC) + `replay.body.ts`
+  (mode discriminant only, v1 accepts `"replay"`; `"edit"` returns 501 Not
+  Implemented until canonical payload lands). SSE framing mirrors
+  `src/server/routes/workflows.ts` exactly — pump first generator event pre-
+  `streamSSE()` so precondition errors surface as real HTTP statuses.
+- **Edit:** `src/server/asset-store/types.ts` — `BatchInternal` +
+  `BatchCreateInput` gain `replayOfBatchId` + `replayOfAssetId`.
+- **Edit:** `src/server/asset-store/batch-repo.ts` — `INSERT` + row-to-batch
+  mapper updated for the new columns.
+- **Edit:** `src/server/asset-store/schema.sql` — canonical reference updated
+  to match migration `2026-04-23-replay-support.sql`.
+- **Wire:** `src/server/app.ts` — `createReplayRoute()` mounted on
+  `/api/assets` **before** `createAssetsRoute()` so `:assetId/replay-class`
+  wins over the base `:id` handler (same pattern as `workflow-runs` before
+  `workflows`).
+
+### Test changes (2 new files, 1 update)
+
+- **New:** `tests/unit/replay-service.test.ts` — 11 cases: 7 `loadReplayContext`
+  precondition branches (NotFound / not_replayable / null payload / malformed
+  JSON / shape-fail / no-active-key / happy) + `executeReplay` happy path
+  asserting `replayOfBatchId/replayOfAssetId` + `replayedFromAssetId`
+  linkage, determinism byte-match (two replays → identical PNG bytes via
+  Mock's prompt-only hash), abort-before-generate path, provider-throws path.
+- **New:** `tests/integration/replay-route.test.ts` — 8 cases: SSE happy path
+  with full event sequence + batch link assertions, 404 unknown asset, 400
+  not_replayable, 400 no payload, 501 `mode=edit`, `replay-class` probe
+  happy + 404 + 400.
+- **Update:** `tests/integration/assets-routes.test.ts` — replaced the
+  Phase 3 guard that asserted 404 on `POST /:id/replay` ("NOT registered")
+  with Phase 5 expectations: 404 on unknown asset, 400 when seed asset
+  has `replayPayload: null`.
+
+### Housekeeping commit (chore 4eaef86)
+
+- `npm uninstall @google-cloud/vertexai` (was 1.10.0, never actually
+  imported — adapter uses `@google/genai 1.5.0` vertex-mode only). Drops
+  line in `eslint.config.js` `SERVER_ONLY_PACKAGES` guard.
+- Comment refresh in `src/core/schemas/vertex-service-account.ts` (said
+  "hands to @google-cloud/vertexai" — updated to "@google/genai (Vertex
+  mode)").
+- HK2 smoke leftover (`data/profiles/smoke-*.json`) was already absent;
+  cleanup code in `tests/live/workflows-smoke.test.ts` afterAll looks sound.
+
+### Phase 5 Step 1 carry-forward
+
+1. **Canonical replay payload migration** — 4 workflow asset-writers
+   (`src/workflows/{ad-production,artwork-batch,aso-screenshots,style-transform}/asset-writer.ts`)
+   still emit the simplified Session #11 JSON shape. Align with
+   `ReplayPayloadSchema` (`src/core/schemas/replay-payload.ts`): add
+   `providerSpecificParams`, `promptTemplateId`, `promptTemplateVersion`,
+   `contextSnapshot.profileId`, `contextSnapshot.profileSnapshot`. Replay
+   service then swaps `StoredReplayPayloadSchema` for the canonical one.
+   Unblocks `mode: "edit"` (prompt/param overrides) safely.
+2. **Replay UI (Step 2)** — asset detail modal primary button; Gallery tile
+   badge chip (deterministic / best_effort / not_replayable); button text
+   varies by class (bro Q2: "Replay (exact) · $X.XX" / "Replay (approximate)
+   · $X.XX" / hidden).
+3. **Tests folding Vertex / Gemini live determinism** — extend
+   `tests/live/providers.vertex-live.test.ts` with a
+   replay-roundtrip case. Billable, bro-gated.
+
+### Flake note (non-blocker)
+
+Windows `regression:full` occasionally hits `ENOTEMPTY` on
+`data/assets/chartlens/2026-04-23` during parallel test afterEach cleanup
+(vitest threads pool + Windows file-handle lock ordering). Retries pass.
+If this becomes painful consider `threads: { singleThread: true }` for the
+integration suite or a per-thread tmpdir for asset writes.
+
+---
 
 ## Completed in Session #24 (Phase 4 Step 8 partial — doc fixes + Vertex blocker bug + 3 Vertex live smokes)
 
