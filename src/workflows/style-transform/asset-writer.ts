@@ -12,6 +12,10 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { GenerateResult } from "@/core/providers/types"
 import type { AppProfile } from "@/core/schemas/app-profile"
 import type { AspectRatio, LanguageCode, ModelInfo } from "@/core/model-registry/types"
+import {
+  ReplayPayloadSchema,
+  type ReplayPayload,
+} from "@/core/schemas/replay-payload"
 import { computeReplayClass } from "@/core/shared/replay-class"
 import { shortId } from "@/core/shared/id"
 import type { AssetInsertInput, AssetRepo } from "@/server/asset-store"
@@ -36,21 +40,28 @@ export interface StyleAssetWriteInput {
   variantIndex: number
 }
 
+// Session #27a — canonical payload migration. Workflow-specific fields
+// (sourceAssetId, styleDnaKey, serial, variantIndex) stay in inputParams
+// below; replayPayload is pure canonical.
 function buildReplayPayload(input: StyleAssetWriteInput): string {
-  return JSON.stringify({
+  const payload: ReplayPayload = {
     version: 1,
-    profileVersion: input.profile.version,
-    promptRaw: input.prompt,
+    prompt: input.prompt,
     providerId: input.providerId,
     modelId: input.model.id,
-    seed: input.concept.seed,
     aspectRatio: input.aspectRatio,
-    language: input.language ?? null,
-    sourceAssetId: input.concept.sourceAssetId,
-    styleDnaKey: input.concept.styleDnaKey,
-    serial: input.concept.serial,
-    variantIndex: input.variantIndex,
-  })
+    ...(input.language !== undefined ? { language: input.language } : {}),
+    seed: input.concept.seed,
+    providerSpecificParams: { addWatermark: false },
+    promptTemplateId: "style-transform",
+    promptTemplateVersion: "1",
+    contextSnapshot: {
+      profileId: input.profile.id,
+      profileVersion: input.profile.version,
+      profileSnapshot: input.profile,
+    },
+  }
+  return JSON.stringify(ReplayPayloadSchema.parse(payload))
 }
 
 function buildInputParams(input: StyleAssetWriteInput): string {
@@ -86,6 +97,8 @@ export function writeStyleAsset(
     batchId: input.batchId,
     variantGroup: input.concept.title,
     promptRaw: input.prompt,
+    promptTemplateId: "style-transform",
+    promptTemplateVersion: "1",
     inputParams: buildInputParams(input),
     replayPayload: buildReplayPayload(input),
     replayClass,

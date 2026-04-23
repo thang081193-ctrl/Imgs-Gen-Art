@@ -66,9 +66,9 @@ const profile: AppProfile = {
   category: "utility",
   assets: { appLogoAssetId: null, storeBadgeAssetId: null, screenshotAssetIds: [] },
   visual: {
-    primaryColor: "#111",
+    primaryColor: "#111111",
     secondaryColor: "#ff66cc",
-    accentColor: "#0cf",
+    accentColor: "#00ccff",
     tone: "minimal",
     doList: ["clean grid"],
     dontList: ["clutter"],

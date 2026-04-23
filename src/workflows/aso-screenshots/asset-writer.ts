@@ -13,6 +13,10 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { GenerateResult } from "@/core/providers/types"
 import type { AppProfile } from "@/core/schemas/app-profile"
 import type { AspectRatio, LanguageCode, ModelInfo } from "@/core/model-registry/types"
+import {
+  ReplayPayloadSchema,
+  type ReplayPayload,
+} from "@/core/schemas/replay-payload"
 import { computeReplayClass } from "@/core/shared/replay-class"
 import { shortId } from "@/core/shared/id"
 import type { CopyLang } from "@/core/templates"
@@ -40,20 +44,28 @@ export interface AsoAssetWriteInput {
   variantIndex: number
 }
 
+// Session #27a — canonical payload migration. Workflow-specific fields
+// (layoutId, targetLang, variantIndex) moved exclusively to inputParams
+// below; replayPayload is pure canonical per src/core/schemas/replay-payload.
 function buildReplayPayload(input: AsoAssetWriteInput): string {
-  return JSON.stringify({
+  const payload: ReplayPayload = {
     version: 1,
-    profileVersion: input.profile.version,
-    promptRaw: input.prompt,
+    prompt: input.prompt,
     providerId: input.providerId,
     modelId: input.model.id,
-    seed: input.assetSeed,
     aspectRatio: input.aspectRatio,
-    language: input.language ?? null,
-    layoutId: input.concept.layoutId,
-    targetLang: input.targetLang,
-    variantIndex: input.variantIndex,
-  })
+    ...(input.language !== undefined ? { language: input.language } : {}),
+    seed: input.assetSeed,
+    providerSpecificParams: { addWatermark: false },
+    promptTemplateId: "aso-screenshots",
+    promptTemplateVersion: "1",
+    contextSnapshot: {
+      profileId: input.profile.id,
+      profileVersion: input.profile.version,
+      profileSnapshot: input.profile,
+    },
+  }
+  return JSON.stringify(ReplayPayloadSchema.parse(payload))
 }
 
 function buildInputParams(input: AsoAssetWriteInput): string {
@@ -88,6 +100,8 @@ export function writeAsoAsset(
     batchId: input.batchId,
     variantGroup: `${input.concept.layoutId}:${input.targetLang}`,
     promptRaw: input.prompt,
+    promptTemplateId: "aso-screenshots",
+    promptTemplateVersion: "1",
     inputParams: buildInputParams(input),
     replayPayload: buildReplayPayload(input),
     replayClass,

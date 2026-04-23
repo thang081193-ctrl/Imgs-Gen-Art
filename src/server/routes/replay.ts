@@ -6,6 +6,12 @@
 //                      for not_replayable). Same preconditions as POST but
 //                      returns JSON instead of running the provider.
 //
+// Session #27a — body.mode === "edit" wired: overridePayload parsed strictly
+// by OverridePayloadSchema; any unrecognized key is lifted from Zod's
+// generic BAD_REQUEST to a field-named EDIT_FIELD_NOT_ALLOWED 400.
+// Capability gate (CAPABILITY_NOT_SUPPORTED) + legacy source rejection
+// (LEGACY_PAYLOAD_NOT_EDITABLE) live in replay-service.ts.
+//
 // SSE framing mirrors src/server/routes/workflows.ts:53-110 — pump the first
 // generator event BEFORE entering streamSSE so precondition errors surface
 // as real HTTP statuses (400/401/404), not SSE error frames.
@@ -14,23 +20,23 @@
 // so GET /:assetId/replay-class wins over the base GET /:id handler. Hono
 // matches sub-apps in registration order.
 
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { streamSSE } from "hono/streaming"
+import { ZodError } from "zod"
 
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
-import { shortId } from "@/core/shared/id"
-import { validateBody } from "@/server/middleware/validator"
 import {
-  executeReplay,
-  probeReplayClass,
-} from "@/server/workflows-runtime/replay-service"
+  BadRequestError,
+  EditFieldNotAllowedError,
+} from "@/core/shared/errors"
+import { shortId } from "@/core/shared/id"
+import { probeReplayClass } from "@/server/workflows-runtime/replay-probe"
+import { executeReplay } from "@/server/workflows-runtime/replay-service"
 
 import { ReplayBodySchema, type ReplayBody } from "./replay.body"
 
-type ReplayEnv = { Variables: { validatedBody: ReplayBody } }
-
-export function createReplayRoute(): Hono<ReplayEnv> {
-  const route = new Hono<ReplayEnv>()
+export function createReplayRoute(): Hono {
+  const route = new Hono()
 
   route.get("/:assetId/replay-class", (c) => {
     const assetId = c.req.param("assetId")
@@ -59,20 +65,9 @@ export function createReplayRoute(): Hono<ReplayEnv> {
     })
   })
 
-  route.post("/:assetId/replay", validateBody(ReplayBodySchema), async (c) => {
+  route.post("/:assetId/replay", async (c) => {
     const assetId = c.req.param("assetId")
-    const body = c.get("validatedBody")
-
-    if (body.mode === "edit") {
-      return c.json(
-        {
-          error: "NOT_IMPLEMENTED",
-          message:
-            "mode='edit' is reserved for a follow-up step — canonical payload migration required first",
-        },
-        501,
-      )
-    }
+    const body = parseReplayBody(await readJsonBody(c))
 
     const newBatchId = shortId("batch", 10)
     const controller = new AbortController()
@@ -86,11 +81,11 @@ export function createReplayRoute(): Hono<ReplayEnv> {
       assetId,
       newBatchId,
       abortSignal: controller.signal,
+      ...(body.overridePayload !== undefined
+        ? { overridePayload: body.overridePayload }
+        : {}),
     })
 
-    // Pump first event. Throws on precondition failure → errorHandler maps
-    // to 400/401/404. Once this resolves successfully, we're committed to
-    // SSE framing: headers will be text/event-stream + 200.
     let first: IteratorResult<WorkflowEvent>
     try {
       first = await generator.next()
@@ -120,4 +115,30 @@ export function createReplayRoute(): Hono<ReplayEnv> {
   })
 
   return route
+}
+
+async function readJsonBody(c: Context): Promise<unknown> {
+  try {
+    return await c.req.json()
+  } catch {
+    throw new BadRequestError("Invalid JSON body")
+  }
+}
+
+function parseReplayBody(raw: unknown): ReplayBody {
+  const result = ReplayBodySchema.safeParse(raw)
+  if (result.success) return result.data
+  // OverridePayloadSchema is strict — unknown keys come through as
+  // "unrecognized_keys" issues. Lift the first such key into a field-named
+  // EDIT_FIELD_NOT_ALLOWED so the client gets an actionable 400 with the
+  // exact offending field. Other issues (missing overridePayload on edit,
+  // bad type, refine rejections) stay as standard 400 BAD_REQUEST with
+  // Zod issues attached.
+  const unrecognized = result.error.issues.find(
+    (i) => i.code === "unrecognized_keys",
+  )
+  if (unrecognized && "keys" in unrecognized && Array.isArray(unrecognized.keys) && unrecognized.keys.length > 0) {
+    throw new EditFieldNotAllowedError(String(unrecognized.keys[0]))
+  }
+  throw new ZodError(result.error.issues)
 }

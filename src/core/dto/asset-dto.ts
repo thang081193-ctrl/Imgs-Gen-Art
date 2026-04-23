@@ -15,6 +15,19 @@ export type NotReplayableReason =
   | "provider_no_seed_support"
   | "watermark_applied"
 
+// Session #27a — edit-mode affordance for the asset DTO. `canEdit` is
+// orthogonal to replayClass: it gates the 27b PromptLab `[Edit & replay]`
+// button. Legacy payloads (pre-Session-#27) are replayable but not editable
+// because we'd have to synthesize a contextSnapshot from current profile
+// state — silent drift from batch-time. Reason is only set when canEdit
+// is false AND it's specifically a payload-shape reason (not a
+// not_replayable overlap; UI priority handles that in 27b).
+export type EditableReason = "legacy_payload"
+export interface EditableFlag {
+  canEdit: boolean
+  reason?: EditableReason
+}
+
 export interface AssetDto {
   id: string
   profileId: string
@@ -46,6 +59,7 @@ export interface AssetDto {
 
   replayClass: ReplayClass
   replayedFromAssetId: string | null
+  editable: EditableFlag
 
   tags: string[]
   notes: string | null

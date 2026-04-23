@@ -197,16 +197,16 @@ describe("POST /api/assets/:id/replay — precondition errors", () => {
     expect(res.status).toBe(400)
   })
 
-  it("501 when mode='edit' (v1 surface guard)", async () => {
+  it("400 when mode='edit' but overridePayload missing (Session #27a refine)", async () => {
     const sourceId = seedSourceAsset({ id: "asset_r_edit" })
     const res = await fetchApp(`/api/assets/${sourceId}/replay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode: "edit" }),
     })
-    expect(res.status).toBe(501)
-    const err = (await res.json()) as { error: string }
-    expect(err.error).toBe("NOT_IMPLEMENTED")
+    expect(res.status).toBe(400)
+    const err = (await res.json()) as { code: string }
+    expect(err.code).toBe("BAD_REQUEST")
   })
 })
 

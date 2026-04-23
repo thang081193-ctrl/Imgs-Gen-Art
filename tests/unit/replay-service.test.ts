@@ -14,8 +14,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { ModelInfo } from "@/core/model-registry/types"
 import { getModel } from "@/core/model-registry/models"
+import type { AppProfile } from "@/core/schemas/app-profile"
+import type { ReplayPayload } from "@/core/schemas/replay-payload"
 import {
   BadRequestError,
+  CapabilityNotSupportedError,
+  MalformedPayloadError,
   NoActiveKeyError,
   NotFoundError,
 } from "@/core/shared/errors"
@@ -148,14 +152,16 @@ describe("loadReplayContext — preconditions", () => {
     expect(() => loadReplayContext("asset_bad", { assetRepo })).toThrow(BadRequestError)
   })
 
-  it("throws BadRequestError when stored shape fails Zod check", () => {
+  it("throws MalformedPayloadError when stored shape matches neither canonical nor legacy", () => {
     const { assetRepo, batchRepo, close } = openDbPair()
     closeDb = close
     seedSourceAsset(assetRepo, batchRepo, {
       id: "asset_shape",
       replayPayload: JSON.stringify({ version: 1 }),
     })
-    expect(() => loadReplayContext("asset_shape", { assetRepo })).toThrow(BadRequestError)
+    expect(() => loadReplayContext("asset_shape", { assetRepo })).toThrow(
+      MalformedPayloadError,
+    )
   })
 
   it("throws NoActiveKeyError when hasActiveKey returns false", () => {
@@ -177,8 +183,9 @@ describe("loadReplayContext — preconditions", () => {
     const ctx = loadReplayContext("asset_src001", { assetRepo })
     expect(ctx.sourceAsset.id).toBe("asset_src001")
     expect(ctx.model.id).toBe(MOCK_MODEL_ID)
-    expect(ctx.payload.promptRaw).toBe("a serene mountain lake at sunrise")
-    expect(ctx.payload.seed).toBe(42)
+    expect(ctx.execute.prompt).toBe("a serene mountain lake at sunrise")
+    expect(ctx.execute.seed).toBe(42)
+    expect(ctx.kind).toBe("legacy")
   })
 })
 
@@ -291,6 +298,110 @@ describe("executeReplay — abort handling", () => {
 
     const batch = batchRepo.findById("batch_ab")
     expect(batch?.status).toBe("aborted")
+  })
+})
+
+describe("executeReplay — mode=edit capability gate (Session #27a)", () => {
+  const canonicalProfile: AppProfile = {
+    version: 1,
+    id: "chartlens",
+    name: "ChartLens",
+    tagline: "Instant chart reader",
+    category: "utility",
+    assets: { appLogoAssetId: null, storeBadgeAssetId: null, screenshotAssetIds: [] },
+    visual: {
+      primaryColor: "#111111",
+      secondaryColor: "#ff66cc",
+      accentColor: "#00ccff",
+      tone: "minimal",
+      doList: ["a"],
+      dontList: ["b"],
+    },
+    positioning: { usp: "x", targetPersona: "y", marketTier: "global" },
+    context: { features: [], keyScenarios: [], forbiddenContent: [] },
+    createdAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  }
+
+  function seedCanonical(assetRepo: AssetRepo, batchRepo: BatchRepo): string {
+    const batchId = "batch_cap_src"
+    batchRepo.create({
+      id: batchId,
+      profileId: "chartlens",
+      workflowId: "artwork-batch",
+      totalAssets: 1,
+      successfulAssets: 1,
+      status: "completed",
+    })
+    const canonical: ReplayPayload = {
+      version: 1,
+      prompt: "foo",
+      providerId: "mock",
+      modelId: MOCK_MODEL_ID,
+      aspectRatio: "1:1",
+      seed: 1,
+      providerSpecificParams: { addWatermark: false },
+      promptTemplateId: "artwork-batch",
+      promptTemplateVersion: "1",
+      contextSnapshot: {
+        profileId: canonicalProfile.id,
+        profileVersion: canonicalProfile.version,
+        profileSnapshot: canonicalProfile,
+      },
+    }
+    const id = "asset_cap_src"
+    assetRepo.insert({
+      id,
+      profileId: "chartlens",
+      profileVersionAtGen: 1,
+      workflowId: "artwork-batch",
+      batchId,
+      promptRaw: canonical.prompt,
+      promptTemplateId: canonical.promptTemplateId,
+      promptTemplateVersion: canonical.promptTemplateVersion,
+      inputParams: "{}",
+      replayPayload: JSON.stringify(canonical),
+      replayClass: "deterministic",
+      providerId: "mock",
+      modelId: MOCK_MODEL_ID,
+      seed: 1,
+      aspectRatio: "1:1",
+      filePath: `./data/assets/${id}.png`,
+      status: "completed",
+      tags: [],
+    })
+    return id
+  }
+
+  it("throws CapabilityNotSupportedError when overridePayload.negativePrompt targets a model without supportsNegativePrompt", async () => {
+    const { assetRepo, batchRepo, close } = openDbPair()
+    closeDb = close
+    const sourceId = seedCanonical(assetRepo, batchRepo)
+    const baseModel = getModel(MOCK_MODEL_ID)
+    if (!baseModel) throw new Error("mock model missing from registry")
+    const capped: ModelInfo = {
+      ...baseModel,
+      capability: { ...baseModel.capability, supportsNegativePrompt: false },
+    }
+
+    await expect(async () => {
+      for await (const _evt of executeReplay(
+        {
+          assetId: sourceId,
+          newBatchId: "batch_cap_attempt",
+          abortSignal: new AbortController().signal,
+          overridePayload: { negativePrompt: "disallowed" },
+        },
+        {
+          assetRepo,
+          batchRepo,
+          resolveModel: (id) => (id === MOCK_MODEL_ID ? capped : getModel(id)),
+          assetsDir: tmpAssetsDir,
+        },
+      )) {
+        // drain
+      }
+    }).rejects.toBeInstanceOf(CapabilityNotSupportedError)
   })
 })
 

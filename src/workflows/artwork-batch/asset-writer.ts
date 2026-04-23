@@ -12,6 +12,10 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { GenerateResult } from "@/core/providers/types"
 import type { AppProfile } from "@/core/schemas/app-profile"
 import type { AspectRatio, LanguageCode, ModelInfo } from "@/core/model-registry/types"
+import {
+  ReplayPayloadSchema,
+  type ReplayPayload,
+} from "@/core/schemas/replay-payload"
 import { computeReplayClass } from "@/core/shared/replay-class"
 import { shortId } from "@/core/shared/id"
 import type { AssetInsertInput, AssetRepo } from "@/server/asset-store"
@@ -34,17 +38,28 @@ export interface AssetWriteInput {
   now: Date
 }
 
+// Session #27a — canonical payload migration. artwork-batch replayPayload
+// already had no workflow-specific fields (conceptTitle/tagGroup live in
+// inputParams); just swaps to canonical shape.
 function buildReplayPayload(input: AssetWriteInput): string {
-  return JSON.stringify({
+  const payload: ReplayPayload = {
     version: 1,
-    profileVersion: input.profile.version,
-    promptRaw: input.prompt,
+    prompt: input.prompt,
     providerId: input.providerId,
     modelId: input.model.id,
-    seed: input.concept.seed,
     aspectRatio: input.aspectRatio,
-    language: input.language ?? null,
-  })
+    ...(input.language !== undefined ? { language: input.language } : {}),
+    seed: input.concept.seed,
+    providerSpecificParams: { addWatermark: false },
+    promptTemplateId: "artwork-batch",
+    promptTemplateVersion: "1",
+    contextSnapshot: {
+      profileId: input.profile.id,
+      profileVersion: input.profile.version,
+      profileSnapshot: input.profile,
+    },
+  }
+  return JSON.stringify(ReplayPayloadSchema.parse(payload))
 }
 
 function buildInputParams(input: AssetWriteInput): string {
@@ -81,6 +96,8 @@ export function writeAssetAndInsert(
     batchId: input.batchId,
     variantGroup: input.concept.title,
     promptRaw: input.prompt,
+    promptTemplateId: "artwork-batch",
+    promptTemplateVersion: "1",
     inputParams: buildInputParams(input),
     replayPayload: buildReplayPayload(input),
     replayClass,

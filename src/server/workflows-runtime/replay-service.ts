@@ -1,37 +1,34 @@
-// Phase 5 Step 1 (Session #25) — Replay service (generic, workflow-agnostic).
+// Session #27a — Phase 5 Step 5a. Extends Session #25's replay service with:
+//   1. Dual-reader shape detection — canonical ReplayPayloadSchema first,
+//      fall back to inlined legacy detection (presence of `promptRaw` key)
+//      to keep 105+ pre-migration rows on bro's home PC replayable during
+//      the transition. `replay-payload-shape.ts` is deleted; the legacy
+//      schema is private to this module.
+//   2. `overridePayload` support for body.mode === "edit" — allowlisted via
+//      OverridePayloadSchema (prompt | addWatermark | negativePrompt),
+//      gated by model capability (negativePrompt requires
+//      supportsNegativePrompt). Rejects legacy sources with
+//      LegacyPayloadNotEditableError to prevent silent profileSnapshot
+//      drift (synthesizing from current profile = wrong semantically).
 //
-// Runs one `provider.generate()` call from a stored `assets.replay_payload`,
-// writes a new asset linked to the source via `assets.replayed_from`,
-// creates a new batch linked via `batches.replay_of_{batch,asset}_id`.
-// Emits the standard WorkflowEvent stream (`started → image_generated →
-// complete` / `error + complete` / `aborted`) so the /:id/replay route can
-// wrap it in the existing streamSSE plumbing without reinventing framing.
-//
-// Scope deviation (per Session #25 chat decision): the 4 workflow runners
-// are NOT modified. Replay is fundamentally workflow-agnostic because the
-// stored payload holds the fully-resolved prompt; no concept/prompt-template
-// re-run is needed. One service + one asset-writer helper handles all
-// workflow families via source-asset metadata inheritance.
-//
-// Inference note: the simplified stored payload lacks providerSpecificParams.
-// All 4 workflow asset-writers call provider.generate() with a hardcoded
-// `{ addWatermark: false }` (see e.g. src/workflows/artwork-batch/run.ts:107),
-// so replay inherits the same constant — matches original call semantics
-// exactly until the canonical payload migration lands.
+// Probe moved to replay-probe.ts (carry-forward #6 from Session #26 — LOC
+// soft cap was tight; dual reader + override logic would blow past 300).
 
 import { resolve } from "node:path"
 
-import type { NotReplayableReason } from "@/core/dto/asset-dto"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
-import { getModel } from "@/core/model-registry/models"
 import type { ModelInfo } from "@/core/model-registry/types"
+import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
+import type { OverridePayload } from "@/core/schemas/override-payload"
+import type { ReplayPayload } from "@/core/schemas/replay-payload"
 import {
   BadRequestError,
+  CapabilityNotSupportedError,
+  LegacyPayloadNotEditableError,
   NoActiveKeyError,
   NotFoundError,
 } from "@/core/shared/errors"
-import { computeNotReplayableReason } from "@/core/shared/replay-class"
 import {
   finalizeBatch,
   getAssetRepo as getAssetRepoDefault,
@@ -45,17 +42,20 @@ import { loadStoredKeys } from "@/server/keys/store"
 import { getProvider as getProviderDefault } from "@/server/providers"
 
 import { writeReplayAsset } from "./replay-asset-writer"
-import {
-  StoredReplayPayloadSchema,
-  type StoredReplayPayload,
-} from "./replay-payload-shape"
+import type { ReplayExecuteFields } from "./replay-execute-fields"
+import { normalizePayload, type ReplayPayloadKind } from "./replay-payload-reader"
+
+export { type ReplayExecuteFields } from "./replay-execute-fields"
 
 export const DEFAULT_ASSETS_DIR = resolve(process.cwd(), "data", "assets")
 
 export interface LoadedReplayContext {
   sourceAsset: AssetInternal
   model: ModelInfo
-  payload: StoredReplayPayload
+  execute: ReplayExecuteFields
+  kind: ReplayPayloadKind
+  canonical: ReplayPayload | null
+  storedPayloadJson: string
 }
 
 export interface ReplayServiceDeps {
@@ -108,105 +108,81 @@ export function loadReplayContext(
       assetId,
     })
   }
-  const parsed = StoredReplayPayloadSchema.safeParse(raw)
-  if (!parsed.success) {
-    throw new BadRequestError(`Asset '${assetId}' replay payload failed shape check`, {
-      assetId,
-      issues: parsed.error.issues,
-    })
-  }
+  const { kind, canonical, execute } = normalizePayload(raw, assetId)
 
-  const model = resolveModel(parsed.data.modelId)
-  if (!model || model.providerId !== parsed.data.providerId) {
+  const model = resolveModel(execute.modelId)
+  if (!model || model.providerId !== execute.providerId) {
     throw new BadRequestError(
-      `Stored model '${parsed.data.modelId}' no longer registered for provider '${parsed.data.providerId}'`,
-      { modelId: parsed.data.modelId, providerId: parsed.data.providerId },
+      `Stored model '${execute.modelId}' no longer registered for provider '${execute.providerId}'`,
+      { modelId: execute.modelId, providerId: execute.providerId },
     )
   }
-  if (!hasActiveKey(parsed.data.providerId)) {
+  if (!hasActiveKey(execute.providerId)) {
     throw new NoActiveKeyError(
-      `No active key for provider '${parsed.data.providerId}' — rotate or add before replay`,
-      { providerId: parsed.data.providerId },
+      `No active key for provider '${execute.providerId}' — rotate or add before replay`,
+      { providerId: execute.providerId },
     )
   }
 
-  return { sourceAsset, model, payload: parsed.data }
+  return {
+    sourceAsset,
+    model,
+    execute,
+    kind,
+    canonical,
+    storedPayloadJson: sourceAsset.replayPayload,
+  }
 }
 
-// Session #26 (Phase 5 Step 2 fold-in) — lightweight probe for the UI button
-// state. Does NOT throw on `not_replayable`: that's an expected, displayable
-// state. The disabled-button-with-tooltip UX needs to distinguish which of
-// the 3 reasons applies. Other preconditions still hard-fail (404 if the
-// asset row is missing — there's nothing to probe).
-//
-// Compared to loadReplayContext used by POST /replay, this path skips:
-//   - payload presence/shape validation (not needed to surface class + reason)
-//   - active-key check for not_replayable (can't replay regardless — still
-//     worth showing the reason to the user rather than a generic 401)
-// For replayable classes (deterministic | best_effort) we DO run the full
-// preconditions so 400/401 surface the same way as POST would.
-export type ReplayProbeResult =
-  | {
-      kind: "replayable"
-      replayClass: "deterministic" | "best_effort"
-      providerId: string
-      modelId: string
-      estimatedCostUsd: number
-      workflowId: string
-    }
-  | {
-      kind: "not_replayable"
-      reason: NotReplayableReason
-      providerId: string
-      modelId: string
-      workflowId: string
-    }
-
-export function probeReplayClass(
-  assetId: string,
-  deps: Pick<ReplayServiceDeps, "assetRepo" | "resolveModel" | "hasActiveKey"> = {},
-): ReplayProbeResult {
-  const assetRepo = deps.assetRepo ?? getAssetRepoDefault()
-  const resolveModel = deps.resolveModel ?? getModel
-
-  const sourceAsset = assetRepo.findById(assetId)
-  if (!sourceAsset) {
-    throw new NotFoundError(`Asset '${assetId}' not found`, { assetId })
+function applyOverride(
+  ctx: LoadedReplayContext,
+  override: OverridePayload,
+): { execute: ReplayExecuteFields; newPayloadJson: string } {
+  // Legacy source → synthesizing a canonical contextSnapshot from current
+  // profile state would drift from the batch-time profile. Reject loudly
+  // instead of silently corrupting the audit trail.
+  if (ctx.kind === "legacy" || ctx.canonical === null) {
+    throw new LegacyPayloadNotEditableError(ctx.sourceAsset.id)
+  }
+  if (
+    override.negativePrompt !== undefined &&
+    !ctx.model.capability.supportsNegativePrompt
+  ) {
+    throw new CapabilityNotSupportedError("negativePrompt", ctx.model.id)
   }
 
-  if (sourceAsset.replayClass === "not_replayable") {
-    // Model lookup is best-effort here — if the stored model has been dropped
-    // from the registry we still want to surface *some* reason (the helper
-    // treats undefined capability as `provider_no_seed_support`).
-    const model = resolveModel(sourceAsset.modelId)
-    const reason = computeNotReplayableReason({
-      seed: sourceAsset.seed,
-      capability: model?.capability,
-    })
-    return {
-      kind: "not_replayable",
-      reason,
-      providerId: sourceAsset.providerId,
-      modelId: sourceAsset.modelId,
-      workflowId: sourceAsset.workflowId,
-    }
+  const prompt = override.prompt ?? ctx.execute.prompt
+  const addWatermark =
+    override.addWatermark !== undefined ? override.addWatermark : ctx.execute.addWatermark
+  const negativePrompt =
+    override.negativePrompt !== undefined
+      ? override.negativePrompt
+      : ctx.execute.negativePrompt
+
+  const execute: ReplayExecuteFields = {
+    ...ctx.execute,
+    prompt,
+    addWatermark,
+    ...(negativePrompt !== undefined ? { negativePrompt } : {}),
   }
 
-  const ctx = loadReplayContext(assetId, deps)
-  return {
-    kind: "replayable",
-    replayClass: ctx.sourceAsset.replayClass as "deterministic" | "best_effort",
-    providerId: ctx.payload.providerId,
-    modelId: ctx.payload.modelId,
-    estimatedCostUsd: ctx.model.costPerImageUsd,
-    workflowId: ctx.sourceAsset.workflowId,
+  const newCanonical: ReplayPayload = {
+    ...ctx.canonical,
+    prompt,
+    providerSpecificParams: {
+      ...ctx.canonical.providerSpecificParams,
+      addWatermark,
+      ...(negativePrompt !== undefined ? { negativePrompt } : {}),
+    },
   }
+  return { execute, newPayloadJson: JSON.stringify(newCanonical) }
 }
 
 export interface ExecuteReplayParams {
   assetId: string
   newBatchId: string
   abortSignal: AbortSignal
+  overridePayload?: OverridePayload
 }
 
 export async function* executeReplay(
@@ -224,6 +200,11 @@ export async function* executeReplay(
     ...(deps.resolveModel !== undefined ? { resolveModel: deps.resolveModel } : {}),
     ...(deps.hasActiveKey !== undefined ? { hasActiveKey: deps.hasActiveKey } : {}),
   })
+
+  const { execute, newPayloadJson } =
+    params.overridePayload !== undefined
+      ? applyOverride(ctx, params.overridePayload)
+      : { execute: ctx.execute, newPayloadJson: ctx.storedPayloadJson }
 
   batchRepo.create({
     id: params.newBatchId,
@@ -255,20 +236,21 @@ export async function* executeReplay(
     return
   }
 
-  const provider = resolveProvider(ctx.payload.providerId)
+  const provider = resolveProvider(execute.providerId)
   try {
     const generateResult = await provider.generate({
-      prompt: ctx.payload.promptRaw,
-      modelId: ctx.payload.modelId,
-      aspectRatio: ctx.payload.aspectRatio,
-      ...(ctx.payload.seed !== undefined && ctx.payload.seed !== null
-        ? { seed: ctx.payload.seed }
-        : {}),
-      ...(ctx.payload.language !== undefined && ctx.payload.language !== null
-        ? { language: ctx.payload.language }
-        : {}),
+      prompt: execute.prompt,
+      modelId: execute.modelId,
+      aspectRatio: execute.aspectRatio,
+      ...(execute.seed !== undefined ? { seed: execute.seed } : {}),
+      ...(execute.language !== undefined ? { language: execute.language } : {}),
       abortSignal: params.abortSignal,
-      providerSpecificParams: { addWatermark: false },
+      providerSpecificParams: {
+        addWatermark: execute.addWatermark,
+        ...(execute.negativePrompt !== undefined
+          ? { negativePrompt: execute.negativePrompt }
+          : {}),
+      },
     })
 
     const newAsset = writeReplayAsset(
@@ -276,7 +258,8 @@ export async function* executeReplay(
         sourceAsset: ctx.sourceAsset,
         newBatchId: params.newBatchId,
         generateResult,
-        payload: ctx.payload,
+        execute,
+        replayPayloadJson: newPayloadJson,
         model: ctx.model,
         assetsDir,
         now: nowFn(),
@@ -312,3 +295,4 @@ export async function* executeReplay(
     yield { type: "complete", assets: [], batchId: params.newBatchId }
   }
 }
+

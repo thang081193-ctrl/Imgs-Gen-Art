@@ -14,6 +14,10 @@ export type ErrorCode =
   | "SAFETY_FILTER"
   | "NOT_REPLAYABLE"
   | "EDIT_REQUIRES_PROMPT"
+  | "EDIT_FIELD_NOT_ALLOWED"
+  | "CAPABILITY_NOT_SUPPORTED"
+  | "LEGACY_PAYLOAD_NOT_EDITABLE"
+  | "MALFORMED_PAYLOAD"
   | "EXTRACTION_FAILED"
   | "MIGRATION_DRIFT"
   | "INTERNAL"
@@ -167,6 +171,68 @@ export class ServiceAccountFileMissingError extends ProviderError {
       expectedPath: details.expectedPath,
     })
     this.name = "ServiceAccountFileMissingError"
+  }
+}
+
+// Session #27a — Phase 5 Step 5a (canonical payload migration + mode=edit).
+// Emitted when POST /api/assets/:id/replay body.overridePayload contains a key
+// outside the strict allowlist (prompt | addWatermark | negativePrompt). 400
+// because the request shape itself is invalid; message carries the offending
+// field name so the client can pinpoint without parsing Zod issues.
+export class EditFieldNotAllowedError extends AppError {
+  constructor(field: string) {
+    super(
+      "EDIT_FIELD_NOT_ALLOWED",
+      `Field '${field}' cannot be edited. Allowed fields: prompt, addWatermark, negativePrompt.`,
+      400,
+      { field },
+    )
+    this.name = "EditFieldNotAllowedError"
+  }
+}
+
+// Emitted when an allowlisted override field targets a model that lacks the
+// capability (e.g. negativePrompt on Imagen 4). Distinct from
+// EDIT_FIELD_NOT_ALLOWED: the field is generally editable, just not for this
+// model. 400 because it's a client-correctable mismatch.
+export class CapabilityNotSupportedError extends AppError {
+  constructor(field: string, modelId: string) {
+    super(
+      "CAPABILITY_NOT_SUPPORTED",
+      `Field '${field}' not supported by model '${modelId}'.`,
+      400,
+      { field, modelId },
+    )
+    this.name = "CapabilityNotSupportedError"
+  }
+}
+
+// Emitted when mode=edit targets an asset whose replay_payload is the
+// pre-Session-#27 legacy shape (promptRaw + primitives, no contextSnapshot).
+// Replay is still supported for these assets via the dual-reader fallback;
+// edit is not, because synthesizing a profileSnapshot from the current
+// profile would silently drift from the batch-time profile — data corruption
+// via optimism. User must create a fresh batch to edit.
+export class LegacyPayloadNotEditableError extends AppError {
+  constructor(assetId: string) {
+    super(
+      "LEGACY_PAYLOAD_NOT_EDITABLE",
+      "This asset predates the edit & replay feature. Replay is supported but editing is not available. Create a new batch to use edit & replay.",
+      400,
+      { assetId },
+    )
+    this.name = "LegacyPayloadNotEditableError"
+  }
+}
+
+// Emitted when a stored replay_payload matches neither the canonical nor the
+// legacy schema. 500 because this is a data-corruption signal, not a client
+// shape issue — a pre-migration row has been corrupted or a future-schema row
+// has landed in a backend that hasn't caught up yet.
+export class MalformedPayloadError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super("MALFORMED_PAYLOAD", message, 500, details)
+    this.name = "MalformedPayloadError"
   }
 }
 

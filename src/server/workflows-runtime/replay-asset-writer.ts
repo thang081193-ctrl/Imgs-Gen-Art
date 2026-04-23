@@ -1,13 +1,16 @@
 // Phase 5 Step 1 (Session #25) — replay asset persistence helper.
+// Session #27a — migrated off StoredReplayPayload; now accepts a normalized
+// ReplayExecuteFields (column values) + a pre-assembled replayPayloadJson
+// string (payload column). Lets replay-service decide whether to copy the
+// source payload verbatim (mode=replay) or rebuild a canonical payload with
+// overrides (mode=edit) without this writer needing the distinction.
 //
-// Split from replay-service.ts to keep that file under CONTRIBUTING Rule 7
-// soft cap (250 LOC). Mirrors the per-workflow asset-writer convention
-// (writeAssetAndInsert in each src/workflows/<id>/asset-writer.ts) but is
-// generic: every field beyond what the stored replay payload carries is
-// inherited from the source asset row — replay-asset keeps the same
-// workflowId, profileId, profileVersionAtGen, variantGroup, tags,
-// promptTemplateId/Version as its source so Gallery filters continue to
-// group them naturally.
+// Split from replay-service.ts to keep that file under CONTRIBUTING Rule 7's
+// LOC cap. Mirrors the per-workflow asset-writer convention but is generic:
+// every field beyond what the stored replay payload carries is inherited
+// from the source asset row — replay-asset keeps the same workflowId,
+// profileId, profileVersionAtGen, variantGroup, tags, promptTemplateId/
+// Version as its source so Gallery filters continue to group them naturally.
 
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -19,13 +22,15 @@ import type {
   AssetInternal,
   AssetRepo,
 } from "@/server/asset-store"
-import type { StoredReplayPayload } from "./replay-payload-shape"
+
+import type { ReplayExecuteFields } from "./replay-service"
 
 export interface ReplayAssetWriteInput {
   sourceAsset: AssetInternal
   newBatchId: string
   generateResult: GenerateResult
-  payload: StoredReplayPayload
+  execute: ReplayExecuteFields
+  replayPayloadJson: string
   model: ModelInfo
   assetsDir: string
   now: Date
@@ -53,19 +58,17 @@ export function writeReplayAsset(
     workflowId: input.sourceAsset.workflowId,
     batchId: input.newBatchId,
     variantGroup: input.sourceAsset.variantGroup,
-    promptRaw: input.payload.promptRaw,
+    promptRaw: input.execute.prompt,
     promptTemplateId: input.sourceAsset.promptTemplateId,
     promptTemplateVersion: input.sourceAsset.promptTemplateVersion,
     inputParams: input.sourceAsset.inputParams,
-    replayPayload: JSON.stringify(input.payload),
+    replayPayload: input.replayPayloadJson,
     replayClass: input.sourceAsset.replayClass,
-    providerId: input.payload.providerId,
-    modelId: input.payload.modelId,
-    seed: input.payload.seed ?? null,
-    aspectRatio: input.payload.aspectRatio,
-    ...(input.payload.language !== undefined && input.payload.language !== null
-      ? { language: input.payload.language }
-      : {}),
+    providerId: input.execute.providerId,
+    modelId: input.execute.modelId,
+    seed: input.execute.seed ?? null,
+    aspectRatio: input.execute.aspectRatio,
+    ...(input.execute.language !== undefined ? { language: input.execute.language } : {}),
     filePath,
     width: input.generateResult.width,
     height: input.generateResult.height,
