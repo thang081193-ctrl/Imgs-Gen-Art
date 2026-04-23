@@ -73,6 +73,13 @@ export interface GenerateResult {
   height: number
   seedUsed?: number
   generationTimeMs: number
+  /**
+   * Actual USD cost for this generation. Adapter-reported so future
+   * resolution-tiered pricing (e.g. Imagen 1K vs 2K) lands here without
+   * leaking into ModelInfo. Mock returns 0. Defaults to ModelInfo's
+   * `costPerImageUsd` when adapter has no per-call variance.
+   */
+  costUsd: number
   providerResponseMeta?: Record<string, unknown>
 }
 

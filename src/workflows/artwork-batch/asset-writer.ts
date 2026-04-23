@@ -95,7 +95,7 @@ export function writeAssetAndInsert(
     fileSizeBytes: input.generateResult.imageBytes.byteLength,
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
-    costUsd: input.model.costPerImageUsd,
+    costUsd: input.generateResult.costUsd,
     tags: [input.tagGroup],
     createdAt: input.now.toISOString(),
   }

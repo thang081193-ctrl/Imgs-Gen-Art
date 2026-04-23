@@ -105,7 +105,7 @@ export function writeAdAsset(
     fileSizeBytes: input.generateResult.imageBytes.byteLength,
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
-    costUsd: input.model.costPerImageUsd,
+    costUsd: input.generateResult.costUsd,
     tags: [input.concept.featureFocus, input.concept.layoutId, input.concept.copyKey],
     createdAt: input.now.toISOString(),
   }

@@ -36,6 +36,15 @@ const GEMINI_MODEL_IDS: readonly string[] = [
   MODEL_IDS.GEMINI_NB_2,
 ]
 
+// Phase 4 Step 5 — per-model USD cost. Source: PLAN §3 Providers table.
+// Gemini has no resolution tier (4K default), so a flat model-keyed table
+// is correct. Kept adapter-local (not in ModelInfo) so future tier-splits
+// can land without ModelInfo shape churn.
+const GEMINI_COST: Readonly<Record<string, number>> = {
+  [MODEL_IDS.GEMINI_NB_PRO]: 0.134,
+  [MODEL_IDS.GEMINI_NB_2]:   0.067,
+}
+
 // Q2 (Session #18) — boot-time observability log. Once per module load; the
 // LOG_LEVEL=warn env gates it out of test output. If bro rotates SDK or
 // re-verifies capability provenance, bump SDK_VERSION + VERIFIED_AT here and
@@ -212,6 +221,7 @@ async function generate(params: GenerateParams): Promise<GenerateResult> {
     width,
     height,
     generationTimeMs: Date.now() - start,
+    costUsd: GEMINI_COST[params.modelId] ?? 0,
   }
   if (params.seed !== undefined) result.seedUsed = params.seed
   return result

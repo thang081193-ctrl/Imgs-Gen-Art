@@ -5,6 +5,7 @@
 import { useEffect } from "react"
 import type { ReactElement } from "react"
 import type { AssetDto } from "@/core/dto/asset-dto"
+import { formatCost } from "@/client/utils/format"
 
 export interface AssetDetailModalProps {
   asset: AssetDto | null
@@ -99,7 +100,7 @@ export function AssetDetailModal({
               <Row label="Gen time">{asset.generationTimeMs}ms</Row>
             )}
             {asset.costUsd !== null && (
-              <Row label="Cost">${asset.costUsd.toFixed(4)}</Row>
+              <Row label="Cost">{formatCost(asset.costUsd)}</Row>
             )}
             {asset.tags.length > 0 && (
               <Row label="Tags">

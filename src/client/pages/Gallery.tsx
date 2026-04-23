@@ -6,7 +6,7 @@
 // filter; URL is ephemeral but batchId filter persists in Gallery state
 // until manually cleared.
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ReactElement } from "react"
 import { useAssets, useProfiles, useWorkflows } from "@/client/api/hooks"
 import { AssetFilterBar } from "@/client/components/AssetFilterBar"
@@ -16,6 +16,7 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { WorkflowId } from "@/core/design/types"
 import type { Navigator } from "@/client/navigator"
 import type { ShowToast } from "@/client/components/ToastHost"
+import { formatCost } from "@/client/utils/format"
 
 const PAGE_SIZE = 50
 
@@ -50,12 +51,26 @@ export function Gallery({ navigator }: GalleryPageProps): ReactElement {
   const profiles = profilesQ.data?.profiles ?? []
   const workflows = workflowsQ.data?.workflows ?? []
   const batchNotFound = batchId !== null && !assetsQ.loading && assets.length === 0 && page === 0
+  const pageCostTotal = useMemo(
+    () => assets.reduce((sum, a) => sum + (a.costUsd ?? 0), 0),
+    [assets],
+  )
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-4">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Gallery</h1>
-        <p className="text-xs text-slate-500">Sorted by created_at DESC · page {page + 1}</p>
+        <p className="text-xs text-slate-500">
+          Sorted by created_at DESC · page {page + 1}
+          {pageCostTotal > 0 && (
+            <>
+              {" "}· page total{" "}
+              <span className="font-mono text-slate-300">
+                {formatCost(pageCostTotal, "aggregate")}
+              </span>
+            </>
+          )}
+        </p>
       </header>
 
       <AssetFilterBar

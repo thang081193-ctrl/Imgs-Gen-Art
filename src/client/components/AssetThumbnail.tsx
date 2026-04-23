@@ -6,6 +6,7 @@ import type { ReactElement } from "react"
 import { COLOR_CLASSES } from "@/core/design"
 import { WORKFLOW_COLORS } from "@/core/design/tokens"
 import type { AssetDto } from "@/core/dto/asset-dto"
+import { formatCost } from "@/client/utils/format"
 
 export interface AssetThumbnailProps {
   asset: AssetDto
@@ -35,10 +36,15 @@ export function AssetThumbnail({ asset, onSelect }: AssetThumbnailProps): ReactE
           className="h-full w-full object-cover"
         />
       )}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1">
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 bg-gradient-to-t from-black/80 to-transparent p-1">
         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${tone.badge}`}>
           {asset.workflowId}
         </span>
+        {asset.costUsd !== null && asset.costUsd > 0 && (
+          <span className="inline-block rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-300 font-mono">
+            {formatCost(asset.costUsd)}
+          </span>
+        )}
       </div>
     </button>
   )

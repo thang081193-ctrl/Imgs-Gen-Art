@@ -80,6 +80,7 @@ export const mockProvider: ImageProvider = {
       width: MOCK_IMAGE_SIZE,
       height: MOCK_IMAGE_SIZE,
       generationTimeMs: Date.now() - start,
+      costUsd: 0, // Mock is always free.
     }
     if (params.seed !== undefined) result.seedUsed = params.seed
     return result

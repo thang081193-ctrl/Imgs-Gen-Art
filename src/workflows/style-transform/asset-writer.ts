@@ -100,7 +100,7 @@ export function writeStyleAsset(
     fileSizeBytes: input.generateResult.imageBytes.byteLength,
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
-    costUsd: input.model.costPerImageUsd,
+    costUsd: input.generateResult.costUsd,
     tags: [input.concept.styleDnaKey, input.concept.sourceAssetId],
     createdAt: input.now.toISOString(),
   }

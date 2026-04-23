@@ -15,7 +15,7 @@ import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
 import { RuntimeValidationError } from "@/core/shared/errors"
 import { deriveSeed } from "@/core/shared/rand"
-import type { AssetRepo, BatchRepo } from "@/server/asset-store"
+import { finalizeBatch, type AssetRepo, type BatchRepo } from "@/server/asset-store"
 import { getAdLayouts, getCopyTemplates } from "@/server/templates"
 import type { WorkflowRunParams } from "@/workflows/types"
 
@@ -89,7 +89,6 @@ export function createAsoScreenshotsRun(
 
     const assets: AssetDto[] = []
     let successfulAssets = 0
-    let totalCost = 0
     let globalIndex = 0
 
     for (let ci = 0; ci < concepts.length; ci++) {
@@ -101,11 +100,12 @@ export function createAsoScreenshotsRun(
 
         for (let vi = 0; vi < input.variantsPerConcept; vi++) {
           if (params.abortSignal.aborted) {
-            deps.batchRepo.updateStatus(params.batchId, {
+            finalizeBatch({
+              batchId: params.batchId,
               status: "aborted",
-              successfulAssets,
-              totalCostUsd: totalCost,
-              abortedAt: nowFn().toISOString(),
+              assetRepo: deps.assetRepo,
+              batchRepo: deps.batchRepo,
+              at: nowFn().toISOString(),
             })
             yield {
               type: "aborted",
@@ -158,7 +158,6 @@ export function createAsoScreenshotsRun(
 
             assets.push(asset)
             successfulAssets++
-            totalCost += model.costPerImageUsd
             yield { type: "image_generated", asset, index: globalIndex }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
@@ -175,11 +174,12 @@ export function createAsoScreenshotsRun(
       }
     }
 
-    deps.batchRepo.updateStatus(params.batchId, {
+    finalizeBatch({
+      batchId: params.batchId,
       status: "completed",
-      successfulAssets,
-      totalCostUsd: totalCost,
-      completedAt: nowFn().toISOString(),
+      assetRepo: deps.assetRepo,
+      batchRepo: deps.batchRepo,
+      at: nowFn().toISOString(),
     })
     yield { type: "complete", assets, batchId: params.batchId }
   }

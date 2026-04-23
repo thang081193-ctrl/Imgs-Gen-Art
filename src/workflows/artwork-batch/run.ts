@@ -9,7 +9,7 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
-import type { AssetRepo, BatchRepo } from "@/server/asset-store"
+import { finalizeBatch, type AssetRepo, type BatchRepo } from "@/server/asset-store"
 import { getArtworkGroups } from "@/server/templates"
 import type { WorkflowRunParams } from "@/workflows/types"
 
@@ -71,7 +71,6 @@ export function createArtworkBatchRun(
 
     const assets: AssetDto[] = []
     let successfulAssets = 0
-    let totalCost = 0
     let globalIndex = 0
 
     for (let ci = 0; ci < concepts.length; ci++) {
@@ -80,11 +79,12 @@ export function createArtworkBatchRun(
 
       for (let vi = 0; vi < input.variantsPerConcept; vi++) {
         if (params.abortSignal.aborted) {
-          deps.batchRepo.updateStatus(params.batchId, {
+          finalizeBatch({
+            batchId: params.batchId,
             status: "aborted",
-            successfulAssets,
-            totalCostUsd: totalCost,
-            abortedAt: nowFn().toISOString(),
+            assetRepo: deps.assetRepo,
+            batchRepo: deps.batchRepo,
+            at: nowFn().toISOString(),
           })
           yield {
             type: "aborted",
@@ -127,7 +127,6 @@ export function createArtworkBatchRun(
 
           assets.push(asset)
           successfulAssets++
-          totalCost += model.costPerImageUsd
           yield { type: "image_generated", asset, index: globalIndex }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
@@ -143,11 +142,12 @@ export function createArtworkBatchRun(
       }
     }
 
-    deps.batchRepo.updateStatus(params.batchId, {
+    finalizeBatch({
+      batchId: params.batchId,
       status: "completed",
-      successfulAssets,
-      totalCostUsd: totalCost,
-      completedAt: nowFn().toISOString(),
+      assetRepo: deps.assetRepo,
+      batchRepo: deps.batchRepo,
+      at: nowFn().toISOString(),
     })
     yield { type: "complete", assets, batchId: params.batchId }
   }

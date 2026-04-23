@@ -40,6 +40,12 @@ import { extractImageFromResponse } from "./vertex-extract"
 
 const VERTEX_MODEL_IDS: readonly string[] = [MODEL_IDS.IMAGEN_4]
 
+// Phase 4 Step 5 — Imagen 4 pricing. PLAN §3 lists $0.04 flat (2K default).
+// Resolution-tier split (1K=$0.02) deferred — not wired through aspect ratio yet.
+const VERTEX_COST: Readonly<Record<string, number>> = {
+  [MODEL_IDS.IMAGEN_4]: 0.04,
+}
+
 const SDK_VERSION = "1.5.0"
 const VERIFIED_AT = "2026-04-23"
 
@@ -202,6 +208,7 @@ async function generate(params: GenerateParams): Promise<GenerateResult> {
     width,
     height,
     generationTimeMs: Date.now() - start,
+    costUsd: VERTEX_COST[params.modelId] ?? 0,
   }
   if (params.seed !== undefined) result.seedUsed = params.seed
   return result

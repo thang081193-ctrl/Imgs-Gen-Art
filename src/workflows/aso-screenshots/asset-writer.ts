@@ -102,7 +102,7 @@ export function writeAsoAsset(
     fileSizeBytes: input.generateResult.imageBytes.byteLength,
     status: "completed",
     generationTimeMs: input.generateResult.generationTimeMs,
-    costUsd: input.model.costPerImageUsd,
+    costUsd: input.generateResult.costUsd,
     tags: [input.concept.layoutId, input.targetLang],
     createdAt: input.now.toISOString(),
   }

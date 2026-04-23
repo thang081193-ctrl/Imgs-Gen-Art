@@ -10,7 +10,12 @@ import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
 import { BadRequestError } from "@/core/shared/errors"
-import type { AssetRepo, BatchRepo, ProfileAssetsRepo } from "@/server/asset-store"
+import {
+  finalizeBatch,
+  type AssetRepo,
+  type BatchRepo,
+  type ProfileAssetsRepo,
+} from "@/server/asset-store"
 import { getStyleDna } from "@/server/templates"
 import type { WorkflowRunParams } from "@/workflows/types"
 
@@ -91,7 +96,6 @@ export function createStyleTransformRun(
 
     const assets: AssetDto[] = []
     let successfulAssets = 0
-    let totalCost = 0
     let globalIndex = 0
 
     for (let ci = 0; ci < concepts.length; ci++) {
@@ -100,11 +104,12 @@ export function createStyleTransformRun(
 
       for (let vi = 0; vi < input.variantsPerConcept; vi++) {
         if (params.abortSignal.aborted) {
-          deps.batchRepo.updateStatus(params.batchId, {
+          finalizeBatch({
+            batchId: params.batchId,
             status: "aborted",
-            successfulAssets,
-            totalCostUsd: totalCost,
-            abortedAt: nowFn().toISOString(),
+            assetRepo: deps.assetRepo,
+            batchRepo: deps.batchRepo,
+            at: nowFn().toISOString(),
           })
           yield {
             type: "aborted",
@@ -153,7 +158,6 @@ export function createStyleTransformRun(
 
           assets.push(asset)
           successfulAssets++
-          totalCost += model.costPerImageUsd
           yield { type: "image_generated", asset, index: globalIndex }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
@@ -169,11 +173,12 @@ export function createStyleTransformRun(
       }
     }
 
-    deps.batchRepo.updateStatus(params.batchId, {
+    finalizeBatch({
+      batchId: params.batchId,
       status: "completed",
-      successfulAssets,
-      totalCostUsd: totalCost,
-      completedAt: nowFn().toISOString(),
+      assetRepo: deps.assetRepo,
+      batchRepo: deps.batchRepo,
+      at: nowFn().toISOString(),
     })
     yield { type: "complete", assets, batchId: params.batchId }
   }
