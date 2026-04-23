@@ -6,7 +6,7 @@
 // request body at start-time (input can change between runs). `start()`
 // bumps a nonce so the underlying useSSE effect re-fires.
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSSE } from "./use-sse"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 import type { WorkflowId } from "@/core/design/types"
@@ -42,6 +42,15 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
   const [completedCount, setCompletedCount] = useState<number>(0)
   const [events, setEvents] = useState<WorkflowEvent[]>([])
   const [runBody, setRunBody] = useState<unknown>(null)
+
+  // Ref mirrors runState so `cancel()` sees the latest value without stale
+  // closures. Guards the race where a Mock batch completes (runState →
+  // "complete" via SSE) between the user's Cancel click and the DELETE fetch,
+  // which would otherwise produce a benign 409 BATCH_NOT_RUNNING.
+  const runStateRef = useRef<RunState>("idle")
+  useEffect(() => {
+    runStateRef.current = runState
+  }, [runState])
 
   const runUrl = runState === "running" && workflowId !== null && runNonce > 0
     ? `/api/workflows/${workflowId}/run?_=${runNonce}`
@@ -118,6 +127,7 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
   }, [buildBody])
 
   const cancel = useCallback(async (): Promise<void> => {
+    if (runStateRef.current !== "running") return
     sse.abort()
     if (batchId !== null) {
       try {

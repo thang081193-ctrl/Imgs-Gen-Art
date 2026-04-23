@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
 Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-8 of 9 shipped, 345/345 regression green (full suite), client Workflow + Gallery pages live, SSE wire proved end-to-end in browser, dispatcher post-abort grace window fix, 3 new dispatcher tests locked)
-Last updated: 2026-04-22 (Session #16, Opus 4.7 — Step 8 ships client UI: 4 workflow forms (sidecar Q1(a)), Gallery + filters, SSE dispatch + cancel confirm + Gallery-CTA toast, dispatcher fix (grace window for post-abort error+aborted events); 6 open Qs chosen by bro with 4 bonus refinements (empty-state CTA, model-switch lang auto-deselect, progress-context confirm dialog, Gallery deep-link).)
+Last updated: 2026-04-23 (interim hotfixes between Session #16 and #17 — browser smoke happy path + deep-link CTA PASS in Chrome; 2 client hotfixes landed: cancel race guard + EventLog memoization. Cancel mid-flight flow still pending manual verify — Mock at 20ms/image finishes too fast for human click.)
 
 ## Phase 3 Summary
 
@@ -150,7 +150,32 @@ Could not click through UI from this shell, but verified the full wire end-to-en
 **Carry-over from Session #16 pre-Step-9 checklist:**
 - Seed profiles: already on disk (`data/profiles/*.json` × 3); `npm run seed:profiles` is idempotent.
 - Gitignored runtime: `data/assets/`, `data/profile-assets/`, `data/keys.enc`, `keys/vertex-*.json` — all OK, won't leak.
-- Browser-smoke validation deferred to bro — curl wire-proven but full UX (confirm dialog animation, toast CTA ripple, deep-link filter) needs a real DOM.
+- Browser-smoke validation deferred to bro — curl wire-proven but full UX (confirm dialog animation, toast CTA ripple, deep-link filter) needs a real DOM. **Updated 2026-04-23**: happy path + deep-link CTA verified in Chrome (see hotfixes section below); cancel mid-flight still pending.
+
+
+
+## Interim hotfixes between Session #16 → #17 (2026-04-23, Opus 4.7 1M)
+
+### Browser smoke — partial PASS in Chrome
+Bro ran the Session #16 smoke list at http://localhost:5173:
+- Workflow picker → **artwork-batch** → ai-chatbot profile → mock/mock-fast → 1:1 → Memory group → 4 concepts × 1 variant → **Run** → EventLog streamed `started → 4×(concept_generated + image_generated) → complete` → toast `"Batch complete — 4 asset(s) saved"` + CTA `"View in Gallery →"` → click CTA deep-linked Gallery with `batchId=batch_zhnZ7syfe3` pre-filled + filtered grid showing 4 items. ✅
+- **Cancel mid-flight** — deferred: Mock at 20ms/image makes even 10×8=80 batches finish before a human click lands on the Cancel button. Needs either a slower-mock knob (env override `MOCK_DELAY_MS`) or the Step 9 `tests/integration/workflows-cancel.test.ts` harness exercising the dispatcher grace-window fix at HTTP layer.
+
+### 2 client hotfixes (no regression re-run; server + tests untouched)
+1. **`src/client/utils/use-workflow-run.ts`** — added `runStateRef` mirror of `runState`; `cancel()` early-returns when `runStateRef.current !== "running"`. Eliminates the benign `409 BATCH_NOT_RUNNING` Chrome DevTools was logging when a user's Cancel click arrived after the SSE `complete` event (race is unavoidable with 20ms Mock; server-side 409 is correct per Session #12 Q2, so the fix is client-side guard). Net +8 LOC (import `useRef`, ref + `useEffect` sync, guard line).
+2. **`src/client/components/EventLog.tsx`** — wrapped `EventRow` with `React.memo`. Previously every new event appended to the list re-rendered all prior rows (80-image batches visibly stalled the UI under SSE flood). With memo + stable keys, only the new row renders. Net +1 LOC (import `memo`, wrap component).
+
+### QA gate (interim)
+```
+lint: clean
+typecheck:client: 0 errors
+check-loc: 153 src files (unchanged), 0 violations
+regression: NOT re-run (client-only changes, no server/test files touched) — Session #17 Step 1 to verify `npm run regression:full` = 345/345 on the updated tree.
+```
+
+### Carry-over items touched
+- Known pending #1 (full click-through browser smoke) — happy path + deep-link CTA closed; cancel flow still open.
+- No other Session #16 pending items affected.
 
 
 

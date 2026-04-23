@@ -2,7 +2,7 @@
 // per-type color + short summary. Autoscrolls to the latest event when
 // the user hasn't manually scrolled up. Max-height fixed; overflow-y.
 
-import { useEffect, useRef } from "react"
+import { memo, useEffect, useRef } from "react"
 import type { ReactElement } from "react"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 
@@ -33,7 +33,10 @@ export function EventLog({ events }: EventLogProps): ReactElement {
   )
 }
 
-function EventRow({ ev }: { ev: WorkflowEvent }): ReactElement {
+// Memoized so each new event appended to the list doesn't re-render every
+// prior row — under 80-image batches the list's map() was the dominant
+// re-render cost, visibly stalling the UI.
+const EventRow = memo(function EventRow({ ev }: { ev: WorkflowEvent }): ReactElement {
   const color = colorFor(ev.type)
   const line = summarize(ev)
   return (
@@ -42,7 +45,7 @@ function EventRow({ ev }: { ev: WorkflowEvent }): ReactElement {
       <span className="text-slate-400 truncate">{line}</span>
     </div>
   )
-}
+})
 
 function colorFor(type: WorkflowEvent["type"]): string {
   switch (type) {
