@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (2 of 8 steps shipped; Gemini + Vertex Imagen adapters both live via `@google/genai` unified SDK, slot-manager resolution, gated live smokes; 460/460 regression green)
-Last updated: 2026-04-23 (Session #19 close — Phase 4 Step 2 DONE; Vertex Imagen adapter shipped as file quartet (vertex-imagen + vertex-auth + vertex-errors + vertex-extract), 49 new unit tests against mocked SDK, 5 gated live smokes (health + generate + pre-abort + deterministic seed pair), 1 new integration case for POST /keys/:id/test vertex flow, SDK pivot locked to `@google/genai` in `vertexai: true` mode (NOT `@google-cloud/vertexai` — blocker discovered mid-session, see Deviations))
+Current phase: **Phase 4 — IN PROGRESS ⏳** (3 of 8 steps shipped; Gemini + Vertex adapters live + Settings page + key slot UI; 460/460 regression green)
+Last updated: 2026-04-23 (Session #20 close — Phase 4 Step 3 DONE; Key management UI shipped — Modal primitive + KeyAddModalGemini + KeyAddModalVertex + KeysTable + TestButton + Settings page + navigator + TopNav "Settings" link; `apiDelete` / `apiPostMultipart` added to client fetch wrapper; `useKeys` + `createGeminiKey` / `createVertexKey` / `activateKey` / `deleteKey` / `testKey` helpers; full CRUD curl smoke verified end-to-end against real Gemini adapter (create→activate→list→test→delete→empty); 0 new unit tests (project has no jsdom / testing-library; pattern from Session #16 — client components covered by typecheck + manual browser smoke); 460/460 regression still green)
 
 ## Phase 4 Summary
 
@@ -9,12 +9,113 @@ Last updated: 2026-04-23 (Session #19 close — Phase 4 Step 2 DONE; Vertex Imag
 |---|---|---|
 | 1 | Gemini adapter (NB Pro + NB 2) | ✅ Session #18 — 3 src files + 1 test file + 1 live file + 2 existing test updates + `@modelcontextprotocol/sdk` peer-dep workaround (+32 unit tests) |
 | 2 | Vertex Imagen adapter | ✅ Session #19 — 4 src files + 1 unit file + 1 live file + 1 Zod schema + 1 typed error + registry wire + 2 integration test updates (+49 unit + 1 integration) |
-| 3 | Key management UI (KeySlotDropdown + KeyAddModal + Settings) | ⏳ Session #20 |
+| 3 | Key management UI (Modal primitive + KeyAddModal × 2 + KeysTable + TestButton + Settings) | ✅ Session #20 — 6 new src files (Modal + 4 under `components/keys/` + Settings page) + 4 small edits (App + TopNav + navigator + api hooks/client) + 0 new tests (no jsdom in repo) |
 | 4 | `/api/providers/health` live wiring + 60s cache | ⏳ Session #21 |
 | 5 | Cost tracking per asset + batch | ⏳ Session #22 |
 | 6 | Compatibility warning banner (client) | ⏳ Session #23 |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #24 |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #25 |
+
+## Completed in Session #20 (Phase 4 Step 3 — Key management UI)
+
+### Scope decisions locked Session #20 (4 Qs + 4 bonuses, all applied verbatim)
+
+- **Q1 — Modal primitive: CREATE `src/client/components/Modal.tsx`** (not extend `ConfirmDialog`). Reason: `ConfirmDialog` API is narrow (text body + 2 buttons); forms need flexible content. `Modal.tsx` is a generic primitive — backdrop + ESC dismiss + light focus-trap (Tab/Shift+Tab cycle within dialog) + ARIA role/dialog + aria-modal + aria-labelledby + size variants `sm | md | lg`. ~117 LOC. `ConfirmDialog` UNTOUCHED — refactoring it to compose Modal is orthogonal and Phase 5 territory.
+- **Q2 — Vertex file picker: plain `<input type="file" accept="application/json">`.** Native keyboard / screen-reader support + platform picker wins over a custom drop-zone for Session #20 scope. On file-select, client-side `JSON.parse` + Zod-parse via `VertexServiceAccountSchema` (imported from `@/core/schemas` — same schema the server re-validates with) BEFORE enabling the submit button. Inline error under input if invalid. Drop-zone UX deferred to Phase 5 polish.
+- **Q3 — Test button UX: inline spinner + status badge + TRANSITION toast.** Refined from "error-only toast": badge color-coded (ok=emerald, auth_error=red, quota_exceeded/rate_limited=amber, down=slate, unknown=slate). Toast fires only when: (a) status transitions between distinct codes across consecutive runs, OR (b) first-ever run returns a non-ok status. Same-state repeats = silent. First-run "ok" = silent (badge already shows latency). Network errors always toast with the error message. Badge has `title` tooltip with `message` field.
+- **Q4 — Settings routing: EXTEND `Page` union** to `"home" | "workflow" | "gallery" | "settings"`. Single `Settings.tsx` page mounted in `App.tsx`'s conditional render stack; `TopNav` gets a 4th `NavLink`. Matches existing prop-drill navigator pattern (Session #16). Drawer deferred — Phase 4 scope doesn't need that interaction model.
+
+### Pre-code alignment resolutions (bro-approved before first src file)
+
+- **BONUS A — Refresh on mutation via `refreshKey` bump** (not React Query; no new dep). `useKeys(refreshKey)` uses existing `useFetch` cache-bust pattern (`/api/keys?_=${refreshKey}`). `SettingsPage` owns `refreshKey` state; every mutation (create / activate / delete) calls `bumpRefresh()` after success. Parity with `useAssets(filter, refreshKey)` from Session #16.
+- **BONUS B — Active slot visually distinct.** Active row gets `bg-indigo-500/5 border-l-4 border-l-indigo-500` + `"Active"` uppercase pill (indigo on indigo). Inactive rows get transparent left-border (`border-l-4 border-l-transparent`) so row height doesn't jump on activation/deactivation. Amber banner if `slots.length > 0 && activeSlotId === null` — loud call-out that provider has orphaned keys.
+- **BONUS C — Delete confirmation via existing `ConfirmDialog`** (no new primitive). Body copy varies by active-state: active slot → "Provider will have no active key until you activate another"; non-active → plain "Delete slot '{label}'?". `danger` variant. Server's tri-state response (`204` non-active / `200` was-active with `warning`) surfaces as warning-toast if present.
+- **BONUS D — Gemini API key input: `type="password"` + `autoComplete="new-password"` + show/hide toggle.** Prevents screen-record leaks + browser autofill. `autoComplete="new-password"` is the canonical WHATWG value that disables credential managers for generic secret fields. Show-button toggles `type` between `password` ↔ `text` for verification UX. Vertex SA doesn't need this — the value lives in a file input, never displayed.
+
+### New src files (6 files, 851 LOC total, all under 300 hard cap)
+
+- **`src/client/components/Modal.tsx`** (117 LOC) — generic modal primitive. Backdrop-click + ESC dismiss (via window `keydown` listener during open); first-tabbable autofocus on open; Tab/Shift+Tab cycles within the dialog (skips disabled). `role="dialog"` + `aria-modal="true"` + `aria-labelledby="modal-title"`. Size variants `sm` (`max-w-sm`) / `md` (`max-w-md`) / `lg` (`max-w-2xl`). Optional `showCloseButton` (default true) for forced-choice dialogs.
+- **`src/client/components/keys/KeyAddModalGemini.tsx`** (141 LOC) — Gemini add form. Label + key text inputs; key input `type={showKey ? "text" : "password"}` with show/hide toggle; `autoComplete="new-password"` on key field; disabled submit when either is empty; submit → `createGeminiKey()` → `onCreated(slotId)` + modal close + reset. ApiError messages surfaced inline in red panel above buttons.
+- **`src/client/components/keys/KeyAddModalVertex.tsx`** (213 LOC) — Vertex add form. File input + label + projectId + location (default `us-central1`). On file-select: `File.text()` → `JSON.parse` → `VertexServiceAccountSchema.safeParse`; on success show parsed `client_email` in green + auto-populate `projectId` from `project_id` if field empty (user can override); on Zod failure show path + message in red; on JSON-parse failure show error. Submit builds `FormData` and hits `createVertexKey()`. Can't submit until file parses cleanly + all 3 text fields non-empty.
+- **`src/client/components/keys/KeysTable.tsx`** (194 LOC) — per-provider slot list. Shows label + slot id + (Vertex-only) projectId/location + `⚠ credentials file missing` when `hasCredentials=false` + added/lastUsed timestamps. Active-slot styling per Bonus B. Per-row: `TestButton` + conditional `Activate` + `Delete`. Delete routes through `ConfirmDialog` with contextual body copy per Bonus C. Empty state + orphaned-slots banner.
+- **`src/client/components/keys/TestButton.tsx`** (103 LOC) — per-row test button. Click → `testKey(slotId)` → store result in local state → render badge with status color + latency ("ok 412ms" format). Transition-toast logic: `prevStatus !== null && prevStatus !== result.status` → toast; `prevStatus === null && nowIsError` → first-run error toast; else silent. `warning` variant for quota_exceeded / rate_limited, `danger` for auth_error / down / generic, `success` for ok-after-error. ApiError always toasted.
+- **`src/client/pages/Settings.tsx`** (83 LOC) — page shell. Fetches `useKeys(refreshKey)`; renders loading/error/data branches; two `KeysTable` instances (gemini + vertex); owns `addOpen` state driving the two KeyAddModal variants; `onCreated` success toast with truncated slotId + hint to click Activate.
+
+### Src changes (5 existing files, minimal deltas)
+
+- **`src/client/api/client.ts`** — added `apiPostMultipart<T>(path, formData, opts?)` (skips `Content-Type` so browser sets the multipart boundary) + `apiDelete<T>(path, opts?)` (handles 204 vs JSON response; throws `ApiError` on 4xx/5xx with parsed payload).
+- **`src/client/api/hooks.ts`** — added `useKeys(refreshKey)` (parallel shape to `useAssets`) + `KeysListResponse` / `SlotCreatedResponse` / `SlotActivatedResponse` / `SlotDeletedResponse` / `SlotTestResponse` typed bodies + 5 mutation functions (`createGeminiKey`, `createVertexKey`, `activateKey`, `deleteKey`, `testKey`) wrapping the 4 existing `/api/keys` routes. `SlotTestResponse.status` typed as the 6-code HealthStatus union + `"unknown"` for forward-compat.
+- **`src/client/navigator.ts`** — `Page` union widened to include `"settings"`. No new params.
+- **`src/client/components/TopNav.tsx`** — 4th `NavLink` added for Settings.
+- **`src/client/App.tsx`** — `Settings` import + `{page === "settings" && <Settings showToast={show} />}` branch.
+
+### New test files
+
+- **None.** Project has no jsdom / testing-library; Session #16 established that client UI is verified via typecheck (`tsconfig.client.json`) + manual browser smoke documented in BOOTSTRAP QA gates. Adding jsdom here would introduce a new dev-dep and a whole test-infra surface for a 6-file Phase 4 step. Server-side endpoint coverage for `/api/keys` routes is already complete (17 integration tests in `keys-routes.test.ts`, including the Session #19 real-adapter Vertex + Gemini test-endpoint tests).
+
+### Existing test updates (0 files)
+
+- No tests touched. Regression holds at 460/460.
+
+### Doc changes
+
+- **`PHASE-STATUS.md`** (this edit) — Phase 4 Summary flips Step 3 to ✅, new Session #20 detailed entry, updated `currentPhase` + `lastUpdated`.
+
+### QA gate (Session #20 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 167 src files (was 161; +Modal +4 keys/* +Settings), 0 violations
+test: 460/460 pass (41 files; regression unchanged)
+  breakdown: unit 312 + integration 135 + extraction 13
+  prior:   460 (Session #19 baseline)
+  new:     +0 (no jsdom in repo; client-UI verified via typecheck + manual smoke)
+  live:    +0 (no new live tests; adapter surface unchanged)
+build: clean (vite bundle 310.68 kB / 90.51 kB gzip; up ~12 kB from Session #19 for new components)
+manual smoke (curl against real server + adapter):
+  POST /api/keys (Gemini) → 201 {slotId, provider:"gemini"}
+  POST /api/keys/:id/activate → 200 {activated:true}
+  GET /api/keys → 200 slot in gemini.slots + activeSlotId set
+  POST /api/keys/:id/test → 200 {status:"down", latencyMs, message:"API key not valid"} (fake key → real Gemini API HTTP 400 → mapped to "down")
+  DELETE /api/keys/:id (was-active) → 200 {deleted:true, deactivated:true, warning:"Active gemini slot removed"}
+  GET /api/keys (post-delete) → 200 empty slots + activeSlotId:null
+```
+
+### Deviations from plan
+
+- **Split KeyAddModal into TWO components (Gemini / Vertex), not one with a mode prop.** Handoff's "Vertex: multipart upload" vs "Gemini: text input" are different-enough form shapes + validation paths (JSON + Zod + File vs. plaintext string) that unified handling would add more branching than LOC saved. Each modal is under 220 LOC; together they're ~354 LOC vs an estimated ~280 for a unified one. Readability > LOC golf for forms.
+- **Color-coded status badge lives inline in `TestButton.tsx` via a local `STATUS_CLASS` map** (not added to `COLOR_CLASSES` design-tokens table). Rationale identical to Session #16's ConfirmDialog "disabled" decision: 5 health-status codes are orthogonal to the 5-variant color axis, and `design-tokens.test.ts` guards the 50-class table shape. Tailwind literal classes are static strings (Rule 1 satisfied).
+- **No Modal unit tests.** Project has zero jsdom footprint; adding it for one file pulls `jsdom` + `@testing-library/react` + config. Deferred.
+- **Vertex file parse uses `VertexServiceAccountSchema` re-imported on the client.** The schema lives in `@/core/schemas` so both server (Session #19 adapter) and client (this session's form) validate against the same shape. No drift. Browser is Node-free so `readFileSync` is not invoked — `File.text()` returns string via Web API. Fine.
+- **`apiDelete` returns `T | null`.** Server routes respond 204 (no content) for non-active delete and 200 JSON for active delete. Client returns `null` for 204 and parsed body for 200. Callers narrow via `res?.warning`. Less annoying than a union-type per-endpoint.
+
+### Known pending items (for Phase 4 Step 4 entry)
+
+1. **Manual browser click-through still pending bro.** Server-layer end-to-end smoke is green (create → activate → list → test → delete → verify empty via curl); the React UI was not clicked through here. Bro should spin `npm run dev`, hit `http://127.0.0.1:5173/`, click Settings → Add Gemini key → Activate → Test → Delete → verify toasts + badges fire as expected. Same flow for Vertex with a throwaway SA JSON.
+2. **Health cache + slot-rotation invalidation hook (Session #21 Step 4)** — client's new `refreshKey` bump only busts the keys list; the Phase 4 Step 4 `/providers/health` cache will also need invalidation on key-slot `activate` / `delete`. `slot-manager.activateSlot` / `removeSlot` are the fire points.
+3. **Vertex live smokes STILL UNCONFIRMED** (carry-over from Session #19). Bro can now add a Vertex slot via the UI itself instead of needing a seed script — nice side effect of Session #20.
+4. **`useKeys` / `createGeminiKey` / `createVertexKey` / `activateKey` / `deleteKey` / `testKey`** aren't React hooks in the strict sense (mutations are plain promise-returning functions). Kept simple on purpose — wrapping them in `useMutation`-style abstractions would require a state library. Current pattern mirrors `useFetch` + direct `apiPost` call-sites already used by `useWorkflowRun` (Session #16).
+5. **Phase 3 known pending #2-#7 still carried forward** (Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows). Phase 5 territory mostly.
+6. **BOOTSTRAP-PHASE4.md Step 2 SDK reference is stale** (`@google-cloud/vertexai@1.10.0` → should be `@google/genai@1.5.0 (vertexai: true)`). Still flagged for Phase 4 close (Session #25).
+
+## Next Session (#21) kickoff — Phase 4 Step 4 (`/api/providers/health` live wiring + 60s cache)
+
+1. Read this file (Session #20 entry) + `BOOTSTRAP-PHASE4.md` Step 4 + `MEMORY.md`. Verify baseline `npm run regression:full` = 460/460.
+2. Scope decisions for bro before coding:
+   - **Cache shape** — `Map<string, {status, expiresAt}>` keyed by `${providerId}:${modelId}`? TTL 60s per handoff.
+   - **Invalidation hook** — fire from `slot-manager.activateSlot` / `removeSlot` or from `/api/keys` route-layer after save? Former is closer to source; latter avoids coupling slot-manager to a cache module.
+   - **Query filter** — `?provider=X&model=Y` returns single flat HealthStatus vs default matrix. Confirm shape `{[providerId]: {[modelId]: status}}` for batch.
+   - **Stale-while-revalidate** — on cache miss for mid-UI polls, return stale + kick async refresh, or always block on fresh probe? Former is smoother UX but more infra.
+3. Est 2-3h. Expected regression: 460 → ~470 (+health cache unit + integration tests).
+
+**Carry-over from Session #20:**
+- `Modal.tsx` primitive is reusable — Phase 5 replay-UI / profile editor / asset detail re-rendering will compose it.
+- `apiDelete` / `apiPostMultipart` helpers added to `client.ts` — future multipart endpoints (profile-assets upload is already there server-side) can use these directly.
+- `refreshKey` bump pattern for useFetch-backed hooks is now the standard refresh mechanism (2 sites: Gallery `useAssets`, Settings `useKeys`).
+
+---
 
 ## Completed in Session #19 (Phase 4 Step 2 — Vertex Imagen adapter)
 
