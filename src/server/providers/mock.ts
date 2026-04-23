@@ -15,7 +15,19 @@ import type {
 import { encodeSolidPng } from "./mock-png-encoder"
 
 const MOCK_IMAGE_SIZE = 1024
-const MOCK_DELAY_MS = 20
+
+// Session #17 Q1 — env-configurable so manual browser cancel-tests can
+// slow Mock down. Default 0 (integration tests finish instantly); set
+// MOCK_DELAY_MS=1500 in .env.local to simulate real provider latency.
+// Read per-call so tests can toggle between cases in the same process.
+// Invalid/negative values clamp to 0.
+function resolveMockDelayMs(): number {
+  const raw = process.env["MOCK_DELAY_MS"]
+  if (raw === undefined) return 0
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return 0
+  return parsed
+}
 
 function colorFromPrompt(prompt: string): [number, number, number] {
   const hash = createHash("sha256").update(prompt, "utf8").digest()
@@ -59,7 +71,7 @@ export const mockProvider: ImageProvider = {
 
   async generate(params: GenerateParams): Promise<GenerateResult> {
     const start = Date.now()
-    await sleep(MOCK_DELAY_MS, params.abortSignal)
+    await sleep(resolveMockDelayMs(), params.abortSignal)
     const [r, g, b] = colorFromPrompt(params.prompt)
     const imageBytes = encodeSolidPng(MOCK_IMAGE_SIZE, MOCK_IMAGE_SIZE, r, g, b)
     const result: GenerateResult = {

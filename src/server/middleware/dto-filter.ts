@@ -9,13 +9,36 @@ import { createLogger } from "@/core/shared/logger"
 
 const logger = createLogger()
 
-const BANNED_KEYS: ReadonlySet<string> = new Set([
+// Session #17 Q3 — banned response keys. Extended from 6 to 20 entries to
+// cover every known leak vector per PLAN §6.4 + Rule 11. Exported so the
+// dto-no-paths-full integration test audits the SAME set the middleware
+// enforces (single source of truth, no drift).
+export const BANNED_KEYS: ReadonlySet<string> = new Set([
+  // Generic filesystem path fields
   "file_path",
   "filePath",
+  // Auth material (paths, ciphertext, raw)
   "service_account_path",
   "serviceAccountPath",
+  "service_account_json",
+  "serviceAccountJson",
   "key_encrypted",
   "keyEncrypted",
+  "api_key",
+  "apiKey",
+  "credentials",
+  // Profile-asset paths (all 3 kinds) — Rule 11 + Rule 13
+  "app_logo_path",
+  "appLogoPath",
+  "store_badge_path",
+  "storeBadgePath",
+  "screenshot_path",
+  "screenshotPath",
+  "screenshot_paths",
+  "screenshotPaths",
+  // Replay payload raw leak (Phase 5 surface, pre-audited)
+  "replay_payload_raw",
+  "replayPayloadRaw",
 ])
 
 function findBannedKey(node: unknown, path = "$"): string | null {

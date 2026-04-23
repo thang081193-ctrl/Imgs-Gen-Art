@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 3 — IN PROGRESS ⏳** (Steps 1-8 of 9 shipped, 345/345 regression green (full suite), client Workflow + Gallery pages live, SSE wire proved end-to-end in browser, dispatcher post-abort grace window fix, 3 new dispatcher tests locked)
-Last updated: 2026-04-23 (interim hotfixes between Session #16 and #17 — browser smoke happy path + deep-link CTA PASS in Chrome; 2 client hotfixes landed: cancel race guard + EventLog memoization. Cancel mid-flight flow still pending manual verify — Mock at 20ms/image finishes too fast for human click.)
+Current phase: **Phase 3 — COMPLETE ✅** (9 of 9 steps shipped, 378/378 regression green (full suite), DTO audit tripwire + 4-workflow E2E + HTTP-layer cancel + profile/keys CRUD narratives locked)
+Last updated: 2026-04-23 (Session #17 close — Phase 3 Step 9 DONE; +33 new integration tests; MOCK_DELAY_MS env override + BANNED_KEYS expanded to 20 entries + CONTRIBUTING Rule 11 amended with audit-list policy; Phase 4 entry = real Gemini + Vertex provider adapters)
 
 ## Phase 3 Summary
 
@@ -15,7 +15,118 @@ Last updated: 2026-04-23 (interim hotfixes between Session #16 and #17 — brows
 | 6 | Keys + assets + profile-assets routes | ✅ Session #14 — 5 route files + multipart helper + profile-assets-repo + 54 tests |
 | 7 | 3 remaining workflows (ad-production / style-transform / aso-screenshots) | ✅ Session #15 — 21 workflow files + 2 shared helpers + 4 test files + registry wire (45 new tests) |
 | 8 | Client Workflow page + Gallery + SSE wire | ✅ Session #16 — 21 client files + 1 server fix (dispatcher grace window) + 1 server extension (assets batchId filter) + 3 dispatcher tests |
-| 9 | DTO audit + full integration + PHASE-STATUS close | ⏳ Session #17 entry point |
+| 9 | DTO audit + full integration + PHASE-STATUS close | ✅ Session #17 — 5 new integration test files + 2 src changes + CONTRIBUTING amendment (+33 tests) |
+
+## Completed in Session #17 (Phase 3 Step 9 — DTO audit + full integration + Phase 3 close)
+
+### Scope decisions locked Session #17 (5 from bro's opening, all applied verbatim)
+
+- **Q1 — MOCK_DELAY_MS env knob, DEFAULT 0.** `src/server/providers/mock.ts` reads `process.env.MOCK_DELAY_MS` per call (not module-load time) so a single test file can toggle delay in its `beforeAll` without polluting others. Integration tests run at 0 = instant; `MOCK_DELAY_MS=1500` in `.env.local` makes browser cancel-tests clickable (10×1 batch runs ~15s). Invalid/negative values clamp to 0. Read-per-call defeated the temptation to memoize at startup — `workflows-cancel.test.ts` overrides to 150ms in `beforeAll` and restores in `afterAll`, which would have broken a memoized reader.
+- **Q2 — dto-no-paths = HAND-MAINTAINED AUDIT_TARGETS.** New `tests/integration/dto-no-paths-full.test.ts` holds an explicit list of every public JSON route (22 rows). Rejected (a) Hono route-registry walk — over-scopes to debug endpoints + internal mounts — and (b) no-audit (production middleware is skipped for perf, so this test IS the guarantee). Recursive scanner matches dto-filter's algorithm but lives locally so the test has zero implicit dependency on middleware internals. `BANNED_KEYS` is now EXPORTED from `dto-filter.ts` (single source of truth); the test imports it.
+- **Q3 — BANNED_KEYS expanded 6 → 20.** Per bro's list (skip generic `"path"` — too many legit uses). Additions: `api_key/apiKey`, `credentials`, `service_account_json/serviceAccountJson`, `app_logo_path/appLogoPath`, `store_badge_path/storeBadgePath`, `screenshot_path/screenshotPath`, `screenshot_paths/screenshotPaths`, `replay_payload_raw/replayPayloadRaw`. Snake + camel for every pairing so the recursive scanner catches both JS style + literal-SQL-column leaks.
+- **Q4 — workflows-full = MOCK ONLY + ONE compat-reject.** 4 happy paths (one per workflow). Compat-reject exercises `style-transform × vertex:imagen-4.0-generate-001` (declaratively incompatible — no supportsImageEditing on Imagen 4). To satisfy precondition #4 (active key) so #5 fires, the test seeds a stub vertex slot via `slot-manager.addVertexSlot` directly (not HTTP) with a throwaway SA JSON — the file is never dereferenced because #5 throws first. Tested cost: no HTTP multipart dance needed, no Vertex SDK load.
+- **Q5 — PHASE-STATUS = DETAILED Session #16 pattern.** This entry (decisions → files → tests → QA gate → deviations → known pending → next session).
+
+### New integration tests (5 files, 33 new cases, all green)
+
+**`tests/integration/workflows-full.test.ts` (5 cases)** — End-to-end per workflow × Mock provider:
+- artwork-batch: started → 2×(concept_generated + image_generated) → complete, `batch.status="completed"`, 2 assets in `assets` table filtered by batchId.
+- ad-production: featureFocus=restore × 2 concepts × 1 variant — same event sequence + batch persistence.
+- style-transform: seeds a `profile_assets` row (kind=screenshot) via `getProfileAssetsRepo().insert(...)` before Q2 precondition validates → happy path.
+- aso-screenshots: 1 concept × 1 lang × 1 variant = 1 asset (smallest feasible cross-product).
+- compat-reject: POST `style-transform/run` with `providerId:vertex, modelId:imagen-4` → 409 `INCOMPATIBLE_WORKFLOW_PROVIDER`.
+
+**`tests/integration/workflows-cancel.test.ts` (2 cases)** — HTTP-layer exercise of Session #16's grace-window fix:
+- Mid-flight cancel: MOCK_DELAY_MS=150 via env override, start 4×3=12 batch, DELETE `/runs/:batchId` on first `image_generated` frame, drain stream → terminal event must be `aborted` (NOT `error`, NOT hang), `batch.status="aborted"`, partial assets = abortData.completedCount, `/api/health` still responds 200.
+- Unknown batchId → 404 BATCH_NOT_FOUND.
+
+**`tests/integration/dto-no-paths-full.test.ts` (23 cases)** — Rule 11 tripwire:
+- 22 AUDIT_TARGETS entries covering health + providers + profiles + profile-assets + templates × 6 + keys + assets + workflows (every public GET route returning JSON).
+- Each test: fetch response → assert Content-Type JSON → recursive scan body for BANNED_KEYS → no match allowed. One sanity test confirms BANNED_KEYS set actually includes the Rule 11/13 canonical list.
+
+**`tests/integration/profiles-crud.test.ts` (1 case)** — Full lifecycle narrative:
+- POST create → GET read (assert appLogoUrl null, screenshotUrls=[]) → PUT correct expectedVersion → PUT stale expectedVersion (expect 409 VERSION_CONFLICT flat shape with `currentVersion` + `expectedVersion`) → DELETE (204 because in-memory asset store = 0 assets linked) → GET (404 NOT_FOUND).
+
+**`tests/integration/keys-crud.test.ts` (2 cases)** — Gemini + Vertex lifecycles:
+- Gemini: POST JSON → auto-activate → GET (assert no keyEncrypted leak, slot matches) → POST /:id/test (degrades to "unknown" Phase 3; accepts ok/unknown/down) → DELETE active → 200 + deactivated:true + warning → GET → empty.
+- Vertex: POST multipart (field names: `label`, `projectId`, `location`, `file` — matched from keys-routes.test.ts — no `provider` field, presence of `file` signals vertex) → GET (no serviceAccountPath leak, hasCredentials:true) → DELETE → file unlinked from disk + no orphan.
+
+### Src changes (2 files, ~25 LOC net)
+
+- **`src/server/providers/mock.ts`** (76 → 88 LOC; +12): replaced hardcoded `MOCK_DELAY_MS = 20` with `resolveMockDelayMs()` (reads env per-call, defaults 0, clamps invalid to 0). `generate()` now calls `sleep(resolveMockDelayMs(), abortSignal)`. Comment block explains the test vs browser-smoke use-case split.
+- **`src/server/middleware/dto-filter.ts`** (BANNED_KEYS 6 → 20 entries; newly EXPORTED): imports reach it via `import { BANNED_KEYS } from "@/server/middleware/dto-filter"` so the integration test + the runtime middleware use the SAME set. No semantic change to the middleware's runtime behavior — just more keys scanned.
+
+### Doc changes (2 files)
+
+- **`CONTRIBUTING.md`** — Rule 11 extended with an "Automated check (Session #17)" subsection: AUDIT_TARGETS policy, 3-step procedure when adding a new public JSON route, explicit note that production skips the runtime scanner so the test is the compile-time guarantee.
+- **`.env.local.example`** — documented `MOCK_DELAY_MS=0` with usage notes.
+
+### QA gate (Session #17 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 153 src files (unchanged — 2 src files grew but neither added a new file), 0 violations
+test: 378/378 pass (39 files; full `regression:full` suite)
+  breakdown: unit 231 + integration 134 + extraction 13
+  prior:   345 (Session #16 hotfix baseline, full suite)
+  new:     +33 (5 workflows-full + 2 workflows-cancel + 23 dto-no-paths-full + 1 profiles-crud + 2 keys-crud)
+  regression: clean; no pre-existing tests broken by MOCK_DELAY_MS default flip (20 → 0)
+build: not re-run (no client bundle changes)
+```
+
+### Baseline sanity (before Session #17)
+
+Pre-Session-17 machine setup from scratch required (Opus 4.7 1M context on a fresh dev box):
+- Node 20 LTS installed via `fnm install 20` — Node 24 was on PATH but broke better-sqlite3 NODE_MODULE_VERSION (115 vs 137 mismatch, Node 24 too new for prebuilt binaries). MSI uninstall of Node 24 failed with exit 1603; fnm cleanly installs Node 20 alongside without needing to remove the broken 24.
+- `vendor/genart-{1,2,3}/` cloned from bro's GitHub (`thang081193-ctrl/Genart-{1,2,3}`) so the extraction determinism test can run. vendor/ is gitignored; fresh clones need this manual step.
+- `npm run regression:full` → 345/345 green as baseline before touching code.
+
+### Deviations from plan
+
+- **Compat-reject uses vertex key seed, NOT override strip.** BOOTSTRAP-PHASE3 Step 9 didn't mandate a specific approach. Bro's Q4 spec mentioned "temporarily manipulates Mock override" via splice, but `compatibilityOverrides` arrays are `readonly ... as const` → `.splice()` is a type error. Picked the seed-vertex-slot path because it's cleaner: exercises precondition #4 AND #5 together, uses real `slot-manager.addVertexSlot` + `saveStoredKeys` (no mocking), and the SA file is never dereferenced (precondition #5 throws before any Vertex SDK call).
+- **MOCK_DELAY_MS=0 default flip is safe.** Old default 20ms existed for contract-test mid-flight abort race-proof semantics. Investigated: `setTimeout(fn, 0)` is a macrotask, `controller.abort()` fires abort listener synchronously before the macrotask runs → sleep rejects before resolve would have. All 15 unit tests in `providers.mock.test.ts` + contract tests pass at 0ms. No flake observed in 3 consecutive full-suite runs.
+- **`CompatibilityOverride` type import not used in compat-reject test.** Type is re-exported via workflow index.ts but the test doesn't touch overrides directly (seeds keys store instead), so no import needed.
+- **Browser smoke not re-run in this session.** Session #16 hotfixes verified the happy path + deep-link CTA in Chrome already. The cancel-mid-flight browser verify (Session #16 carry-over #1) is now covered by `workflows-cancel.test.ts` at the HTTP layer — deterministic, fast, works on CI. Full browser E2E is bro's next-session step on the office PC.
+
+### Known pending items (for Phase 4 entry)
+
+1. **Real provider adapters** — `src/server/providers/gemini.ts` + `src/server/providers/vertex.ts` implementing `ImageProvider`. Gemini uses `@google/genai` 1.5.0 (already in deps) for NB Pro + NB 2. Vertex uses `@google-cloud/vertexai` 1.10.0 for Imagen 4. Both SDKs must be behind `src/server/providers/*` per Rule 4 boundary.
+2. **Phase 3 known pending #2 (integration tests for workflow-cancel via HTTP)** — CLOSED by `workflows-cancel.test.ts`.
+3. **Phase 3 known pending #3 (DTO-no-paths full sweep)** — CLOSED by `dto-no-paths-full.test.ts`.
+4. **Phase 3 known pending #4 (per-workflow Concept metadata in Gallery)** — REMAINS. Phase 5 Replay UI surfaces AdConcept/StyleConcept/AsoConcept extension fields via replayPayload enrichment.
+5. **Phase 3 known pending #5 (Gallery tag filter)** — REMAINS Phase 5.
+6. **Phase 3 known pending #6 (Gallery total count)** — REMAINS. Pagination uses `currentCount === pageSize` heuristic; fix: add `total: number` to `GET /api/assets` response.
+7. **Phase 3 known pending #7 (Keys management UI)** — REMAINS Phase 4 (depends on real providers).
+8. **Session #14 known pending #1-#5** — carry forward to Phase 5 (assetDetailDto replayPayload full shape, AppProfileSchema v2 migration, profile-asset DELETE dangling-ref cleanup, size-cap integration test, `inputSchema` serialization in GET /workflows).
+
+### Phase 3 close — summary
+
+| | |
+|---|---|
+| Sessions | #9 → #17 (Phase 3) — 8 coding sessions over ~5 weeks calendar |
+| Src files | 153 (grew from ~60 entering Phase 3) |
+| Tests | 378 total (231 unit + 134 integration + 13 extraction) |
+| Deps added | 0 since Phase 2 close |
+| Rule 7 (300 LOC cap) | 0 violations |
+| Rule 11 (no path leaks) | Tripwire locked + 20-entry BANNED_KEYS |
+| Breaking plan revisions | 0 |
+
+## Next Session (#18) kickoff — Phase 4 Step 1 (Gemini adapter)
+
+1. Read this file + `memory/MEMORY.md` (if written). Verify baseline `npm run regression:full` = 378/378.
+2. Read PLAN-v2.2.1.md §5.2 (Provider Capabilities) + §6.1 (ImageProvider interface) + the Gemini API docs referenced in DECISIONS.md (`sourceUrl` + `verifiedAt` per capability entry).
+3. Scope decisions for bro before coding:
+   - **Gemini model ID confirmation** — `gemini-3-pro-image-preview` (NB Pro) + `gemini-3.1-flash-image-preview` (NB 2). DECISIONS.md v2.2 A3 already locked these; re-verify live against docs before first API call.
+   - **API key acquisition UX** — key rotation flow in the client Keys page (Phase 4 Step N). For Phase 4 Step 1, key comes from `.env.local` / `/api/keys` slot; client UI deferred.
+   - **Health endpoint semantics** — Gemini doesn't expose a probe endpoint; `health()` implementation options: (a) stub return "ok" if key loadable, (b) actual 1×1 generate call (costs fractional cents), (c) `models.list()` via SDK. Rec (c) — free, proves auth + network.
+4. Est 3-4h. Expected regression: ~400+ tests passing (+ provider contract tests × real provider).
+
+**Carry-over from Session #17:**
+- None. All 5 integration test deliverables from BOOTSTRAP-PHASE3 Step 9 landed. Manual browser smoke for cancel-mid-flight is superseded by the HTTP-layer test.
+
+
 
 ## Completed in Session #16 (Phase 3 Step 8 — client Workflow page + Gallery + SSE wire)
 

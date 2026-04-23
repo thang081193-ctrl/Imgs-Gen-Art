@@ -320,6 +320,15 @@ app.get("/assets/:id/file", async (c) => {
 })
 ```
 
+**Automated check (Session #17):** `tests/integration/dto-no-paths-full.test.ts` holds a hand-maintained `AUDIT_TARGETS` list of every public GET route that returns JSON. On each target, the test fetches the response and recursively scans for `BANNED_KEYS` (exported from `src/server/middleware/dto-filter.ts` — same set the runtime middleware enforces, single source of truth).
+
+**When adding a new public JSON route:**
+1. Register it in `src/server/app.ts` and its per-route subapp.
+2. Add an `AuditTarget` row to `AUDIT_TARGETS` in `dto-no-paths-full.test.ts`.
+3. If your route legitimately needs to expose a new path-like field (e.g. public URL), submit a PR note explaining why and ensure the DTO mapper emits a URL (`/api/...`) not a filesystem path.
+
+Adding a route without a matching `AUDIT_TARGETS` entry defeats the tripwire — the runtime scanner in `dto-filter` middleware is dev-mode only (skipped in production for perf), so the integration test is our compile-time guarantee the middleware WOULD catch a leak if it ran.
+
 ---
 
 ### Rule 12 — Extractor must fail-fast (NEW in v2.1)
