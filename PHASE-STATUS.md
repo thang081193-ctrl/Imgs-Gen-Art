@@ -1,20 +1,112 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 4 — IN PROGRESS ⏳** (1 of 8 steps shipped; Gemini adapter live w/ lazy-import SDK, client cache, safety-filter typed error, gated live smokes; 410/410 regression green)
-Last updated: 2026-04-23 (Session #18 close — Phase 4 Step 1 DONE; Gemini NB Pro + NB 2 adapter shipped as file trio (gemini + errors + extract), 32 new unit tests against mocked SDK, 5 live smokes gated by GEMINI_API_KEY, 2 integration tests updated to match Phase 4 reality; `@modelcontextprotocol/sdk@1.29.0` installed as devDep (peer of `@google/genai` range `^1.11.0`) AND lazy dynamic import retained as defensive fallback against upstream SDK bug recurrence)
+Current phase: **Phase 4 — IN PROGRESS ⏳** (2 of 8 steps shipped; Gemini + Vertex Imagen adapters both live via `@google/genai` unified SDK, slot-manager resolution, gated live smokes; 460/460 regression green)
+Last updated: 2026-04-23 (Session #19 close — Phase 4 Step 2 DONE; Vertex Imagen adapter shipped as file quartet (vertex-imagen + vertex-auth + vertex-errors + vertex-extract), 49 new unit tests against mocked SDK, 5 gated live smokes (health + generate + pre-abort + deterministic seed pair), 1 new integration case for POST /keys/:id/test vertex flow, SDK pivot locked to `@google/genai` in `vertexai: true` mode (NOT `@google-cloud/vertexai` — blocker discovered mid-session, see Deviations))
 
 ## Phase 4 Summary
 
 | Step | Title | Status |
 |---|---|---|
 | 1 | Gemini adapter (NB Pro + NB 2) | ✅ Session #18 — 3 src files + 1 test file + 1 live file + 2 existing test updates + `@modelcontextprotocol/sdk` peer-dep workaround (+32 unit tests) |
-| 2 | Vertex Imagen adapter | ⏳ Session #19 |
+| 2 | Vertex Imagen adapter | ✅ Session #19 — 4 src files + 1 unit file + 1 live file + 1 Zod schema + 1 typed error + registry wire + 2 integration test updates (+49 unit + 1 integration) |
 | 3 | Key management UI (KeySlotDropdown + KeyAddModal + Settings) | ⏳ Session #20 |
 | 4 | `/api/providers/health` live wiring + 60s cache | ⏳ Session #21 |
 | 5 | Cost tracking per asset + batch | ⏳ Session #22 |
 | 6 | Compatibility warning banner (client) | ⏳ Session #23 |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ⏳ Session #24 |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ⏳ Session #25 |
+
+## Completed in Session #19 (Phase 4 Step 2 — Vertex Imagen adapter)
+
+### Scope decisions locked Session #19 (3 + 3 bonuses, all applied verbatim)
+
+- **Q1 — SA loading: Option (a) `resolveServiceAccount` mirror Gemini.** Lives in `src/server/providers/vertex-auth.ts` (split from the adapter to stay under 300 LOC + testable in isolation). Priority: `context.serviceAccount` (bypass for `POST /keys/:id/test`) → active Vertex slot from `loadStoredKeys()` → `readFileSync(slot.serviceAccountPath)` → `JSON.parse` → `VertexServiceAccountSchema.safeParse` → slot wins as projectId/location source-of-truth (BONUS B). Three typed errors: `NoActiveKeyError` (no slot), `ServiceAccountFileMissingError` (ENOENT — NEW subclass of `ProviderError`), `ProviderError` (parse / schema failures).
+- **Q2 — Deterministic seed test: CONFIRM + counter-check.** `tests/live/providers.vertex-live.test.ts` ships 2 gated deterministic tests: (a) same seed + `addWatermark:false` → byte-identical output via `Buffer.compare === 0`; (b) different seed → bytes differ. Heavily gated by BOTH `VERTEX_PROJECT_ID` + `VERTEX_SA_PATH` — partial env = skip, zero cost. Budget: 4×$0.04 = $0.16 per full live run (plus 1× happy generate = $0.04). Total live budget: ~$0.20. Document pending live-run confirmation once bro has keys.
+- **Q3 — Language: PASS-THROUGH, conditional spread.** Adapter uses `Record<string, unknown>` config (same pattern as Gemini) to bypass SDK's narrow `ImagePromptLanguage` enum (5 values: auto/en/ja/ko/hi) vs. the registry's declared 11 values (en/zh/zh-CN/zh-TW/fr/de/hi/ja/ko/pt/es). Precondition-check already filters out-of-registry langs upstream. `if (params.language) config["language"] = params.language` → undefined omits the field entirely → SDK auto-detects from prompt.
+
+### Pre-code alignment resolutions (bro-approved before first src file)
+
+- **BONUS A — Token expiration.** `@google/genai` internally uses `google-auth-library` ADC which auto-refreshes bearer tokens on 401. Phase 4 batches typically <1h so rarely hit expiration mid-flight. No explicit retry code in adapter — SDK handles transparently. Document behavior as-observed after live smokes run.
+- **BONUS B — projectId source of truth: SLOT WINS.** On slot creation via `POST /api/keys` multipart, the route already validates `body.projectId` matches `saFile.project_id` (Session #14 behavior). At runtime, both guaranteed same; adapter reads `slot.projectId` — single source, no file re-parse overhead. Context-flow falls back to `credentials.project_id` since there's no slot to read.
+- **BONUS C — Location default `us-central1`.** `DEFAULT_LOCATION` const in `vertex-auth.ts`. Slot-stored value wins if non-empty; `us-central1` fills in for context flow + empty-slot-location defensive case. Multi-region support deferred to Phase 5+ if demanded.
+
+### New src files (4 files, 572 LOC total, all under 300 hard cap)
+
+- **`src/server/providers/vertex-imagen.ts`** (217 LOC) — the adapter itself. `vertexImagenProvider: ImageProvider` singleton. Module-level `logAdapterInit()` once-guard (`sdkMode: "vertexai"` in the log meta). `clientCache: Map<string, GoogleGenAIClass>` keyed by `${projectId}|${location}|${client_email}` fingerprint — SA swap or slot rotation produces fresh client. `sdkModulePromise` memoized dynamic import, separate from Gemini's (module-scoped) so resetting one cache doesn't invalidate the other. `getClient({credentials, projectId, location})` calls `new GoogleGenAI({vertexai: true, project, location, googleAuthOptions: {credentials}})`. `health()` delegates auth probe to `models.list()` (Imagen is a publisher model, not in user's tuned-models list, so we only verify the list call succeeds — "ok" signal = auth + project access). `generate()` calls `models.generateImages({model, prompt, config})` with config = `{numberOfImages:1, aspectRatio, addWatermark, abortSignal?, seed?, language?}` (all fields conditional-spread, no undefined leaked into SDK payload). `_resetClientCacheForTests` exported.
+- **`src/server/providers/vertex-auth.ts`** (115 LOC) — `resolveServiceAccount(context?)` + `ResolvedServiceAccount` type + `DEFAULT_LOCATION` const. Q1 implementation, isolated from the adapter so unit tests can hit the real `fs.readFileSync` + `JSON.parse` + Zod paths without pulling the @google/genai lazy-import. Guards: `context.serviceAccount` missing project_id → `ProviderError`; slot-file ENOENT → `ServiceAccountFileMissingError`; malformed JSON → `ProviderError("not valid JSON")`; failed Zod schema → `ProviderError("schema validation")` with `zodIssues` array in details.
+- **`src/server/providers/vertex-errors.ts`** (137 LOC) — SDK-error → typed-error translation. Shape-compatible with `gemini-errors.ts` but branded `providerId: "vertex"` and adds 2 google.rpc.Status branches (UNAUTHENTICATED → auth_error, RESOURCE_EXHAUSTED → quota_exceeded) on top of numeric HTTP codes. `ServiceAccountFileMissingError` short-circuits to `auth_error` in `mapSdkErrorToHealthStatus` so the "your SA file is gone" state surfaces loudly instead of falling through to generic "down".
+- **`src/server/providers/vertex-extract.ts`** (103 LOC) — `extractImageFromResponse()` for Imagen's response shape (`response.generatedImages[].image.imageBytes`, NOT Gemini's `candidates[].content.parts[].inlineData`). 4 failure modes: empty `generatedImages` → `ProviderError`; `raiFilteredReason` on first entry → `SafetyFilterError` (Imagen's RAI filter produces entries with NO imageBytes + a reason string — guard before checking bytes); missing `imageBytes` → `ProviderError`; unsupported mimeType → `ProviderError`. Reuses `readPngDimensions` via `import { readPngDimensions } from "./gemini-extract"` (that module has zero SDK coupling — safe sibling import).
+
+### Src changes (4 existing files)
+
+- **`src/core/shared/errors.ts`** — added `ServiceAccountFileMissingError` subclass of `ProviderError`. Fixed `providerId: "vertex"` + `sdkCode: "SA_FILE_MISSING"` + `slotId` + `expectedPath` in details. Still a 502 via the ProviderError base (operational upstream-auth failure).
+- **`src/core/schemas/index.ts`** — re-exports `./vertex-service-account`.
+- **`src/server/providers/registry.ts`** — `vertexImagenProvider` joins the registry Map alongside `mockProvider` + `geminiProvider`. All 3 real-ish providers registered for Phase 4.
+- **`src/server/providers/index.ts`** — switched from `export * from "./gemini"` / `export * from "./vertex-imagen"` to explicit named re-exports (`geminiProvider`, `vertexImagenProvider`) to avoid the `_resetClientCacheForTests` name collision both adapters declare. Test files import the test-affordances via the specific module path directly.
+
+### New test files (2 files, 653 LOC total)
+
+- **`tests/unit/providers.vertex-imagen.test.ts`** (539 LOC, 49 tests) — hoisted `vi.mock("@google/genai", ...)` exposes `generateImages` + `list` + constructor spies. Real tmpdir SA fixture (mkdtempSync + writeFileSync in beforeAll + rmSync in afterAll) exercises the actual `readFileSync` + `JSON.parse` + Zod paths — no fs mocking. Breakdown: contract × 5 + capability × 1 + client caching × 3 (reuse / SA swap / constructor opts assertion) + health flows × 5 (ok / unknown modelId → down / abortSignal propagation / no-slot auth_error via vi.resetModules + doMock / SA-file-missing auth_error via vi.resetModules + doMock) + generate wiring × 9 (abortSignal / seed / providerSpecificParams.addWatermark:false / default watermark:true / language pass-through / language omit when undefined / aspectRatio + numberOfImages:1 / ProviderError wrap / NoActiveKeyError via fresh-module-import) + vertex-auth × 6 (context happy / context missing project_id → ProviderError / slot happy / file missing → ServiceAccountFileMissingError / JSON parse fail → ProviderError / Zod fail → ProviderError) + extract × 5 (valid / raiFilteredReason → SafetyFilterError / empty generatedImages / missing imageBytes / unsupported mime) + error-map × 9 (5 HTTP codes + 2 rpcStatus + SA-missing short-circuit + ISO checkedAt) + mapSdkErrorToThrown × 6 (AbortError / ProviderError / SafetyFilterError / ServiceAccountFileMissingError pass-through + generic wrap + rpcStatus wrap). Every `vi.resetModules` path pairs `fresh import("@/server/providers/...")` with `fresh import("@/core/shared/errors")` so `instanceof` assertions check class identity from the same module graph.
+- **`tests/live/providers.vertex-live.test.ts`** (114 LOC, 5 tests) — `describe.skipIf(!HAS_ENV)` where `HAS_ENV = VERTEX_PROJECT_ID && VERTEX_SA_PATH`. Tests: health() ok (30s), happy-path generate (60s), pre-abort rejects (5s), deterministic seed pair (90s each × 2 = $0.16 budget). `VERTEX_LOCATION` env var optional (defaults `us-central1`).
+
+### Existing test updates (2 files)
+
+- **`tests/integration/app.test.ts`** — `"returns full catalog with registered providers"`: `registeredProviderIds` assertion widened to `arrayContaining(["mock", "gemini", "vertex"])` + explicit `toHaveLength(3)` guard. Session #18's `not.toContain("vertex")` guard removed now that the registry includes all 3.
+- **`tests/integration/keys-routes.test.ts`** — added 1 new case under `POST /api/keys/:id/test — Session #14 Q8 + wiring`: `"returns full response shape against the real vertex adapter (Phase 4 Step 2)"`. Creates a Vertex slot via the existing multipart flow with a throwaway SA JSON, then POSTs `/test` → expects 200 + `status ∈ {auth_error, rate_limited, quota_exceeded, down}` (fake SA never authenticates, so "ok" excluded) + `modelId` defaulted from `modelsByProvider("vertex")[0]` + ISO checkedAt. Tests end-to-end: multipart upload → slot persist → adapter probe → DTO mapping.
+
+### Doc changes
+
+- **`PHASE-STATUS.md`** (this edit) — Phase 4 Summary flips Step 2 to ✅, new Session #19 detailed entry, updated currentPhase + lastUpdated + regression count (410 → 460).
+
+### QA gate (Session #19 final)
+
+```
+lint: clean
+typecheck:server: 0 errors
+typecheck:client: 0 errors
+check-loc: 161 src files (was 156; +vertex-imagen +vertex-auth +vertex-errors +vertex-extract +vertex-service-account schema), 0 violations
+test: 460/460 pass (41 files; full regression)
+  breakdown: unit 312 (+49) + integration 135 (+1) + extraction 13
+  prior:   410 (Session #18 baseline)
+  new:     +49 unit (tests/unit/providers.vertex-imagen.test.ts) + 1 integration (keys-routes Vertex /test)
+  live:    +5 gated (tests/live/providers.vertex-live.test.ts — skip without VERTEX_PROJECT_ID + VERTEX_SA_PATH)
+  regression: clean; 2 existing integration tests updated for Phase 4 Step 2 reality (app.test.ts + keys-routes.test.ts)
+build: not re-run (no client bundle changes)
+```
+
+### Deviations from plan
+
+- **SDK pivot: `@google-cloud/vertexai@1.10.0` → `@google/genai@1.5.0` (Vertex mode).** BOOTSTRAP-PHASE4.md Step 2 line 89 + bro's Session #19 kickoff both named `@google-cloud/vertexai@1.10.0`. Grepping the installed package (`node_modules/@google-cloud/vertexai/build/src/`) revealed it has NO Imagen surface — exports only `VertexAI.preview.getGenerativeModel(...)` for Gemini-on-Vertex (chat/multimodal), zero `generateImages` / `predictImage` / `publishers/google/models/imagen-*:predict` API. The `imageCount` field in that SDK is metadata token-counting for image INPUTS, not generation. Options presented to bro: (A) pivot to `@google/genai` with `vertexai: true` flag — same SDK as Gemini adapter, `client.models.generateImages({model, prompt, config})` explicitly documented for Imagen on Vertex, zero new deps, unified error-map codebase, MCP peer already installed; (B) `@google-cloud/aiplatform` PredictServiceClient — heavyweight gRPC + ~50MB deps; (C) direct REST + `google-auth-library` — lightest but self-managed HTTP + retry. **Bro locked (A).** Implementation uses typed `import type { GoogleGenAI as GoogleGenAIClass } from "@google/genai"` + lazy `import("@google/genai")` dynamic — SAME pattern as gemini.ts (including MCP-peer-dep defensive fallback). `new GoogleGenAI({vertexai: true, project, location, googleAuthOptions: {credentials}})` is the Vertex construction path documented in the SDK's `GoogleGenAIOptions` JSDoc. The Imagen model ID `imagen-4.0-generate-001` is a short form that the SDK internally resolves to `publishers/google/models/imagen-4.0-generate-001` when `vertexai: true`. BOOTSTRAP-PHASE4.md Step 2 wording "Imagen 4 via `@google-cloud/vertexai` 1.10.0" is now STALE — should be updated to `@google/genai@1.5.0 (vertexai: true)` when Phase 4 closes (Session #25).
+- **File count pivoted from trio → quartet (added `vertex-auth.ts`).** First pass put `resolveServiceAccount` inline in `vertex-imagen.ts` → 321 LOC, over the 300 hard cap. Split to `vertex-auth.ts` dropped adapter to 217 LOC. Bonus: `resolveServiceAccount` is now isolated + unit-testable without loading the SDK (6 of the 49 unit tests hit it directly).
+- **`ImagePromptLanguage` SDK enum narrower than registry (5 vs 11 langs).** SDK types `language?: ImagePromptLanguage` (auto/en/ja/ko/hi only) but `vertex:imagen-4.0-generate-001` capability declares `supportedLanguages` = 11 entries including zh-CN, fr, de, pt, es. Adapter uses `Record<string, unknown>` config to bypass TS strictness — same pattern Gemini adapter already uses for the same reason. Runtime: Vertex API accepts the full 11-lang set per PLAN §6.2 verification. Precondition-check filters out-of-registry langs upstream; the SDK's narrower enum is TS-level noise only.
+- **Integration test approach: real SA file fixture, not fs-mocked.** Gemini's unit test uses a stubbed `decrypt` as identity for the apiKey flow — simple because Gemini keys are single strings. Vertex's SA flow involves fs + JSON + Zod layers that are worth exercising end-to-end. Decision: `mkdtempSync` + `writeFileSync` a real SA fixture in `beforeAll`, cleanup in `afterAll`, let `readFileSync` actually read it. Tests for file-missing + JSON-malformed + Zod-invalid spin up isolated tmp dirs per test + cleanup in `finally`. Zero fs mocks → zero risk of mock-vs-prod drift on that critical path.
+- **Dispatcher abort grace window (Session #16 policy): NOT touched.** Vertex adapter inherits the same AbortSignal + `mapSdkErrorToThrown` passthrough pattern as Gemini. No adapter-layer changes needed to honor the dispatcher contract.
+- **`scripts/seed-vertex-slot.ts` NOT created.** Live smoke file comment flags that bro must have an active Vertex slot in keys.enc for `generate()` live tests (since `generate()` uses slot-manager, not context). Same constraint as gemini-live. Bro manually adds slot via `POST /api/keys` multipart once, then live suite runs against it.
+
+### Known pending items (for Phase 4 Step 3 entry)
+
+1. **Live smokes UNCONFIRMED.** Bro needs `VERTEX_PROJECT_ID` + `VERTEX_SA_PATH` env + an active Vertex slot in keys.enc to run the 5 live tests. Budget ≈ $0.20 per full run. Expected outcome: all 5 green; deterministic-seed pair verifies PLAN §7.4 replayClass === "deterministic" precondition empirically.
+2. **Keys UI (Step 3, Session #20)** — client-side add/activate/delete for both Gemini (text input) + Vertex (multipart upload) slots. Replaces the `slot-manager.addSlot` direct-test-setup pattern Phase 3 used. See BOOTSTRAP-PHASE4.md Step 3.
+3. **Cache invalidation on key rotation (Step 4)** — `/providers/health` cache + provider client caches both need a hook fired from `slot-manager.activateSlot` / `removeSlot`. Vertex adapter's `clientCache` uses `${projectId}|${location}|${client_email}` fingerprint so SA swap auto-invalidates without an explicit hook — but the health cache in Step 4 will still need one.
+4. **BOOTSTRAP-PHASE4.md Step 2 SDK reference is stale** — says `@google-cloud/vertexai@1.10.0`, should read `@google/genai@1.5.0 (vertexai: true)`. Update when Phase 4 closes (Session #25) alongside the Phase 4 summary edit.
+5. **Phase 3 known pending #2-#7 still carried forward** (Gallery tag filter, total count, per-workflow Concept metadata, assetDetailDto replayPayload, size-cap integration, AppProfileSchema v2 migration, inputSchema serialization in GET /workflows). Phase 5 territory mostly.
+
+## Next Session (#20) kickoff — Phase 4 Step 3 (Key management UI)
+
+1. Read this file (Session #19 entry) + `BOOTSTRAP-PHASE4.md` Step 3 + `MEMORY.md`. Verify baseline `npm run regression:full` = 460/460.
+2. Scope decisions for bro before coding:
+   - **Gemini add-key form** — single text input for API key, masked display afterwards. Separate `KeyAddModal` component or reuse existing `ConfirmDialog` pattern?
+   - **Vertex add-key form** — multipart upload (file + projectId + location + label). File-picker UX: drop-zone or just `<input type="file" accept="application/json">`?
+   - **"Test" button UX** — click invokes `POST /api/keys/:id/test` → show spinner → render status + latency. Surface the 5 HealthStatusCodes with distinct icons/colors?
+   - **Settings page routing** — add `"settings"` to the `Page` union in `src/client/App.tsx`? Top-nav gets a new link?
+3. Est 2-3h. Expected regression: 460 → ~475 (component unit tests + a couple of integration tests for new client states).
+
+**Carry-over from Session #19:**
+- Vertex adapter quartet pattern is the template for future provider adapters (adapter + auth + errors + extract).
+- `_resetClientCacheForTests` export pattern works; just import via specific module path to avoid barrel-collision.
+- SDK choice DEFAULT going forward = `@google/genai` in whichever mode the provider demands. No split across multiple Google SDK packages.
+
+---
 
 ## Completed in Session #18 (Phase 4 Step 1 — Gemini adapter)
 
