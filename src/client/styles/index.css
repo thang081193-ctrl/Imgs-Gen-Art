@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Session #34 F2 — html font-family rule is redeclared in @layer base so
+   it overrides Tailwind preflight's default (`ui-sans-serif, system-ui`).
+   The `:root` font-variable is defined by theme.css at the top of this
+   file; this rule just binds it to the document root. */
+@layer base {
+  html {
+    font-family: var(--jm-font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
 @layer components {
   .input {
     @apply block w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-50;

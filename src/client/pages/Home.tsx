@@ -16,8 +16,12 @@ export function Home({ onNav }: HomeProps): ReactElement {
   return (
     <main className="flex flex-col items-center justify-center p-8 min-h-[calc(100vh-60px)]">
       <div className="max-w-2xl w-full space-y-6">
-        <h1 className="text-5xl font-bold tracking-tight text-slate-100">
-          Images Gen Art
+        <h1 className="text-6xl tracking-tight text-slate-100 leading-none">
+          <span className="font-normal">Images</span>{" "}
+          <span className="font-light italic text-slate-400">Gen</span>{" "}
+          <span className="font-black bg-gradient-to-br from-sky-400 via-indigo-500 to-violet-600 bg-clip-text text-transparent">
+            Art
+          </span>
         </h1>
         <p className="text-slate-400 text-lg">
           Local artwork generation platform — Phase 3 scaffold
