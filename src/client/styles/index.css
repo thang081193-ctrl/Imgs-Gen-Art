@@ -7,3 +7,15 @@
     @apply block w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-50;
   }
 }
+
+/* Session #29 Step 3b — filter-chip click-to-scroll feedback. AssetFilterChips
+   adds this class to the target anchor section; it auto-removes after one
+   animation cycle so rapid re-clicks retrigger correctly. */
+@keyframes flash-highlight {
+  0%   { box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.85); }
+  100% { box-shadow: 0 0 0 2px rgba(56, 189, 248, 0); }
+}
+.flash-highlight {
+  animation: flash-highlight 1200ms ease-out;
+  border-radius: 0.375rem;
+}

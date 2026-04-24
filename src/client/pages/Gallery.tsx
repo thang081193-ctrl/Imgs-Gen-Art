@@ -1,22 +1,37 @@
-// Gallery page — filter + grid + modal + pagination. Default sort
-// createdAt DESC (server-side). Filters: profile (dropdown), workflow
-// (color-coded chips), batchId (exact-match text input). Pagination 50/page.
+// Gallery page — filter bar + chips row + grid + modal + pagination. Default
+// sort createdAt DESC (server-side).
 //
-// Deep-link from Workflow page toast: navigator.params.batchId → initial
-// filter; URL is ephemeral but batchId filter persists in Gallery state
-// until manually cleared.
+// Session #29 Step 3b: filter state = one `AssetListFilter` (expanded — 8
+// dimensions). URL ↔ filter round-trip via `AssetListFilterSchema.safeParse`
+// on mount + `history.replaceState` on change. The navigator's `batchId`
+// deep-link continues to seed the filter on initial mount.
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactElement } from "react"
-import { useAssets, useProfiles, useWorkflows } from "@/client/api/hooks"
+import {
+  buildAssetsQueryString,
+  useAssets,
+  useProfiles,
+  useProviders,
+  useWorkflows,
+} from "@/client/api/hooks"
 import { AssetFilterBar } from "@/client/components/AssetFilterBar"
+import { AssetFilterChips } from "@/client/components/AssetFilterChips"
+import type { AssetFilterDimension } from "@/client/components/AssetFilterChips"
 import { AssetThumbnail } from "@/client/components/AssetThumbnail"
 import { AssetDetailModal } from "@/client/components/AssetDetailModal"
+import { GalleryEmptyState } from "@/client/components/GalleryEmptyState"
 import type { AssetDto } from "@/core/dto/asset-dto"
-import type { WorkflowId } from "@/core/design/types"
+import type { AssetListFilter } from "@/core/schemas/asset-list-filter"
+import { emptyAssetListFilter } from "@/core/schemas/asset-list-filter"
 import type { Navigator } from "@/client/navigator"
 import type { ShowToast } from "@/client/components/ToastHost"
 import { formatCost } from "@/client/utils/format"
+import {
+  decodeGalleryFilter,
+  hasAnyFilter,
+  stripPagination,
+} from "@/client/utils/gallery-filter-url"
 
 const PAGE_SIZE = 50
 
@@ -26,48 +41,76 @@ export interface GalleryPageProps {
 }
 
 export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElement {
-  const [profileId, setProfileId] = useState<string | null>(null)
-  const [workflowId, setWorkflowId] = useState<WorkflowId | null>(null)
-  const [batchId, setBatchId] = useState<string | null>(navigator.params.batchId ?? null)
+  const [filter, setFilter] = useState<AssetListFilter>(() => {
+    const fromUrl = decodeGalleryFilter(typeof window !== "undefined" ? window.location.search : "")
+    if (hasAnyFilter(fromUrl)) return fromUrl
+    const base = emptyAssetListFilter()
+    if (navigator.params.batchId !== undefined) return { ...base, batchId: navigator.params.batchId }
+    return base
+  })
   const [page, setPage] = useState<number>(0)
   const [selected, setSelected] = useState<AssetDto | null>(null)
 
-  // Reset page when filters change so we don't sit on empty page 3.
+  // URL sync — strip limit/offset so pagination doesn't leak into the bar.
   useEffect(() => {
-    setPage(0)
-  }, [profileId, workflowId, batchId])
+    if (typeof window === "undefined") return
+    const encoded = buildAssetsQueryString({
+      ...filter,
+      limit: undefined,
+      offset: undefined,
+    })
+    const trimmed = stripPagination(encoded)
+    const newUrl = trimmed ? `${window.location.pathname}?${trimmed}` : window.location.pathname
+    window.history.replaceState(null, "", newUrl)
+  }, [filter])
+
+  // Reset page when filter narrows (any filter change).
+  useEffect(() => { setPage(0) }, [filter])
+
+  // Honor navigator.params.batchId updates after mount (e.g. Workflow page
+  // toast CTA re-enters Gallery with a new batchId).
+  useEffect(() => {
+    if (navigator.params.batchId !== undefined && navigator.params.batchId !== filter.batchId) {
+      setFilter((f) => ({ ...f, batchId: navigator.params.batchId }))
+    }
+  }, [navigator.params.batchId, filter.batchId])
+
+  const onChangeFilter = useCallback((patch: Partial<AssetListFilter>) => {
+    setFilter((f) => ({ ...f, ...patch }))
+  }, [])
+
+  const clearDimension = (d: AssetFilterDimension): void => {
+    onChangeFilter({ [d]: undefined } as Partial<AssetListFilter>)
+  }
+  const clearAll = (): void => { setFilter(emptyAssetListFilter()) }
 
   const profilesQ = useProfiles()
   const workflowsQ = useWorkflows()
-  const assetsQ = useAssets({
-    ...(profileId !== null ? { profileId } : {}),
-    ...(workflowId !== null ? { workflowId } : {}),
-    ...(batchId !== null ? { batchId } : {}),
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
-  })
+  const providersQ = useProviders()
+  const assetsQ = useAssets({ ...filter, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
 
   const assets = assetsQ.data?.assets ?? []
+  const profiles = profilesQ.data?.profiles ?? []
+  const workflows = workflowsQ.data?.workflows ?? []
+  const providers = providersQ.data?.providers ?? []
+  const models = providersQ.data?.models ?? []
+  const filterActive = hasAnyFilter(filter)
+  const batchNotFound = filter.batchId !== undefined && !assetsQ.loading && assets.length === 0 && page === 0
+  const pageCostTotal = useMemo(
+    () => assets.reduce((sum, a) => sum + (a.costUsd ?? 0), 0),
+    [assets],
+  )
+
   const openSourceAsset = (sourceId: string): void => {
     const match = assets.find((a) => a.id === sourceId)
     if (match !== undefined) setSelected(match)
     else {
-      // Source lives outside the current filtered page — switch filter to the
-      // source's batch isn't ideal either (we don't know it). Fall back to
-      // a toast so the user isn't silently ignored.
       showToast({
         variant: "info",
         message: `Source asset ${sourceId} not in current view. Clear filters or search by id.`,
       })
     }
   }
-  const profiles = profilesQ.data?.profiles ?? []
-  const workflows = workflowsQ.data?.workflows ?? []
-  const batchNotFound = batchId !== null && !assetsQ.loading && assets.length === 0 && page === 0
-  const pageCostTotal = useMemo(
-    () => assets.reduce((sum, a) => sum + (a.costUsd ?? 0), 0),
-    [assets],
-  )
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-4">
@@ -87,15 +130,23 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
       </header>
 
       <AssetFilterBar
+        filter={filter}
         profiles={profiles}
         workflows={workflows}
-        profileId={profileId}
-        workflowId={workflowId}
-        batchId={batchId}
-        onProfileChange={setProfileId}
-        onWorkflowChange={setWorkflowId}
-        onBatchIdChange={setBatchId}
+        providers={providers}
+        models={models}
+        onChange={onChangeFilter}
+        showToast={showToast}
         batchNotFound={batchNotFound}
+      />
+      <AssetFilterChips
+        filter={filter}
+        profiles={profiles}
+        workflows={workflows}
+        providers={providers}
+        models={models}
+        onClearDimension={clearDimension}
+        onClearAll={clearAll}
       />
 
       {assetsQ.loading && <p className="text-sm text-slate-500">Loading assets…</p>}
@@ -103,7 +154,7 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
         <p className="text-sm text-red-400">Failed to load assets: {assetsQ.error.message}</p>
       )}
       {!assetsQ.loading && assets.length === 0 && !batchNotFound && (
-        <EmptyGallery />
+        filterActive ? <GalleryEmptyState onClearAll={clearAll} /> : <EmptyGallery />
       )}
 
       {assets.length > 0 && (
@@ -131,7 +182,7 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
         asset={selected}
         onClose={() => setSelected(null)}
         onFilterBatch={(id) => {
-          setBatchId(id)
+          onChangeFilter({ batchId: id })
           setSelected(null)
         }}
         onOpenAsset={setSelected}
@@ -154,11 +205,7 @@ function EmptyGallery(): ReactElement {
 }
 
 function Pagination({
-  page,
-  pageSize,
-  currentCount,
-  onPrev,
-  onNext,
+  page, pageSize, currentCount, onPrev, onNext,
 }: {
   page: number
   pageSize: number
@@ -166,8 +213,6 @@ function Pagination({
   onPrev: () => void
   onNext: () => void
 }): ReactElement {
-  // We don't know total count (server doesn't return it); gate "Next" via
-  // currentCount === pageSize heuristic (if full page, probably more).
   const hasMore = currentCount === pageSize
   return (
     <div className="flex items-center justify-between text-xs text-slate-400">

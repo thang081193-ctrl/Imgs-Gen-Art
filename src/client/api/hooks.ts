@@ -8,7 +8,8 @@ import type { ApiError } from "./client"
 import { apiDelete, apiGet, apiPost, apiPostMultipart } from "./client"
 import type { KeySlotDto, VertexSlotDto } from "@/core/dto/key-dto"
 import type { ProfileDto, ProfileSummaryDto } from "@/core/dto/profile-dto"
-import type { AssetDto } from "@/core/dto/asset-dto"
+import type { AssetDto, ReplayClass } from "@/core/dto/asset-dto"
+import type { DatePreset, TagMatchMode } from "@/core/schemas/asset-list-filter"
 import type {
   ModelInfo,
   ProviderInfo,
@@ -122,23 +123,61 @@ export interface AssetsListResponse {
   offset: number
 }
 
+// Session #29 Step 3b — expanded filter shape. Mirrors the wire contract
+// (AssetListFilterSchema) so URL ↔ filter round-trip is identity. Each field
+// is explicitly `T | undefined` (not just optional) so callers can spread an
+// AssetListFilter and override with explicit `undefined` values under
+// `exactOptionalPropertyTypes: true`. `replayClasses === []` is a distinct
+// "match none" state (Q-29.E); `undefined` means absent/all-3-on.
 export interface AssetsFilter {
-  profileId?: string
-  workflowId?: WorkflowId
-  batchId?: string
-  limit?: number
-  offset?: number
+  profileIds?: string[] | undefined
+  workflowIds?: string[] | undefined
+  tags?: string[] | undefined
+  tagMatchMode?: TagMatchMode | undefined
+  datePreset?: DatePreset | undefined
+  providerIds?: string[] | undefined
+  modelIds?: string[] | undefined
+  replayClasses?: ReplayClass[] | undefined
+  batchId?: string | undefined
+  limit?: number | undefined
+  offset?: number | undefined
+}
+
+// CSV param encoding — each value is percent-encoded individually, then
+// joined with an un-encoded comma so `?tags=sunset,neon` stays human-readable
+// in the browser address bar (Q-29.C). Tags cannot contain commas (the tag
+// input uses `,` as a delimiter) so the round-trip is lossless.
+function encodeCsvParam(key: string, values: string[]): string {
+  return `${encodeURIComponent(key)}=${values.map(encodeURIComponent).join(",")}`
+}
+
+// Public so the Gallery URL-sync + integration tests can exercise the exact
+// encoding `useAssets` uses. Returns a leading "" — append to "/api/assets?…".
+export function buildAssetsQueryString(filter: AssetsFilter): string {
+  const parts: string[] = []
+  if (filter.profileIds   && filter.profileIds.length   > 0) parts.push(encodeCsvParam("profileIds",   filter.profileIds))
+  if (filter.workflowIds  && filter.workflowIds.length  > 0) parts.push(encodeCsvParam("workflowIds",  filter.workflowIds))
+  if (filter.tags         && filter.tags.length         > 0) parts.push(encodeCsvParam("tags",         filter.tags))
+  if (filter.tagMatchMode) parts.push(`tagMatchMode=${filter.tagMatchMode}`)
+  if (filter.datePreset && filter.datePreset !== "all") parts.push(`datePreset=${filter.datePreset}`)
+  if (filter.providerIds && filter.providerIds.length > 0) parts.push(encodeCsvParam("providerIds", filter.providerIds))
+  if (filter.modelIds    && filter.modelIds.length    > 0) parts.push(encodeCsvParam("modelIds",    filter.modelIds))
+  if (filter.replayClasses !== undefined) {
+    // `[]` → `replayClasses=` (present-but-empty, match-none semantics).
+    parts.push(filter.replayClasses.length === 0
+      ? "replayClasses="
+      : encodeCsvParam("replayClasses", filter.replayClasses))
+  }
+  if (filter.batchId) parts.push(`batchId=${encodeURIComponent(filter.batchId)}`)
+  parts.push(`limit=${filter.limit  ?? 50}`)
+  parts.push(`offset=${filter.offset ?? 0}`)
+  return parts.join("&")
 }
 
 export function useAssets(filter: AssetsFilter, refreshKey: number = 0): ApiState<AssetsListResponse> {
-  const qs = new URLSearchParams()
-  if (filter.profileId)  qs.set("profileId",  filter.profileId)
-  if (filter.workflowId) qs.set("workflowId", filter.workflowId)
-  if (filter.batchId)    qs.set("batchId",    filter.batchId)
-  qs.set("limit",  String(filter.limit  ?? 50))
-  qs.set("offset", String(filter.offset ?? 0))
+  const qs = buildAssetsQueryString(filter)
   // refreshKey in path so external triggers re-fetch; query-string dedupe OK.
-  return useFetch<AssetsListResponse>(`/api/assets?${qs.toString()}&_=${refreshKey}`)
+  return useFetch<AssetsListResponse>(`/api/assets?${qs}&_=${refreshKey}`)
 }
 
 export function useAsset(assetId: string | null): ApiState<AssetDto> {
