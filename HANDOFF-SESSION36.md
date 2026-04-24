@@ -111,26 +111,32 @@ Proposed structure (finalize in S#36; this is the skeleton to fill):
 §9  DECISIONS §J log (all Q answers from S#35 pre-align locked here)
 ```
 
-### Decision Qs for S#36 start
+### Decision Qs for S#36 start (most locked end of S#35)
 
-After drafting §1-§9 skeleton but before filling:
+- **Q-36.A** — PLAN-v3.md sits side-by-side with PLAN-v2.2.1.md.
+  v2.2.1 stays as historical v1 blueprint (all 14 DoD items shipped in
+  practice though the checklist was never ticked in-doc). PLAN-v3 is
+  the forward-looking doc for v2 lanes. No migration of v2.2.1 content.
+  **Status: LOCKED.**
+- **Q-36.B** — Grok model pick: defer. Bro will confirm model IDs +
+  API-key flow at S#36 start. Draft PLAN-v3 §3 with a `grok-TBD`
+  placeholder + contract-level description that's model-agnostic.
+  **Status: OPEN — confirm at S#36 start.**
+- **Q-36.C** — Policy guard rules: **auto-scraped** from Meta/Google docs
+  as the base layer, plus a user-additions override layer. PLAN-v3 §4
+  specifies the scraper pipeline (cron? per-boot? manual?), the
+  override precedence (user > scraped > default), and the audit trail
+  (which rule blocked which gen). **Status: LOCKED.**
+- **Q-36.D** — Saved Styles migration: **ships in Phase A alongside the
+  IA/header rework** — not a separate pre-Phase step. One-time boot
+  migration drops legacy ASO Screenshots and promotes Artwork + Ad +
+  Style to `saved_styles` rows. **Status: LOCKED.**
+- **Q-36.E** — Header redesign: **Phase A from day one**, matching the
+  JM Studio Meta/TikTok Converter reference (giant logo + 2-line title
+  + version strip + nav pills with icons + status pill). No separate
+  UI-polish sub-phase. **Status: LOCKED.**
 
-- **Q-36.A** — Where does PLAN-v3.md sit relative to PLAN-v2.2.1.md?
-  Side-by-side (separate files) or single migrated file? Mình recommend
-  keep both: PLAN-v2.2.1 = historical for v1, PLAN-v3 = forward.
-- **Q-36.B** — Grok model pick: `grok-4` (latest general), `grok-4-fast`
-  (cheaper, lower latency), vision variant for upload-reference path?
-  Bro confirm model IDs + API key flow (similar to Gemini/Vertex key
-  slots, or plain env var for v2 start?).
-- **Q-36.C** — Policy guard rule source-of-truth: hand-transcribed from
-  Meta/Google docs into JSON, or auto-scraped? Recommend hand-
-  transcribed v2 start, review quarterly.
-- **Q-36.D** — Saved Styles migration timing: migrate on next boot
-  (one-shot), or expose Admin action? Recommend boot migration with
-  guard row in `_migrations`.
-- **Q-36.E** — Header redesign lands in Phase A alongside Saved Styles,
-  or as its own UI-polish sub-phase? Recommend gộp Phase A — tight
-  visual rework goes together.
+Open: Q-36.B only. Everything else is decided before S#36 opens.
 
 ### Estimate
 
