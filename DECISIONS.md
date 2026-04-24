@@ -239,5 +239,70 @@ the absence.
 
 ---
 
-*Last updated: 2026-04-24 with Session #27b (Phase 5 Step 5b — PromptLab).*
-*Status: Phase 5 Step 5 (5a + 5b) closed. Steps 3 / 4 / 6 pending.*
+## Session #28a — Phase 5 Step 3a (AssetListFilter backend)
+
+**Plural CSV wire contract with legacy singular back-compat.** `GET /api/
+assets` accepts plural CSV params (`profileIds=a,b,c`, `workflowIds=…`,
+`tags=…`, `providerIds=…`, `modelIds=…`, `replayClasses=…`) as the v1
+contract. The legacy singular `?profileId=X` / `?workflowId=Y` keep
+parsing for backward compat — `AssetListFilterSchema.transform()` merges
+them into the plural array via `mergeLegacy()` (plural wins when both
+are provided). Rationale: Gallery calls and the 15 existing integration
+tests that use singular params keep working untouched, and the pre-
+Session-#29 frontend won't regress when the UI is still on the old
+`AssetFilterBar` card.
+
+**Tag filter stays on the JSON `tags TEXT` column (LIKE scan).** Bro's
+pre-code clarification confirmed DECISIONS §C1 still holds — no
+`asset_tags` JOIN table in Session #28a. OR mode = `(tags LIKE ? OR
+tags LIKE ?)`, AND mode = same shape joined with AND. Params encode the
+JSON string fragment (`%"tag"%`) so a literal `"tag"` inside the JSON
+array matches. Backslash + double-quote escape on each tag value (`%`
+and `_` intentionally pass through — v1 tags are UI-driven + short;
+revisit if free-text tag input with SQL-wildcard characters lands).
+When dogfood surfaces filter pain at >10k assets, migrate to the
+`asset_tags` JOIN table (post-v1 work per §C1).
+
+**`batchId` stays singular.** All other filter dimensions went plural
+for multi-select UI, but exact-batch-match has no set semantics — the
+batchId deep-link from Workflow → Gallery is one batch per link. Plural
+batchIds would be dead weight in v1.
+
+**`totalCount` skipped from the response.** `GET /api/assets` keeps the
+existing `{ assets, limit, offset }` shape — no `totalCount` field. The
+Session #29 empty state UI derives from `assets.length === 0 && filter-
+is-active`, not a count. Adding totalCount = one extra `COUNT(*)` query
+per fetch + wire-shape change. Session #30+ can add it when
+paginated-list UX needs "X of Y" strings.
+
+**Cursor-based pagination deferred to Session #30+.** Session #28 bro-
+initial spec called for base64-encoded `{createdAt, id}` cursor
+pagination, but that's a breaking change to the existing offset/limit
+contract (consumers: Gallery `useAssets`, Workflow batchId filter,
+all 15 assets-routes integration tests + every other caller passing
+offsets). Bro confirmed switching-cost analysis → cursor migration
+isolated as its own session. 28a keeps offset/limit. Inline TODO
+marker in `@/core/schemas/asset-list-filter` header.
+
+**Path layout locked.** Schema lives at
+`@/core/schemas/asset-list-filter` (universal, client-safe), query
+builder at `@/server/asset-store/asset-list-query` (alongside the
+existing asset-repo, not a new `src/server/assets/` directory), and
+the client `useAssets` hook stays inline in `src/client/api/hooks.ts`
+(no new `src/client/hooks/` directory). Matches the existing barrel
+conventions; no reorganization churn.
+
+**`EDIT_FIELD_NOT_ALLOWED` pattern carried over.** The Session #27a
+error-code hierarchy (`MALFORMED_PAYLOAD` / `EDIT_FIELD_NOT_ALLOWED` /
+`CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) is unrelated
+to filter validation — filter errors surface as generic `BAD_REQUEST`
+with the Zod `issues` array. Kept the 27a vocabulary focused on the
+replay/edit pipeline.
+
+---
+
+*Last updated: 2026-04-24 with Session #28a (Phase 5 Step 3a —
+AssetListFilter backend).*
+*Status: Phase 5 Steps 1/2/3a/5a/5b closed. Step 3b (filter UI,
+Session #29) + Step 4 (Profile CMS) + Step 6 (v2 schema migration)
+pending.*

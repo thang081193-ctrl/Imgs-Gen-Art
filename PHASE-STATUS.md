@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/5a/5b CLOSED. Step 5b landed: full PromptLab UI on top of Session #27a's `mode=edit` backend — new `prompt_history` SQLite log + `GET /api/assets/:id/prompt-history` endpoint + `/prompt-lab?assetId=X` page with 3-column layout (source card / editor + prediction strip / diff + history sidebar). Edit-replay iterations logged as pending → complete / failed / cancelled with denormalized costUsd; pure replays skip the log. Inline word-level diff viewer (hand-rolled LCS + regex tokenizer, zero deps). `[Edit & replay]` entry point on AssetDetailModal — disabled with tooltip when `editable.canEdit=false` (legacy) or `replayClass=not_replayable` (not-replayable wins priority). 573 pass / 10 skipped / 1 todo / 584 total regression (+27 net vs Session #27a). Phase 4 remains closed; Step 3 Gallery filters + Step 4 Profile CMS remain pending.)
-Last updated: 2026-04-24 (Session #27b — Phase 5 Step 5b ship + 27a carry-forward #2 + #4 paydown. Commit chain: (1) `refactor(replay)` extracts `applyOverride` → `src/server/workflows-runtime/replay-override.ts` and drops the unused `EDIT_REQUIRES_PROMPT` ErrorCode literal; replay-service drops 1 LOC past the soft cap it was carrying; 9 new replay-override unit tests cover reject paths + happy edge cases + input-mutation invariant. (2) `feat(prompt-lab)` ships the full Step 5b: new `scripts/migrations/2026-04-25-prompt-history.sql` + canonical schema mirror; new `prompt-history-repo.ts` + DTO + `GET /api/assets/:assetId/prompt-history` route (mounted before base assets route, 404 when source missing); replay-service edit-only history write path (pending → complete/failed/cancelled, cost_usd denormalized from result asset); new client modules `diff-words.ts` (LCS + `(\s+|[.,!?;:]|[^\s.,!?;:]+)` tokenizer), `DiffViewer.tsx` (inline `<ins>/<del>` + `+/−` colorblind markers + aria-labels), `PromptEditor.tsx` (textarea + addWatermark + capability-gated negativePrompt), `PromptHistorySidebar.tsx` (flat DESC list + status chips + override badges), `PromptLab.tsx` (3-col layout, assetId from navigator, recomputes predicted replayClass on addWatermark toggle only), `PromptLabSourceCard.tsx` + `PromptLabPredictionStrip.tsx` (extracted for LOC cap), `use-prompt-history.ts` (imperative refresh after SSE complete), `useAsset` hook, extended `useReplay.start(id, {overridePayload?})`. Entry: `[Edit & replay]` secondary button in ReplaySection + AssetDetailModal plumbs `onEditAsset` → Gallery → `navigator.go("prompt-lab", {assetId})`. 6 new integration tests in `prompt-history-route.test.ts` + 3 new unit tests in `replay-service.test.ts` (failed / cancelled / no-insert-on-replay) + 9 new unit tests in `diff-words.test.ts`. 573/584 regression pass (+18 vs 27b commit #1's 555, +27 vs 27a's 546). 1 cross-test flake observed on 1 of 3 full-regression runs (same pre-existing health-cache + zz-pa-test-profile race; unrelated to Step 5b). `test:live:smoke-all` NOT run. Manual UI smoke deferred — batched with Session #26 Step 2 smoke in a dedicated Chrome MCP session per Session #27b Q-CF.3.)
+Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/3a/5a/5b CLOSED. Session #28 split at pre-alignment into 28a backend + 28b frontend (same pattern as 27a/27b). 28a landed: `AssetListFilterSchema` in `src/core/schemas/asset-list-filter.ts` with strict allowlist, CSV-string preprocess for plural array params, enum validation for datePreset / tagMatchMode / replayClasses, backward-compat merge for legacy singular `profileId` / `workflowId` → plural; `buildAssetListQuery` pure SQL builder in `src/server/asset-store/asset-list-query.ts` composing conditional WHERE clauses for all 7 dimensions (profileIds / workflowIds / batchId / providerIds / modelIds / replayClasses / tags × OR|AND / datePreset × all|today|7d|30d); `asset-repo.list()` delegates to the builder; `GET /api/assets` route accepts the full wire contract. Tag filter stays on the JSON `tags TEXT` column via LIKE scan per DECISIONS §C1 (asset_tags JOIN table deferred). 612 pass / 10 skipped / 1 todo / 623 total regression (+39 net vs Session #27b). Phase 4 remains closed; Phase 5 Step 3b (filter UI + chips + URL sync) targets Session #29; Step 4 Profile CMS + Step 6 v2 migration pending.)
+Last updated: 2026-04-24 (Session #28a — Phase 5 Step 3a ship (backend only). Scope split at pre-alignment: 28a = schema + SQL builder + route + unit/integration tests; 28b = frontend UI (Session #29). 3 clarify decisions locked pre-code: (1) tag filter = LIKE scan on the JSON `tags` column (honors DECISIONS §C1 post-v1 deferral); (2) path layout — new schema at `src/core/schemas/asset-list-filter.ts`, SQL builder alongside asset-repo at `src/server/asset-store/asset-list-query.ts`, no new `src/server/assets/` or `src/client/hooks/` dirs; (3) skip totalCount v1 (response shape stays `{ assets, limit, offset }`). Commit chain: (1) `feat(gallery)` ships 2 new files + 5 modified (asset-repo drops 20 LOC of inline WHERE building; assets.body.ts reduced to re-export shim; assets.ts route drops custom `coerceQuery` in favor of schema-strict `.safeParse` with CSV preprocess). Wire contract: plural CSV params (`profileIds=a,b,c`) preferred; legacy singular (`profileId=a`) still parses and merges into plural array via `.transform()`. Cursor-based pagination explicitly deferred to Session #30+ with inline TODO. 39 new tests: 12 in `asset-list-filter-schema.test.ts` (strict-allowlist + CSV preprocess + enum bounds + limit clamp + legacy merge), 19 in `asset-list-query-builder.test.ts` (WHERE composition + tag OR|AND + LIKE escape + datePreset boundaries + param ordering), 8 appended to `assets-routes.test.ts` (HTTP end-to-end on profileIds / replayClasses / providerIds+modelIds / tags OR|AND / datePreset=7d / strict-allowlist 400 / legacy singular backward-compat). 1 existing test updated in `asset-store.test.ts` (`profileId` → `profileIds: [X]` for the new interface shape — non-API-breaking, only the repo filter param renamed). 612/623 regression pass — clean full run with no flake observed. `test:live:smoke-all` NOT run (no provider surface change). Manual UI smoke remains deferred (Step 2 + Step 5b batch) since 28a is backend-only; 28b Session #29 + smoke can co-locate or run as a separate Chrome MCP session at office.)
 
 ## Phase 5 Summary (in progress)
 
@@ -9,7 +9,8 @@ Last updated: 2026-04-24 (Session #27b — Phase 5 Step 5b ship + 27a carry-forw
 |---|---|---|
 | 1 | Replay API (`POST /api/assets/:id/replay` + `GET /:id/replay-class`) | ✅ Session #25 — 5 new src files (replay-service + replay-asset-writer + stored-payload-shape + replay.ts + replay.body.ts) + migration + 3 DB-layer edits (types + batch-repo + schema.sql) + app.ts wire + 2 test files (11 unit + 8 integration) + 1 existing test update + 1 housekeeping commit. Generic workflow-agnostic service — does NOT modify the 4 workflow runners (per bro's B-option chat decision). |
 | 2 | Replay UI (modal button + gallery badge) | ✅ Session #26 — 5 new src files (useReplay hook + useReplayClass hook + replay-errors mapper + ReplayBadge + ReplaySection) + 3 src edits (AssetDetailModal slim, AssetThumbnail badge wiring, Gallery prop threading) + Gap A fold-in across 4 server files (asset-dto NotReplayableReason type, replay-class helper, replay-service probeReplayClass, replay.ts route reshape) + 2 test files (5 new unit for reason helper + 11 new unit for error taxonomy) + 1 existing integration test updated (flip 400 → 200 + 3 new reason cases). Pure-logic tests only; hook/component tests deferred (no jsdom). |
-| 3 | Gallery enhancements (tags/date/provider/model/replayClass filters) | pending |
+| 3a | Filter schema + SQL query builder backend | ✅ Session #28a — 2 new src files (`src/core/schemas/asset-list-filter.ts` 108 LOC + `src/server/asset-store/asset-list-query.ts` 129 LOC) + 5 modified (asset-repo.list delegates, asset-store barrel, types re-export, routes/assets.body shim, routes/assets uses schema-strict parse) + 39 new tests (12 schema / 19 builder / 8 integration) + 1 existing test updated (asset-store.test profileId→profileIds). 612/623 pass. |
+| 3b | Gallery filter UI (chips + empty state + URL sync) | pending (Session #29) |
 | 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
 | 5a | Canonical payload migration + `mode=edit` backend | ✅ Session #27a — 4 writers migrated, dual reader + 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` / `CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD`, `AssetDto.editable` flag, 11 new integration tests + 1 unit. 546/557 pass (+11 net vs Session #26). |
 | 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | ✅ Session #27b — 2 commits (refactor extracts `applyOverride` + drops `EDIT_REQUIRES_PROMPT` dead code; feat ships `prompt_history` table + repo + `GET /api/assets/:id/prompt-history` route + replay-service edit-only history writes + PromptLab page + PromptEditor + DiffViewer + PromptHistorySidebar + `diff-words.ts` LCS util + `useAsset` + `usePromptHistory` + `useReplay.start({overridePayload?})` ext + `[Edit & replay]` entry on AssetDetailModal). 573/584 regression pass (+27 net vs Session #27a). |
@@ -27,6 +28,174 @@ Last updated: 2026-04-24 (Session #27b — Phase 5 Step 5b ship + 27a carry-forw
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #28a (Phase 5 Step 3a — AssetListFilter schema + SQL builder backend)
+
+Bro split Session #28 at pre-alignment into 28a (this — backend) and 28b
+(Session #29 — frontend). Matches the Session #27 split precedent.
+
+### Scope Qs locked before coding
+
+Baseline Q-3.A→E verdicts in `HANDOFF-SESSION28.md` Option B plus 5 bro
+pushbacks / additions + 3 clarifications resolved during 28a kickoff:
+
+- **Q-3.A** Hybrid layout: existing `AssetFilterBar` card preserved
+  (grid-cols-3 above grid) + chips row below card + above grid. Click
+  chip body → scroll + flash-highlight + focus first input in the
+  matching card section via `id="filter-{dimension}"` anchors. **Frontend
+  work — deferred to Session #29 (28b).**
+- **Q-3.B** 4 date presets: `all` (default) / `today` / `7d` / `30d`.
+  `today` = midnight local timezone; rolling windows for N-day. Custom
+  date picker deferred to polish backlog.
+- **Q-3.C** Tags OR/AND toggle (bro pushback honored) — default OR,
+  radio in sidebar section, chip label reflects mode. Both SQL branches
+  tested.
+- **Q-3.D** Server-side filter via strict Zod allowlist. Keeps existing
+  offset/limit pagination contract; cursor-based migration deferred to
+  Session #30+.
+- **Q-3.E** ReplayClass multi-select, all-on ≡ undefined. Chip hidden
+  when all 3 selected.
+- **Q-F** Provider → model cascade: model clears on provider change;
+  toast copy. **Frontend (28b).**
+- **Q-G** Empty state v1 = active filters summary + Clear-all button.
+  "Try loosening one" deferred (N+1 queries). **Frontend (28b).**
+- **Q-H** URL state scope = filters only. Asset selection + scroll
+  position out of scope. **Frontend (28b).**
+
+Three clarifications locked during 28a kickoff audit:
+
+- **Q-Clarify.1** Tags = LIKE scan on the JSON `tags TEXT` column per
+  DECISIONS §C1 (asset_tags JOIN table is post-v1 work — not this
+  session).
+- **Q-Clarify.2** Path layout — new schema at
+  `src/core/schemas/asset-list-filter.ts`, SQL builder alongside existing
+  asset-repo at `src/server/asset-store/asset-list-query.ts`, NO new
+  `src/server/assets/` or `src/client/hooks/` dirs; `useAssets` stays
+  inline in `src/client/api/hooks.ts`.
+- **Q-Clarify.3** Skip totalCount v1 — response shape stays
+  `{ assets, limit, offset }`. Empty state derives from
+  `assets.length === 0`.
+
+### Commit chain (2 commits)
+
+1. `feat(gallery): Phase 5 Step 3a — AssetListFilter schema + query
+   builder backend` — 2 new src files + 5 modified + 3 new test files +
+   1 existing test updated. See §"Files touched" below.
+2. This commit — docs.
+
+### Files touched (2 new src + 5 modified src — excl. tests + docs)
+
+New (2):
+- `src/core/schemas/asset-list-filter.ts` (108 LOC) — strict Zod schema
+  with CSV preprocess, enum validation, legacy singular → plural merge
+  via `.transform()`. Exports `AssetListFilterSchema`, `AssetListFilter`
+  type, `ReplayClassValues` / `DatePresetValues` / `TagMatchModeValues`
+  literal arrays, `emptyAssetListFilter()` default.
+- `src/server/asset-store/asset-list-query.ts` (129 LOC) — pure
+  `buildAssetListQuery(filter, { nowIso? })` returning `{ sql, params }`.
+  Composes `profile_id IN (…)` / `workflow_id IN (…)` / `batch_id = ?`
+  / `provider_id IN (…)` / `model_id IN (…)` / `replay_class IN (…)` /
+  tag LIKE scan (OR|AND joiner, backslash + double-quote escape) /
+  `created_at >= ?` boundary / `ORDER BY created_at DESC LIMIT ? OFFSET
+  ?`. Exports `datePresetBoundary(preset, nowIso?)` for test reuse.
+
+Modified (5):
+- `src/server/asset-store/types.ts` — `AssetListFilter` interface
+  deleted in favor of `export type { AssetListFilter } from
+  "@/core/schemas/asset-list-filter"` re-export (source-compat for
+  barrel consumers).
+- `src/server/asset-store/asset-repo.ts` — `list()` drops 20 LOC of
+  inline WHERE building; delegates to `buildAssetListQuery`.
+- `src/server/asset-store/index.ts` — adds
+  `export * from "./asset-list-query"`.
+- `src/server/routes/assets.body.ts` — reduced to re-export shim for
+  `AssetListFilterSchema` + `parseIncludeParam`. `AssetListQuerySchema`
+  symbol removed (no live callers).
+- `src/server/routes/assets.ts` — drops `coerceQuery` 5-key allowlist
+  in favor of `collectFilterQuery` (excludes `?include=` only, passes
+  everything else to `.safeParse` which enforces strict allowlist).
+  `GET /api/assets` now accepts the full wire contract.
+
+### Test delta
+
+| Category | S#27b | S#28a | Δ |
+|---|---:|---:|---:|
+| pass | 573 | 612 | +39 |
+| skipped | 10 | 10 | 0 |
+| todo | 1 | 1 | 0 |
+| fail | 0 | 0 | 0 |
+| total | 584 | 623 | +39 |
+
+New tests:
+- `tests/unit/asset-list-filter-schema.test.ts` — 12 cases (empty parse
+  defaults / CSV split / empty-string collapse / legacy merge / plural
+  wins / strict reject / enum rejects / enum accepts / limit+offset
+  coerce / limit clamp / enum value-list invariants / emptyFilter
+  shape).
+- `tests/unit/asset-list-query-builder.test.ts` — 19 cases (empty
+  filter / single-dimension × 5 / tag OR / tag AND / default-any / tag
+  LIKE-escape / empty-tags / datePreset all / today / 7d / 30d /
+  boundary helper / limit-offset ordering / offset-default-0 / 7-way
+  composition AND chain).
+- `tests/integration/assets-routes.test.ts` — 8 new cases appended
+  (profileIds CSV / replayClasses subset / providerIds+modelIds AND /
+  tags OR / tags AND / datePreset=7d / unknown-key 400 / legacy singular
+  profileId).
+
+Modified:
+- `tests/unit/asset-store.test.ts` — 1 case (`list respects profileId
+  + workflowId filters + limit/offset`) updated from singular
+  `profileId`/`workflowId` call shape to plural `profileIds`/
+  `workflowIds` (runtime shape change only — TS was permissive on the
+  old extra-property call because tests/ tsconfig doesn't excess-check
+  object literals passed through `Partial<>`-like shapes).
+
+### Gates run in Session #28a
+
+- `npm run typecheck` (server + client) — clean.
+- `npm run lint` — clean.
+- `npm run check-loc` — 0 hard-cap violations; 1 soft-cap warning
+  (`replay-service.ts` at 257 LOC — pre-existing Session #27b
+  carry-forward, not touched in 28a).
+- `npm run regression:full` — 612/623 on clean first run (no flake
+  observed). Mid-session run before the asset-store test update hit
+  4 `ENOTEMPTY` known flakes + 1 real regression from the old test
+  expecting the pre-28a `profileId` singular interface; fixed before
+  final regression.
+- `npm run build` — NOT run (no new client entry; client untouched
+  in 28a).
+- `test:live:smoke-all` — NOT run (no new provider surface; bro-gated).
+
+### Carry-forward (→ Session #29+)
+
+1. **Phase 5 Step 3b** — Gallery filter UI + chips + empty state +
+   URL sync. **Session #29 scope.** See `HANDOFF-SESSION29.md` for
+   the full frontend scope + pre-align Q-29.A→E.
+2. **Cursor-based pagination migration** — offset/limit kept for 3a
+   contract compatibility. Inline TODO in
+   `@/core/schemas/asset-list-filter`. Session #30+.
+3. **`asset_tags` JOIN table** — DECISIONS §C1 defers indexed tag
+   filtering post-v1; revisit when dogfood surfaces performance pain
+   at >10k assets.
+4. **Custom date picker** — polish backlog. Trigger: dogfood request
+   for non-preset ranges.
+5. **HTTP capability test** (27a-CF#1) — still deferred.
+6. **Component + hook tests** (26-CF#1) — still deferred; needs jsdom.
+7. **Visual UI smoke batch** (Step 2 + Step 5b from 27b — bro self-
+   smoke at office since home Chrome MCP unwired).
+8. **`replay-service.ts` 257 LOC** — 7 over soft cap (S#27b carry-
+   forward); still applies if Session #29+ extends the service.
+
+### Session #28a commit discipline
+
+Two commits:
+1. `feat(gallery): Phase 5 Step 3a — AssetListFilter schema + query
+   builder backend` — 2 new + 5 modified src + 3 new test files + 1
+   modified test.
+2. `docs: Session #28a close — PHASE-STATUS + DECISIONS + Session #29
+   handoff` — this file + DECISIONS.md addendum + HANDOFF-SESSION29.md.
+
+---
 
 ## Completed in Session #27b (Phase 5 Step 5b — PromptLab UI + 27a CF#2 + CF#4)
 
