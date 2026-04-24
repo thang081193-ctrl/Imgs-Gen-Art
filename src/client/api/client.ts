@@ -65,6 +65,15 @@ export function apiPost<T>(path: string, body: unknown, opts?: ApiOptions): Prom
   })
 }
 
+export function apiPut<T>(path: string, body: unknown, opts?: ApiOptions): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    ...(opts?.signal ? { signal: opts.signal } : {}),
+  })
+}
+
 export function apiPostMultipart<T>(
   path: string,
   formData: FormData,
