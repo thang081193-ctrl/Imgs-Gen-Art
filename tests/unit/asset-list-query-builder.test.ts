@@ -64,6 +64,33 @@ describe("buildAssetListQuery — single dimensions", () => {
     expect(sql).toContain("replay_class IN (?, ?)")
     expect(params.slice(0, 2)).toEqual(["deterministic", "best_effort"])
   })
+
+  // Session #29 Q-29.E — `[]` signals "0 of 3 checkboxes selected" → match none.
+  it("replayClasses === [] → 1 = 0 clause (match none)", () => {
+    const { sql, params } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      replayClasses: [],
+    })
+    expect(sql).toContain("1 = 0")
+    expect(sql).not.toContain("replay_class IN")
+    // Only limit + offset should be in params — no replay-class values leaked.
+    expect(params).toEqual([50, 0])
+  })
+
+  it("replayClasses === [] composes into WHERE chain alongside other filters", () => {
+    const { sql } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      profileIds: ["chartlens"],
+      replayClasses: [],
+    })
+    expect(sql).toMatch(/WHERE profile_id IN \(\?\) AND 1 = 0/)
+  })
+
+  it("replayClasses === undefined → no clause (parity with empty filter)", () => {
+    const { sql } = buildAssetListQuery(emptyAssetListFilter())
+    expect(sql).not.toContain("replay_class")
+    expect(sql).not.toContain("1 = 0")
+  })
 })
 
 describe("buildAssetListQuery — tag semantics", () => {

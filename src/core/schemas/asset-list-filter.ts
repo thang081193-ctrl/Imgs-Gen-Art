@@ -42,6 +42,20 @@ function csvArray<T extends z.ZodTypeAny>(item: T) {
   }, z.array(item).min(1).optional())
 }
 
+// Like `csvArray`, but distinguishes absent (undefined) from present-but-empty
+// (`[]`). Used for `replayClasses` so the Gallery UI can express "0 of 3
+// checkboxes selected = match none" (Session #29 Q-29.E). The query builder
+// renders `[]` as a `1 = 0` clause so the server returns zero rows.
+function csvArrayPreserveEmpty<T extends z.ZodTypeAny>(item: T) {
+  return z.preprocess((val) => {
+    if (val === undefined || val === null) return undefined
+    if (Array.isArray(val)) return val
+    if (val === "") return []
+    const parts = String(val).split(",").map((s) => s.trim()).filter(Boolean)
+    return parts
+  }, z.array(item).optional())
+}
+
 // Wire-level query schema. `.strict()` rejects unknown keys to keep the URL
 // contract tight. Transform merges singular legacy params into plural arrays.
 export const AssetListFilterSchema = z
@@ -51,7 +65,7 @@ export const AssetListFilterSchema = z
     tags: csvArray(z.string().min(1)),
     providerIds: csvArray(z.string().min(1)),
     modelIds: csvArray(z.string().min(1)),
-    replayClasses: csvArray(z.enum(ReplayClassValues)),
+    replayClasses: csvArrayPreserveEmpty(z.enum(ReplayClassValues)),
     tagMatchMode: z.enum(TagMatchModeValues).optional(),
     datePreset: z.enum(DatePresetValues).optional(),
     batchId: z.string().min(1).optional(),

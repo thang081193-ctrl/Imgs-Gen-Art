@@ -55,9 +55,16 @@ export function buildAssetListQuery(
     params.push(...filter.modelIds)
   }
 
-  if (filter.replayClasses && filter.replayClasses.length > 0) {
-    where.push(`replay_class IN (${placeholders(filter.replayClasses.length)})`)
-    params.push(...filter.replayClasses)
+  // replayClasses preserves the "present-but-empty" wire state (see the schema
+  // `csvArrayPreserveEmpty` helper + Session #29 Q-29.E). `[]` means the user
+  // explicitly unchecked all 3 boxes → server must return zero rows.
+  if (filter.replayClasses !== undefined) {
+    if (filter.replayClasses.length === 0) {
+      where.push("1 = 0")
+    } else {
+      where.push(`replay_class IN (${placeholders(filter.replayClasses.length)})`)
+      params.push(...filter.replayClasses)
+    }
   }
 
   const tagClause = buildTagClause(filter.tags, filter.tagMatchMode ?? "any")

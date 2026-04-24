@@ -100,4 +100,38 @@ describe("AssetListFilterSchema", () => {
     expect(f.tagMatchMode).toBeUndefined()
     expect(f.profileIds).toBeUndefined()
   })
+
+  // Session #29 Q-29.E — UI "0 of 3 checkboxes selected" must round-trip as an
+  // empty array (distinct from absent) so the query builder can emit its
+  // `1 = 0` match-none clause. Other plural fields keep the absent-on-empty
+  // behavior.
+  describe("replayClasses preserves present-but-empty", () => {
+    it("absent key → undefined", () => {
+      const r = AssetListFilterSchema.parse({})
+      expect(r.replayClasses).toBeUndefined()
+    })
+
+    it("empty string value → [] (match-none sentinel)", () => {
+      const r = AssetListFilterSchema.parse({ replayClasses: "" })
+      expect(r.replayClasses).toEqual([])
+    })
+
+    it("single value → [value]", () => {
+      const r = AssetListFilterSchema.parse({ replayClasses: "deterministic" })
+      expect(r.replayClasses).toEqual(["deterministic"])
+    })
+
+    it("CSV preserves ordering + dedupes nothing (server wrapper handles set semantics)", () => {
+      const r = AssetListFilterSchema.parse({
+        replayClasses: "not_replayable,deterministic",
+      })
+      expect(r.replayClasses).toEqual(["not_replayable", "deterministic"])
+    })
+
+    it("other plural fields still collapse empty string → undefined", () => {
+      const r = AssetListFilterSchema.parse({ profileIds: "", tags: "" })
+      expect(r.profileIds).toBeUndefined()
+      expect(r.tags).toBeUndefined()
+    })
+  })
 })
