@@ -957,6 +957,145 @@ bug-fix on real dogfood findings, NOT new feature work.
 
 ---
 
-*Last updated: 2026-04-24 with Session #33 theme overlay (§H above).*
-*Status: v1 shipped + theme layer shipped. Next = bug-fix on
-dogfood findings.*
+## §I — Session #34 (Gallery delete UI + Home H1 chơi-chữ polish)
+
+First two real dogfood findings post-theme-ship. Batched into one
+session, two feature commits.
+
+### §I.1 — F1 Gallery delete UI (dogfood finding)
+
+Bro clicked around the Gallery after S#33 theme ship and hit the
+first real gap: no way to delete assets from the UI. Backend
+`DELETE /api/assets/:id` was already there (Phase 3 Step 6), just
+nothing wired client-side.
+
+**Scope expansion mid-session.** HANDOFF-S34 locked two Qs — A1
+(delete button lives in `AssetDetailModal`) and B1 (reuse
+`ConfirmDialog`, not `window.confirm`). Bro then asked for **both
+per-asset AND bulk-select delete** — A3 had been deferred in
+HANDOFF-S33 §H.3 ("gate on real count > 20"). Bro bypassed that
+gate because dogfood gallery already has 50+ assets.
+
+**Alignment Qs answered before fire.**
+- **Bulk backend shape** = **B-loop** (client `Promise.allSettled`),
+  not `POST /api/assets/bulk-delete`. Reason: single-asset
+  endpoint already works, loop is ~10 LOC, partial-fail surface
+  is cleaner client-side. Defer the dedicated bulk route until
+  >100-asset delete becomes a real use case.
+- **Bulk UX pattern** = **Google Photos/Drive style**, not
+  Dropbox/OneDrive. No "Select" toggle button — checkbox overlay
+  appears on thumbnail hover (opacity 0 → 100). Any tick enters
+  selection mode; header contextually swaps to
+  `[✕ Clear] N selected · [Select all on page] [Delete]` action
+  bar. Click thumbnail in selection mode = toggle (not open
+  modal). Clean, familiar, zero UX-learning-curve.
+
+**Implementation shape.**
+- `src/client/utils/use-delete-asset.ts` (hook) — single `mutate(id)`
+  + `mutateMany(ids)` returning `{ ok, failed }`. `allSettled` so
+  one 4xx doesn't sink the rest.
+- `src/client/components/GallerySelectionBar.tsx` (new) — pure
+  presentational contextual header. Gallery picks which header to
+  render based on `sel.selectionActive`.
+- `src/client/components/AssetThumbnail.tsx` — added optional
+  `selected` / `selectionActive` / `onToggleSelect` props.
+  Checkbox span is `role="checkbox"` with `aria-checked`; hover
+  shows it when selectionActive=false, always shows when
+  =true. Sky-blue ring when selected (matches JM Slate accent).
+- `src/client/utils/use-gallery-selection.ts` (hook) — owns the
+  Set, the refreshKey (for invalidating `useAssets`), the bulk
+  ConfirmDialog open flag, and the `runBulkDelete` callback.
+  Extracted because Gallery.tsx hit 340 LOC (hard cap 300) after
+  F1b inlined. Slimmed to 268 after the extract.
+- `AssetDetailModal.tsx` — footer (`border-t`, not a dedicated
+  `<footer>` element) carries the red-tinted "Delete asset"
+  button. Opens a `ConfirmDialog` with `danger` and an asset-id
+  slice in the body ("Asset ast_E4O7W6uZ… will be removed").
+  Success → toast + modal close + `onDelete(id)` callback so
+  Gallery can drop the id from selection and bump refreshKey.
+
+**`useAssets` + `refreshKey` cycle resolved via id mirroring.**
+`useAssets` already accepted an optional `refreshKey: number`
+cache-buster (it threads through the React dependency key as a
+fragment sentinel the server never sees). The hook cycle —
+Gallery uses selection.refreshKey, selection needs
+pageAssetIds from assets — resolved by mirroring the id list
+into local state via an effect, and passing that into the
+selection hook. One extra render per fetch, no perf issue at
+PAGE_SIZE=50.
+
+**Backend FK quirk surfaced by smoke.** Deleting an asset that
+is referenced as `replayedFromAssetId` by other assets returns
+500 (SQLite FK constraint, no CASCADE wiring). Client handles
+it cleanly — toast surfaces "Delete failed: Internal server
+error" and selection/modal state rewinds. Server-side fix is
+*out of scope* for S#34; flagged as a real carry-forward:
+either CASCADE (probably what we want — deleting the source
+semantically invalidates descendant replay chains) or a
+friendlier 409 with `REPLAY_DEPENDENTS_EXIST` code. Dogfood
+signal is one asset (`ast_oV48pXmw7T`) out of 50 is a source,
+so severity is low.
+
+**Tests.** DELETE route already has happy-path + 404 coverage in
+`tests/integration/assets-routes.test.ts` (Phase 3). No new
+server tests added. Client hooks not unit-tested; behavior
+covered by Preview MCP smoke.
+
+### §I.2 — F2 Home H1 chơi-chữ + Inter Variable self-host
+
+Bro asked for a more playful + premium typographic treatment on
+the landing H1. Three-part intent: (1) the word "Images" reads
+plainly, (2) "Gen" feels quieter / support, (3) "Art" is the
+punchline and carries the brand accent.
+
+**Font locked.** **Inter Variable, self-hosted**, per Q-T.E
+from §H (no CDNs). One woff2 (~344KB from rsms.me upstream)
+covers weight 100–900 via `font-variation-settings`. Served
+from `/public/fonts/` and declared at the top of `theme.css`
+with `@font-face { font-weight: 100 900; font-display: swap; }`.
+
+**Tailwind preflight gotcha.** Tailwind's base layer sets
+`html { font-family: ui-sans-serif, system-ui, ... }` and that
+rule was WINNING against our `html` rule in `theme.css` because
+`theme.css` is `@import`ed BEFORE `@tailwind base` (the CSS var
+ordering matters for theme.css's `:root` token overrides, so
+it has to come first). Fix: move the single `html` font-family
+binding into `index.css` inside `@layer base` so it merges into
+Tailwind's own base layer and wins via layer semantics. CSS
+vars stay in `theme.css`.
+
+**H1 treatment.** Three spans:
+- `<span class="font-normal">Images</span>` — weight 400,
+  default ink.
+- `<span class="font-light italic text-slate-400">Gen</span>`
+  — weight 300, italic, muted slate.
+- `<span class="font-black bg-gradient-to-br from-sky-400 via-indigo-500 to-violet-600 bg-clip-text text-transparent">Art</span>`
+  — weight 900, sky → indigo → violet gradient, clipped to text.
+  Reads well in both themes (sky/violet contrast is strong
+  enough on both `#0b0f14` and `#eef3f9`).
+
+Heading size bumped `text-5xl → text-6xl` to give the
+three-part composition breathing room. `leading-none` tightens
+the height so the italic "Gen" descender doesn't shove the
+baseline.
+
+### §I.3 — Out-of-scope carry-forwards after S#34
+
+Same list as HANDOFF-S33 §H.3 + new findings:
+
+- **§I.1 backend: CASCADE or 409-guard for replay-source delete**
+  (new — dogfood smoke surfaced it; low-severity).
+- Sharp-derived icon-only favicon crop.
+- jm-* semantic class migration.
+- Theme-aware brand-color ramps.
+- §C1 asset_tags JOIN migration.
+- §G.1 server-side async flush await.
+
+S#35 returns to bug-fix-only mode per HANDOFF-S33 default.
+
+---
+
+*Last updated: 2026-04-24 with Session #34 (§I).*
+*Status: v1 shipped + theme layer + Gallery delete UI + H1
+chơi-chữ. Next = bug-fix on dogfood findings; replay-delete
+FK guard is the first known one to pick up.*
