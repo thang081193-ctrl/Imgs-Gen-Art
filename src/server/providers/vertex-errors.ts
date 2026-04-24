@@ -25,7 +25,7 @@ interface ErrorShape {
   error?: { code?: number | string; status?: string; message?: string }
 }
 
-function coerceStatusCode(err: unknown): number | undefined {
+export function coerceStatusCode(err: unknown): number | undefined {
   if (!err || typeof err !== "object") return undefined
   const e = err as ErrorShape
   if (typeof e.status === "number") return e.status
@@ -40,7 +40,7 @@ function coerceStatusCode(err: unknown): number | undefined {
   return undefined
 }
 
-function coerceRpcStatus(err: unknown): string | undefined {
+export function coerceRpcStatus(err: unknown): string | undefined {
   if (!err || typeof err !== "object") return undefined
   const e = err as ErrorShape
   if (typeof e.error?.status === "string") return e.error.status

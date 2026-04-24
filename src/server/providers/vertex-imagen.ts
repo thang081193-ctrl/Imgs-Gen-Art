@@ -37,6 +37,7 @@ import {
   mapSdkErrorToThrown,
 } from "./vertex-errors"
 import { extractImageFromResponse } from "./vertex-extract"
+import { retryOn429 } from "./vertex-retry"
 
 const VERTEX_MODEL_IDS: readonly string[] = [MODEL_IDS.IMAGEN_4]
 
@@ -186,13 +187,23 @@ async function generate(params: GenerateParams): Promise<GenerateResult> {
   if (params.seed !== undefined) config["seed"] = params.seed
   if (params.language) config["language"] = params.language
 
+  // Session #35 F3 — retry-on-429 wraps the SDK call so Imagen's per-region
+  // per-minute burst limit doesn't drop variants mid-batch. Non-429 errors
+  // throw on the first attempt.
   let response
   try {
-    response = await client.models.generateImages({
-      model: params.modelId,
-      prompt: params.prompt,
-      config: config as never,
-    })
+    response = await retryOn429(
+      () =>
+        client.models.generateImages({
+          model: params.modelId,
+          prompt: params.prompt,
+          config: config as never,
+        }),
+      {
+        modelId: params.modelId,
+        ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+      },
+    )
   } catch (err) {
     mapSdkErrorToThrown(err, { modelId: params.modelId })
   }
