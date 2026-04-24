@@ -621,8 +621,216 @@ activates here).
 
 ---
 
-*Last updated: 2026-04-24 with Session #31 (Phase 5 Step 6 —
-AppProfileSchema v2 migration via z.union + transform;
-preserve-edits-on-409 UI re-opened from Session #30 F1 defer).*
-*Status: Phase 5 all steps closed (1/2/3/4/5a/5b/6). Phase 5 polish
-backlog remains (CF #10-27 in HANDOFF-SESSION32.md).*
+## §G — Session #32 (Phase 6 ship close-out — v1 READY polish bundle)
+
+Phase 6 is the "final polish" single-session bundle that drains the
+must-ship-before-v1 backlog: F1 flake fix + F2 dead-code sweep + F3
+Gallery custom date picker + F4 tag autocomplete (BE + FE) + F5
+PromptLab standalone entry + F6 close. 6 pre-alignment Qs locked at
+kickoff; 3 mid-stream pushbacks reversed direction when evidence
+surfaced (see below). Regression at close: 700 pass / 10 skipped /
+1 todo / 711 total.
+
+### G.1 — F1 CF#27 test race fix: singleFork pool + rmSync retry budget
+
+Original Q-32.B verdict (bro) rejected retry-with-backoff as
+"masking symptom" and landed on `singleThread` + defensive
+`fs.rm({recursive, force})` as the primary fix. Experiment
+(5-run verification post-fix) showed 4/5 clean with runs 1-4
+flaking 1-6 failures — singleFork alone was **non-deterministic**.
+
+Revised root cause: the race is NOT purely cross-file. Server
+asset-store continues flushing `data/assets/chartlens/**` writes
+after the HTTP response returns; afterEach rmSync fires during
+that flush, Windows + antivirus amplifies the race window,
+ENOTEMPTY surfaces. This is an intra-file async-sync race that
+serialization alone can't fix.
+
+Final fix combines two layers:
+- **Serialization** (vitest.config.ts `poolMatchGlobs` — 5 files
+  pinned to a forks pool with `singleFork: true`): eliminates
+  cross-file contention. Files covered: `edit-and-run`,
+  `replay-route`, `workflows-full`, `workflows-routes`,
+  `workflows-cancel` (5th file, not in the handoff's "4
+  affected" list — discovered via ASSET_CLEANUP grep).
+- **Native retry budget** (`rmSync({recursive, force,
+  maxRetries: 5, retryDelay: 200})` — 1s total): absorbs the
+  residual intra-file async-write vs sync-rm window. Retry IS
+  the correct fix here — Node provides it in stdlib precisely
+  for OS-level transient FS races, and we cannot synchronize
+  from JS-land against Windows filesystem handle release.
+
+Verified: 5 consecutive clean regression runs, 0/5 failures.
+
+Backlog entry captured in HANDOFF-SESSION33 "Out of scope":
+**server-side async flush await** — asset-store write methods
+should await `fs.fsync` or stream close before HTTP response
+so the race can't re-emerge in production on rapid create-
+delete flows. Non-blocking for v1 (human-scale UX) + retry
+mechanism compensates in tests.
+
+### G.2 — F2 clean-sweep dead-code deletion (/export + /import)
+
+Handoff §F2 named only `/api/profiles/:id/export` for deletion
+(unused post-Session #30 F4 client-side export). Grep evidence
+at F2 kickoff showed **`/api/profiles/import` is also dead** —
+zero src/ consumers, no UI ever built; handoff §21 explicitly
+defers "Profile import UI" to v2+ roadmap ("ship when a real
+user hits it"). Option B clean-sweep deletes both endpoints +
+both test `describe` blocks in one commit.
+
+Original Q-32.F earlier bro rec of `@deprecated` + `X-Deprecation`
+header was reversed at Q-F2 — generic API-hygiene default, wrong
+for ArtForge context:
+- Local-first tool, 127.0.0.1 binding, no external consumers.
+- Pre-v1.0 — no SemVer migration concern.
+- Pattern consistency — Sessions #27a/27b deleted dead code
+  outright, no deprecation period.
+
+Removed: 2 route handlers + `ProfileImportBodySchema` +
+`ProfileImportBody` + 2 integration `describe` blocks (5 tests)
++ `/export` entry in DTO BANNED_KEYS audit list. Commit diff
++8/-90 LOC.
+
+### G.3 — F3 custom date picker (schema + SQL override + UI toggle)
+
+Handoff §F3 misstated 2 facts:
+- `dateFrom` / `dateTo` NOT in schema (only `datePreset` enum
+  existed at session start).
+- `FilterBarDateSection` component NOT a standalone file —
+  DateSection was inline in `FilterBarEnumSections.tsx`.
+
+Actual scope: schema extension + SQL builder override + client-
+URL builder + DateSection extension + chip resolver + Gallery
+clear-handler special case. Larger than the 2h estimate, landed
+in ~3h. 5 design Qs locked pre-code:
+
+- **A3 toggle override** — presets default; "Custom range..."
+  expander reveals dateFrom/dateTo inputs. Picking a preset
+  clears custom; setting custom clears preset. Server-side
+  SQL builder also honors override (custom wins if either
+  bound set) so URL hand-edits can't emit both clauses.
+- **B1** extend inline DateSection (no new file — keeps the
+  FilterBar shell coherent; dropdown renders via expanded
+  state inside the existing fieldset).
+- **C1** client-side dateFrom ≤ dateTo validation with
+  role=alert inline message. Server refines are overkill at
+  v1 scale — schema only gates format.
+- **D1** chip body "2026-04-20 → 2026-04-24" (ISO). Locale-
+  formatted display deferred (no locale dep in v1 elsewhere).
+- **E3** local day boundary — dateFrom = local 00:00 →
+  UTC-ISO, dateTo = local 23:59:59.999 → UTC-ISO. Matches
+  existing `datePreset=today` boundary semantics.
+
+Schema: `dateFrom`/`dateTo` = `z.string().regex(/^\d{4}-\d{2}-
+\d{2}$/)`. SQL builder `buildAssetListQuery` branches: when
+either custom bound set, skip `datePresetBoundary(…)` entirely
+and emit `created_at >= localDayStart(?)` / `created_at <=
+localDayEnd(?)` clauses. Chip resolver checks dateFrom/dateTo
+first and falls back to preset. Gallery `clearDimension
+("datePreset")` resets all three fields.
+
+### G.4 — F4 /api/tags endpoint + autocomplete (flat path, additive shape)
+
+Bro's initial Q-32.C spec (path `/api/tags` + response
+`{id, name, color?, usageCount, createdAt, total}`) assumed a
+real `tags` table + `asset_tags` JOIN exists. Audit proved
+false — §C1 trigger still not tripped; tags live in a JSON
+array column on `assets`. Option γ compromise lands:
+
+- **Path = `/api/tags` (flat, retained)** — future-proofs for
+  when a first-class tags resource exists. Future extension
+  path: enriched response shape, not a URL change.
+- **Response v1 = `{ tags: [{tag, count}], total }`** — matches
+  current storage reality. Enrichment fields (id / color /
+  createdAt) land additively when the §C1 migration trips.
+- **Query = `?q=<prefix>&limit=<n>`** — q max 100 chars,
+  limit int 1-50 (default 10). `sort` param dropped (2 values
+  trivial client-side). Empty q returns top-N by count.
+
+SQL: `json_each(COALESCE(assets.tags, '[]'))` unnests the
+inline JSON array; `LIKE ? || '%' COLLATE NOCASE` prefix match;
+`GROUP BY json_each.value ORDER BY count DESC, tag ASC LIMIT ?`.
+No LIKE-escape in v1 (matches existing filter-layer choice —
+§C1 acceptable-risk note preserved). Companion `buildTagsCount
+Query` emits a `COUNT(DISTINCT ...)` counterpart.
+
+Client: `useAssetTags(q, limit, debounceMs=300)` wraps `useFetch`
+with a debounced-q state. Pure `buildAssetTagsPath` builder
+returns `null` when q is null (skips fetch), omits `q=` param
+when q is empty. Combobox in `FilterBarTagsSection` opens on
+focus, filters already-selected tags client-side, supports
+ArrowDown/Up (with wrap) + Enter-commits-highlighted-else-typed
++ mousedown-select + Escape-close. Highlighted tag prefix
+rendered in bold via `<strong>`.
+
+### G.5 — F5 PromptLab standalone TopNav entry (Q-32.D)
+
+Pre-S32: PromptLab reachable only via AssetDetailModal →
+`[Edit & replay]`. F5 adds a TopNav link (between Gallery and
+Profiles) that routes to `/prompt-lab` with no `assetId`,
+landing on the existing empty-state branch. Empty state
+rewritten per Q-32.D:
+- Primary text: "Select an asset from the Gallery to start
+  editing."
+- Primary CTA: "Go to Gallery →" → `navigator.go("gallery")`.
+- Secondary hint: "Or open an asset from any batch and click
+  [Edit & replay]."
+
+Inline asset-picker rejected (Q-32.D) — duplicates Gallery
+functionality and teaches the wrong mental model; PromptLab
+stays asset-scoped entry from Gallery.
+
+### G.6 — Commit shape + push cadence
+
+Q-32.F resolved to **4 commits**, revised to **5** at Q-F2.push
+to keep F2 refactor + F4 feat type-labels clean:
+- Commit 1 (`fix(tests)`): F1 race fix. Pushed immediately
+  (risky infra change, verification gate).
+- Commit 2a (`refactor(api)`): F2 clean-sweep. Held local +
+  batched with 2b.
+- Commit 2b (`feat(api)`): F4-BE endpoint. Pushed batch with 2a.
+- Commit 3 (`feat(gallery,ui)`): F3 + F4-FE + F5 UI bundle.
+- Commit 4 (`docs`): F6 close — this §G entry + PHASE-STATUS
+  §S32 row + HANDOFF-SESSION33.
+
+Live smoke `test:live:smoke-all` skipped per Q-32.E ($0.92
+preserved). No provider-surface code changed in F1-F5; the
+11-pair coverage floor from Session #23 stays valid.
+
+### G.7 — Out of scope (carry-forwards for v2+)
+
+Phase 6 drained the v1-critical polish. Remaining items ride
+forward into HANDOFF-SESSION33's backlog seed (all items below
+explicitly **deferred**, not forgotten):
+
+- **Server-side async flush await** (§G.1 retrospective) —
+  asset-store should `await fs.fsync` or stream-close before
+  HTTP response. Non-blocking for v1 UX; would eliminate the
+  residual test-retry window.
+- **§C1 `asset_tags` JOIN table migration** — triggered by
+  either (a) asset count > 10k (LIKE scan slows) or (b) real
+  per-tag metadata surfaces (color / createdAt / description).
+- **Component + hook tests** (carry-forward #5) — still gated
+  on jsdom. Preview MCP smoke is the v1 substitute.
+- **Live HTTP capability test** (carry-forward #1) — 11-pair
+  smoke is the coverage floor.
+- **Tree view via parentHistoryId** (carry-forward #10),
+  **side-by-side diff panel** (#11), **cursor-based
+  pagination** (#14), **Profile import UI** (#21), **3-way
+  merge UI** (#22), **bulk profile ops** (#23), **profile
+  list search/filter** (#24), **read-only profile view
+  route** (#25) — all dogfood-trigger-gated (ship when a
+  real user hits the gap).
+
+Phase 6 ships v1 as **feature-complete, polish-complete, and
+ship-ready**. Next session (Session #33) = post-ship support
+— bug-fix flow on real dogfood findings, NOT new feature work.
+
+---
+
+*Last updated: 2026-04-24 with Session #32 (Phase 6 ship close —
+F1 race fix + F2 dead-code sweep + F3 custom date picker + F4
+/api/tags + F5 PromptLab entry + F6 close; §G above).*
+*Status: Phase 6 CLOSED. v1 READY. Next = Session #33 post-ship
+support.*
