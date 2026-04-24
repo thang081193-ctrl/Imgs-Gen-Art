@@ -4,6 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Images Gen Art</title>
+    <meta name="description" content="Local-first artwork generation platform by JM Studio." />
+
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+
+    <meta property="og:title" content="Images Gen Art" />
+    <meta property="og:description" content="Local-first artwork generation platform by JM Studio." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <meta name="theme-color" media="(prefers-color-scheme: dark)"  content="#0b0f14" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef3f9" />
+
+    <script>
+      /* Session #33 theme pre-hydration — runs before React mounts so
+         there is no flash between <html data-theme="dark"> default styles
+         and the user's stored/system preference. Keep in sync with
+         src/client/utils/use-theme.ts (same storage key + values). */
+      (function () {
+        try {
+          var stored = localStorage.getItem("iga-theme");
+          var theme = (stored === "dark" || stored === "light")
+            ? stored
+            : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-950 text-slate-100">
     <div id="root"></div>

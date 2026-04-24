@@ -1,0 +1,123 @@
+/* Session #33 theme overlay — JM Slate tokens applied over the existing
+   Tailwind-utility component layer. Dark is the default (matches what v1
+   shipped); light is a fresh companion theme driven by the same token set.
+
+   Strategy: we keep every `bg-slate-*` / `text-slate-*` / `border-slate-*`
+   class literal the components were written against, and swap the slate
+   palette values out via CSS custom properties. `tailwind.config.ts` maps
+   the slate color stops to `rgb(var(--color-slate-X) / <alpha-value>)`
+   so `bg-slate-900/40` (alpha modifier) still works correctly.
+
+   `<html data-theme="dark|light">` drives the toggle; an inline script in
+   index.html sets it before React mounts so there is no flash. The
+   semantic JM Slate tokens (`--jm-accent`, `--jm-success`, etc.) are also
+   exposed for any component that wants to opt into the theme-native
+   naming in future refactors — v1 components stay on the Tailwind names.
+*/
+
+:root,
+:root[data-theme="dark"] {
+  /* Tailwind slate palette — dark theme.
+     Anchors: slate-950 = JM Slate dark bg (#0b0f14), slate-50 = JM Slate
+     dark ink (#f7f9fc). Intermediate shades interpolate between them with
+     JM's surface + muted tokens pinned at the semantic positions v1
+     components already rely on (slate-400 = muted, slate-700 = border,
+     slate-800 = soft surface, slate-900 = surface, slate-950 = bg). */
+  --color-slate-50:  247 249 252;
+  --color-slate-100: 226 230 235;
+  --color-slate-200: 205 211 220;
+  --color-slate-300: 176 186 199;
+  --color-slate-400: 154 165 180;
+  --color-slate-500: 100 116 139;
+  --color-slate-600: 75 85 99;
+  --color-slate-700: 58 69 83;
+  --color-slate-800: 28 34 45;
+  --color-slate-900: 18 23 31;
+  --color-slate-950: 11 15 20;
+
+  /* JM Slate semantic tokens (opt-in; components not yet migrated to
+     jm-* classes stay on Tailwind utility literals above). */
+  --jm-bg: #0b0f14;
+  --jm-surface: rgba(18, 23, 31, 0.96);
+  --jm-surface-soft: rgba(28, 34, 45, 0.96);
+  --jm-surface-muted: rgba(13, 18, 25, 0.98);
+  --jm-topbar-surface: rgba(11, 15, 21, 0.92);
+  --jm-card-surface: rgba(17, 22, 30, 0.96);
+  --jm-card-surface-alt: rgba(20, 26, 35, 0.96);
+  --jm-field-surface: rgba(7, 9, 12, 0.90);
+  --jm-modal-surface: rgba(11, 14, 18, 0.96);
+
+  --jm-ink: #f7f9fc;
+  --jm-muted: #9aa5b4;
+  --jm-border: rgba(220, 227, 237, 0.14);
+  --jm-border-strong: rgba(220, 227, 237, 0.22);
+  --jm-card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  --jm-accent: #9eb7d4;
+  --jm-accent-dark: #89a4c5;
+  --jm-accent-soft: rgba(158, 183, 212, 0.14);
+  --jm-success: #8fd6b1;
+  --jm-success-soft: rgba(143, 214, 177, 0.14);
+  --jm-warning: #f5ca7a;
+  --jm-warning-soft: rgba(245, 202, 122, 0.14);
+  --jm-danger: #ff8d88;
+  --jm-danger-soft: rgba(255, 141, 136, 0.14);
+  --jm-info: #9fc8ff;
+  --jm-info-soft: rgba(159, 200, 255, 0.16);
+
+  --jm-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  /* Tailwind slate palette — light theme. The numeric shade still orders
+     from "lightest text" (slate-50) to "darkest bg" (slate-950) *in dark*;
+     in light we flip the mental model so the same class literal still
+     reads correctly — `bg-slate-950` remains the app background (which
+     is now near-white), `text-slate-100` remains the primary text
+     (which is now near-black). */
+  --color-slate-50:  15 23 42;
+  --color-slate-100: 30 41 59;
+  --color-slate-200: 51 65 85;
+  --color-slate-300: 71 85 105;
+  --color-slate-400: 95 111 132;
+  --color-slate-500: 139 149 162;
+  --color-slate-600: 181 191 201;
+  --color-slate-700: 212 219 230;
+  --color-slate-800: 247 250 255;
+  --color-slate-900: 255 255 255;
+  --color-slate-950: 238 243 249;
+
+  --jm-bg: #eef3f9;
+  --jm-surface: rgba(255, 255, 255, 0.94);
+  --jm-surface-soft: rgba(248, 251, 255, 0.96);
+  --jm-surface-muted: rgba(241, 246, 252, 0.98);
+  --jm-topbar-surface: rgba(255, 255, 255, 0.88);
+  --jm-card-surface: rgba(255, 255, 255, 0.98);
+  --jm-card-surface-alt: rgba(247, 250, 255, 0.98);
+  --jm-field-surface: rgba(255, 255, 255, 0.96);
+  --jm-modal-surface: rgba(255, 255, 255, 0.96);
+
+  --jm-ink: #0f172a;
+  --jm-muted: #5f6f84;
+  --jm-border: rgba(15, 23, 42, 0.12);
+  --jm-border-strong: rgba(15, 23, 42, 0.18);
+  --jm-card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+
+  --jm-accent: #2563eb;
+  --jm-accent-dark: #1d4ed8;
+  --jm-accent-soft: rgba(37, 99, 235, 0.12);
+  --jm-success: #15803d;
+  --jm-success-soft: rgba(34, 197, 94, 0.14);
+  --jm-warning: #b7791f;
+  --jm-warning-soft: rgba(245, 158, 11, 0.16);
+  --jm-danger: #c2410c;
+  --jm-danger-soft: rgba(239, 68, 68, 0.14);
+  --jm-info: #1d4ed8;
+  --jm-info-soft: rgba(59, 130, 246, 0.14);
+
+  --jm-shadow: 0 18px 38px rgba(15, 23, 42, 0.10);
+
+  color-scheme: light;
+}
