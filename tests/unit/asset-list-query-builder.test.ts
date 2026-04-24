@@ -12,7 +12,8 @@ import { emptyAssetListFilter } from "@/core/schemas/asset-list-filter"
 describe("buildAssetListQuery — empty filter", () => {
   it("produces a WHERE-less query with LIMIT + OFFSET only", () => {
     const { sql, params } = buildAssetListQuery(emptyAssetListFilter())
-    expect(sql).toBe("SELECT * FROM assets  ORDER BY created_at DESC LIMIT ? OFFSET ?")
+    expect(sql).toMatch(/^SELECT assets\.\*, .+ FROM assets  ORDER BY created_at DESC LIMIT \? OFFSET \?$/)
+    expect(sql).toContain("replay_descendant_count")
     expect(params).toEqual([50, 0])
   })
 })

@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS assets (
   created_at TEXT NOT NULL,
 
   FOREIGN KEY (batch_id) REFERENCES batches(id),
-  FOREIGN KEY (replayed_from) REFERENCES assets(id)
+  -- Session #35 F1: CASCADE added in 2026-04-24-replay-cascade.sql.
+  -- Deleting a source invalidates descendant replay chains; UI warns
+  -- about the blast radius via replayDescendantCount on AssetDto.
+  FOREIGN KEY (replayed_from) REFERENCES assets(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_assets_profile ON assets(profile_id);
@@ -54,6 +57,9 @@ CREATE INDEX idx_assets_workflow ON assets(workflow_id);
 CREATE INDEX idx_assets_batch ON assets(batch_id);
 CREATE INDEX idx_assets_variant_group ON assets(variant_group);
 CREATE INDEX idx_assets_created ON assets(created_at DESC);
+-- Session #35 F1: indexes the self-FK subquery used to populate
+-- replayDescendantCount on AssetDto (single lookup per list row).
+CREATE INDEX idx_assets_replayed_from ON assets(replayed_from);
 
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY,

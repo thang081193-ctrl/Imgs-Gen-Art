@@ -59,6 +59,10 @@ export interface AssetDto {
 
   replayClass: ReplayClass
   replayedFromAssetId: string | null
+  // Session #35 F1: number of descendant assets that have this asset as
+  // their replay source. Deleting this asset CASCADEs those descendants
+  // away, so the UI warns when > 0 before confirming a destructive op.
+  replayDescendantCount: number
   editable: EditableFlag
 
   tags: string[]

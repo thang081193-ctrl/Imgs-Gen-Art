@@ -176,6 +176,13 @@ export function AssetDetailModal({
           <>
             Asset <code className="font-mono text-slate-200">{asset.id.slice(0, 12)}…</code>{" "}
             will be removed. This can't be undone.
+            {asset.replayDescendantCount > 0 && (
+              <p className="mt-2 rounded border border-amber-800/60 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-300">
+                ⚠ This will also delete {asset.replayDescendantCount} replay
+                descendant{asset.replayDescendantCount === 1 ? "" : "s"} that
+                source from this asset.
+              </p>
+            )}
           </>
         }
         confirmLabel="Delete"

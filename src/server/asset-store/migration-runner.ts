@@ -4,6 +4,14 @@
 // when the filename is recorded AND the content checksum still matches.
 // A mismatch throws MigrationDriftError (fail-fast per Rule 12) so that
 // silent edits to already-applied migrations cannot slip into prod.
+//
+// Session #35 F1: table-recreation migrations that change a foreign-key
+// action (e.g. adding `ON DELETE CASCADE`) must temporarily disable FK
+// enforcement per SQLite's 12-step ALTER recipe — otherwise `DROP TABLE`
+// fires cascading DELETEs on unrelated referencing tables. A migration
+// file opts in with a leading `-- @no-fk-checks` directive; the runner
+// toggles `PRAGMA foreign_keys` around the transaction (it's a no-op
+// inside one).
 
 import type Database from "better-sqlite3"
 import { readdirSync, readFileSync } from "node:fs"
@@ -67,11 +75,17 @@ export function runPendingMigrations(
       continue
     }
 
-    const applyOne = db.transaction(() => {
-      db.exec(content)
-      insertRecord.run(filename, new Date().toISOString(), checksum)
-    })
-    applyOne()
+    const disableFkChecks = /^\s*--\s*@no-fk-checks\b/m.test(content)
+    if (disableFkChecks) db.pragma("foreign_keys = OFF")
+    try {
+      const applyOne = db.transaction(() => {
+        db.exec(content)
+        insertRecord.run(filename, new Date().toISOString(), checksum)
+      })
+      applyOne()
+    } finally {
+      if (disableFkChecks) db.pragma("foreign_keys = ON")
+    }
     result.applied.push(filename)
   }
 

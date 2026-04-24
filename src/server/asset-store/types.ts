@@ -43,6 +43,7 @@ export interface AssetInternal {
   tags: string[]
   notes: string | null
   replayedFrom: string | null
+  replayDescendantCount: number
 
   createdAt: string
 }

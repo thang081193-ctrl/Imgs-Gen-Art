@@ -35,6 +35,7 @@ interface SeedOverrides {
   tags?: string[]
   createdAt?: string
   batchId?: string | null
+  replayedFrom?: string | null
 }
 
 function seedAsset(id: string, overrides?: SeedOverrides): string {
@@ -78,7 +79,7 @@ function seedAsset(id: string, overrides?: SeedOverrides): string {
     costUsd: 0,
     tags: overrides?.tags,
     notes: null,
-    replayedFrom: null,
+    replayedFrom: overrides?.replayedFrom ?? null,
     createdAt: overrides?.createdAt,
   })
   return filePath
@@ -295,6 +296,60 @@ describe("DELETE /api/assets/:id", () => {
     expect(res.status).toBe(404)
     const body = await res.json() as { error: string }
     expect(body.error).toBe("ASSET_NOT_FOUND")
+  })
+
+  // Session #35 F1 — deleting a source with replay descendants used to
+  // 500 on SQLite FK. The migration flipped the self-FK to ON DELETE
+  // CASCADE so the source + all descendants go in a single 204.
+  it("source with replay descendants → cascades delete (204)", async () => {
+    seedAsset("ast_source")
+    seedAsset("ast_child", { replayedFrom: "ast_source" })
+    seedAsset("ast_grandchild", { replayedFrom: "ast_child" })
+
+    const res = await fetchApp("/api/assets/ast_source", { method: "DELETE" })
+    expect(res.status).toBe(204)
+
+    for (const id of ["ast_source", "ast_child", "ast_grandchild"]) {
+      const check = await fetchApp(`/api/assets/${id}`)
+      expect(check.status).toBe(404)
+    }
+  })
+})
+
+describe("replayDescendantCount on AssetDto (Session #35 F1)", () => {
+  it("0 for leaf assets", async () => {
+    seedAsset("ast_leaf")
+    const res = await fetchApp("/api/assets/ast_leaf")
+    const body = await res.json() as { replayDescendantCount: number }
+    expect(body.replayDescendantCount).toBe(0)
+  })
+
+  it("matches number of descendants sourcing from this asset", async () => {
+    seedAsset("ast_src")
+    seedAsset("ast_c1", { replayedFrom: "ast_src" })
+    seedAsset("ast_c2", { replayedFrom: "ast_src" })
+    // Grandchild references ast_c1 — not counted for ast_src (one-hop only).
+    seedAsset("ast_gc", { replayedFrom: "ast_c1" })
+
+    const src = await (await fetchApp("/api/assets/ast_src")).json() as {
+      replayDescendantCount: number
+    }
+    const c1 = await (await fetchApp("/api/assets/ast_c1")).json() as {
+      replayDescendantCount: number
+    }
+    expect(src.replayDescendantCount).toBe(2)
+    expect(c1.replayDescendantCount).toBe(1)
+  })
+
+  it("list endpoint includes the count on every row", async () => {
+    seedAsset("ast_a")
+    seedAsset("ast_b", { replayedFrom: "ast_a" })
+
+    const res = await fetchApp("/api/assets")
+    const body = await res.json() as { assets: { id: string; replayDescendantCount: number }[] }
+    const byId = Object.fromEntries(body.assets.map((a) => [a.id, a.replayDescendantCount]))
+    expect(byId.ast_a).toBe(1)
+    expect(byId.ast_b).toBe(0)
   })
 })
 

@@ -95,7 +95,12 @@ export function buildAssetListQuery(
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
-  const sql = `SELECT * FROM assets ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+  // Session #35 F1 — threads replay_descendant_count onto every list row
+  // via a self-FK subquery. Indexed by idx_assets_replayed_from; roughly
+  // one B-tree lookup per row, negligible at v1 scale.
+  const descendantSubquery =
+    "(SELECT COUNT(*) FROM assets d WHERE d.replayed_from = assets.id) AS replay_descendant_count"
+  const sql = `SELECT assets.*, ${descendantSubquery} FROM assets ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`
   params.push(filter.limit, filter.offset ?? 0)
   return { sql, params }
 }

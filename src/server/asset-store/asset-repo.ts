@@ -73,8 +73,14 @@ interface AssetRow {
   tags: string | null
   notes: string | null
   replayed_from: string | null
+  replay_descendant_count: number
   created_at: string
 }
+
+// Session #35 F1 — self-FK subquery used by every read path. Indexed via
+// idx_assets_replayed_from so the per-row cost is a single B-tree lookup.
+export const ASSET_SELECT_COLUMNS =
+  "assets.*, (SELECT COUNT(*) FROM assets d WHERE d.replayed_from = assets.id) AS replay_descendant_count"
 
 function rowToAsset(row: AssetRow): AssetInternal {
   return {
@@ -106,6 +112,7 @@ function rowToAsset(row: AssetRow): AssetInternal {
     tags: row.tags ? (JSON.parse(row.tags) as string[]) : [],
     notes: row.notes,
     replayedFrom: row.replayed_from,
+    replayDescendantCount: row.replay_descendant_count,
     createdAt: row.created_at,
   }
 }
@@ -115,9 +122,11 @@ export function createAssetRepo(db: Database.Database) {
   const insertStmt = db.prepare(
     `INSERT INTO assets (${COLUMNS.join(", ")}) VALUES (${placeholders})`,
   )
-  const findByIdStmt = db.prepare(`SELECT * FROM assets WHERE id = ?`)
+  const findByIdStmt = db.prepare(
+    `SELECT ${ASSET_SELECT_COLUMNS} FROM assets WHERE id = ?`,
+  )
   const findByBatchStmt = db.prepare(
-    `SELECT * FROM assets WHERE batch_id = ? ORDER BY created_at ASC`,
+    `SELECT ${ASSET_SELECT_COLUMNS} FROM assets WHERE batch_id = ? ORDER BY created_at ASC`,
   )
   const countByProfileStmt = db.prepare(
     `SELECT COUNT(*) AS count FROM assets WHERE profile_id = ?`,

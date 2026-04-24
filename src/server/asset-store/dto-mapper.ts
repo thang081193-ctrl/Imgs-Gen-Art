@@ -64,6 +64,7 @@ export function toAssetDto(asset: AssetInternal): AssetDto {
     costUsd: asset.costUsd,
     replayClass: asset.replayClass,
     replayedFromAssetId: asset.replayedFrom,
+    replayDescendantCount: asset.replayDescendantCount,
     editable: computeEditable(asset),
     tags: asset.tags,
     notes: asset.notes,
