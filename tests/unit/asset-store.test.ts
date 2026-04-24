@@ -123,12 +123,12 @@ describe("asset-repo — insert / findById / findByBatch / list", () => {
     repo.insert(baseAsset({ id: "a3", profileId: "chartlens",   workflowId: "aso-screenshots", createdAt: "2026-04-21T10:00:02Z" }))
     repo.insert(baseAsset({ id: "a4", profileId: "plant-identifier", workflowId: "artwork-batch", createdAt: "2026-04-21T10:00:03Z" }))
 
-    const byProfile = repo.list({ profileId: "chartlens", limit: 10 })
+    const byProfile = repo.list({ profileIds: ["chartlens"], limit: 10 })
     expect(byProfile.map((r) => r.id)).toEqual(["a3", "a2", "a1"])
 
     const byProfileAndWorkflow = repo.list({
-      profileId: "chartlens",
-      workflowId: "artwork-batch",
+      profileIds: ["chartlens"],
+      workflowIds: ["artwork-batch"],
       limit: 10,
     })
     expect(byProfileAndWorkflow.map((r) => r.id)).toEqual(["a2", "a1"])

@@ -22,10 +22,8 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import { NotFoundError } from "@/core/shared/errors"
 import { getAssetRepo, toAssetDto } from "@/server/asset-store"
 import type { AssetInternal } from "@/server/asset-store"
-import {
-  AssetListQuerySchema,
-  parseIncludeParam,
-} from "./assets.body"
+import { AssetListFilterSchema } from "@/core/schemas/asset-list-filter"
+import { parseIncludeParam } from "./assets.body"
 
 function mimeTypeFromPath(filePath: string): string {
   const ext = extname(filePath).toLowerCase()
@@ -34,14 +32,15 @@ function mimeTypeFromPath(filePath: string): string {
   return "image/png"
 }
 
-function coerceQuery(c: { req: { query: (key: string) => string | undefined } }): Record<string, string> {
-  // Hono's c.req.query() without args returns Record<string, string>; but we
-  // want just the keys the schema cares about. Use the single-arg getter so
-  // Zod sees a clean record even for optional fields.
+// Keep `?include=` out of the filter schema — it's a projection flag, not a
+// list filter. Everything else flows through AssetListFilterSchema.strict().
+const FILTER_EXCLUDED_KEYS = new Set(["include"])
+
+function collectFilterQuery(c: { req: { query: () => Record<string, string> } }): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const k of ["profileId", "workflowId", "batchId", "limit", "offset"]) {
-    const v = c.req.query(k)
-    if (v !== undefined) out[k] = v
+  for (const [k, v] of Object.entries(c.req.query())) {
+    if (FILTER_EXCLUDED_KEYS.has(k)) continue
+    out[k] = v
   }
   return out
 }
@@ -50,25 +49,17 @@ export function createAssetsRoute(): Hono {
   const route = new Hono()
 
   route.get("/", (c) => {
-    const parsed = AssetListQuerySchema.safeParse(coerceQuery(c))
+    const parsed = AssetListFilterSchema.safeParse(collectFilterQuery(c))
     if (!parsed.success) {
       return c.json(
         { error: "BAD_REQUEST", message: "Invalid query", issues: parsed.error.issues },
         400,
       )
     }
-    const q = parsed.data
-    const repo = getAssetRepo()
-    const filter = {
-      limit: q.limit,
-      offset: q.offset,
-      ...(q.profileId ? { profileId: q.profileId } : {}),
-      ...(q.workflowId ? { workflowId: q.workflowId } : {}),
-      ...(q.batchId ? { batchId: q.batchId } : {}),
-    }
-    const rows = repo.list(filter)
+    const filter = parsed.data
+    const rows = getAssetRepo().list(filter)
     const assets = rows.map(toAssetDto)
-    return c.json({ assets, limit: q.limit, offset: q.offset })
+    return c.json({ assets, limit: filter.limit, offset: filter.offset ?? 0 })
   })
 
   route.get("/:id", (c) => {

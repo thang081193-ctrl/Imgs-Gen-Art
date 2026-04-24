@@ -9,6 +9,7 @@ import type {
   AssetInsertInput,
   AssetListFilter,
 } from "./types"
+import { buildAssetListQuery } from "./asset-list-query"
 
 const COLUMNS = [
   "id",
@@ -179,23 +180,7 @@ export function createAssetRepo(db: Database.Database) {
     },
 
     list(filter: AssetListFilter): AssetInternal[] {
-      const where: string[] = []
-      const params: unknown[] = []
-      if (filter.profileId !== undefined) {
-        where.push("profile_id = ?")
-        params.push(filter.profileId)
-      }
-      if (filter.workflowId !== undefined) {
-        where.push("workflow_id = ?")
-        params.push(filter.workflowId)
-      }
-      if (filter.batchId !== undefined) {
-        where.push("batch_id = ?")
-        params.push(filter.batchId)
-      }
-      const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
-      const sql = `SELECT * FROM assets ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`
-      params.push(filter.limit, filter.offset ?? 0)
+      const { sql, params } = buildAssetListQuery(filter)
       const rows = db.prepare(sql).all(...params) as AssetRow[]
       return rows.map(rowToAsset)
     },

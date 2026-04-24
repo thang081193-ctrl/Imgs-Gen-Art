@@ -3,16 +3,15 @@
 // Session #14 Q6 — `?include=` is CSV from day one. Only "replayPayload"
 // is defined today; future Phase 5+ additions extend the enum without
 // breaking the API shape (value-based, not flag-based).
+//
+// Session #28 (Phase 5 Step 3) — list-query schema moved to
+// `@/core/schemas/asset-list-filter` so client + server share the same
+// strict allowlist. Re-exported here for backward source-compat.
 
 import { z } from "zod"
 
-export const AssetListQuerySchema = z.object({
-  profileId: z.string().min(1).optional(),
-  workflowId: z.string().min(1).optional(),
-  batchId: z.string().min(1).optional(),
-  limit: z.coerce.number().int().positive().max(500).default(50),
-  offset: z.coerce.number().int().nonnegative().default(0),
-})
+export { AssetListFilterSchema } from "@/core/schemas/asset-list-filter"
+export type { AssetListFilter } from "@/core/schemas/asset-list-filter"
 
 export const AssetIncludeOptionSchema = z.enum(["replayPayload"])
 export type AssetIncludeOption = z.infer<typeof AssetIncludeOptionSchema>

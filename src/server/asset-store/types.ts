@@ -86,13 +86,10 @@ export interface AssetInsertInput {
   createdAt?: string
 }
 
-export interface AssetListFilter {
-  profileId?: string
-  workflowId?: string
-  batchId?: string
-  limit: number
-  offset?: number
-}
+// AssetListFilter lives in `@/core/schemas/asset-list-filter` (Session #28).
+// Re-exported here so existing `@/server/asset-store` barrel consumers stay
+// source-compatible.
+export type { AssetListFilter } from "@/core/schemas/asset-list-filter"
 
 export type BatchStatus = "running" | "completed" | "aborted" | "error"
 

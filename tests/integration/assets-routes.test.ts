@@ -24,10 +24,20 @@ function fetchApp(path: string, init?: RequestInit): Promise<Response> {
   return app.fetch(new Request(`http://127.0.0.1${path}`, init))
 }
 
-function seedAsset(
-  id: string,
-  overrides?: { profileId?: string; workflowId?: "artwork-batch"; filePath?: string; status?: "completed" | "error" },
-): string {
+interface SeedOverrides {
+  profileId?: string
+  workflowId?: "artwork-batch" | "ad-production" | "style-transform" | "aso-screenshots"
+  filePath?: string
+  status?: "completed" | "error"
+  providerId?: string
+  modelId?: string
+  replayClass?: "deterministic" | "best_effort" | "not_replayable"
+  tags?: string[]
+  createdAt?: string
+  batchId?: string | null
+}
+
+function seedAsset(id: string, overrides?: SeedOverrides): string {
   const profileId = overrides?.profileId ?? "chartlens"
   const fileName = `${id}.png`
   const filePath = overrides?.filePath ?? join(tmpRoot, "assets", profileId, fileName)
@@ -45,16 +55,16 @@ function seedAsset(
     profileId,
     profileVersionAtGen: 1,
     workflowId: overrides?.workflowId ?? "artwork-batch",
-    batchId: null,
+    batchId: overrides?.batchId ?? null,
     variantGroup: null,
     promptRaw: "test prompt",
     promptTemplateId: null,
     promptTemplateVersion: null,
     inputParams: "{}",
     replayPayload: null,
-    replayClass: "deterministic",
-    providerId: "mock",
-    modelId: "mock-fast",
+    replayClass: overrides?.replayClass ?? "deterministic",
+    providerId: overrides?.providerId ?? "mock",
+    modelId: overrides?.modelId ?? "mock-fast",
     seed: 42,
     aspectRatio: "1:1",
     language: null,
@@ -66,9 +76,10 @@ function seedAsset(
     errorMessage: null,
     generationTimeMs: 10,
     costUsd: 0,
-    tags: null,
+    tags: overrides?.tags,
     notes: null,
     replayedFrom: null,
+    createdAt: overrides?.createdAt,
   })
   return filePath
 }
@@ -126,6 +137,86 @@ describe("GET /api/assets", () => {
   it("rejects invalid limit (non-numeric) → 400", async () => {
     const res = await fetchApp("/api/assets?limit=abc")
     expect(res.status).toBe(400)
+  })
+})
+
+// Session #28 Phase 5 Step 3 — expanded filter surface. Each test seeds
+// multiple assets + verifies the HTTP filter narrows the result set.
+describe("GET /api/assets — Session #28 filters", () => {
+  it("profileIds CSV → IN clause (multi-select)", async () => {
+    seedAsset("ast_a", { profileId: "chartlens" })
+    seedAsset("ast_b", { profileId: "ai-chatbot" })
+    seedAsset("ast_c", { profileId: "other" })
+
+    const res = await fetchApp("/api/assets?profileIds=chartlens,ai-chatbot")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id).sort()).toEqual(["ast_a", "ast_b"])
+  })
+
+  it("replayClasses filters to subset", async () => {
+    seedAsset("ast_det", { replayClass: "deterministic" })
+    seedAsset("ast_best", { replayClass: "best_effort" })
+    seedAsset("ast_not", { replayClass: "not_replayable" })
+
+    const res = await fetchApp("/api/assets?replayClasses=deterministic,best_effort")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id).sort()).toEqual(["ast_best", "ast_det"])
+  })
+
+  it("providerIds + modelIds compose (AND)", async () => {
+    seedAsset("ast_g", { providerId: "gemini", modelId: "gemini-3.1-flash-image-preview" })
+    seedAsset("ast_v", { providerId: "vertex", modelId: "imagen-4.0-generate-001" })
+    seedAsset("ast_m", { providerId: "mock", modelId: "mock-fast" })
+
+    const res = await fetchApp("/api/assets?providerIds=gemini,vertex&modelIds=imagen-4.0-generate-001")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id)).toEqual(["ast_v"])
+  })
+
+  it("tags OR mode matches any selected tag", async () => {
+    seedAsset("ast_sunset", { tags: ["sunset", "warm"] })
+    seedAsset("ast_neon", { tags: ["neon", "cold"] })
+    seedAsset("ast_retro", { tags: ["retro"] })
+
+    const res = await fetchApp("/api/assets?tags=sunset,neon&tagMatchMode=any")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id).sort()).toEqual(["ast_neon", "ast_sunset"])
+  })
+
+  it("tags AND mode requires all selected tags present", async () => {
+    seedAsset("ast_both", { tags: ["sunset", "warm"] })
+    seedAsset("ast_one", { tags: ["sunset", "cold"] })
+
+    const res = await fetchApp("/api/assets?tags=sunset,warm&tagMatchMode=all")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id)).toEqual(["ast_both"])
+  })
+
+  it("datePreset=7d excludes rows older than 7 days", async () => {
+    const now = new Date()
+    const old = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const recent = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)
+    seedAsset("ast_old", { createdAt: old.toISOString() })
+    seedAsset("ast_recent", { createdAt: recent.toISOString() })
+
+    const res = await fetchApp("/api/assets?datePreset=7d")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets.map((a) => a.id)).toEqual(["ast_recent"])
+  })
+
+  it("unknown query key → 400 (strict allowlist)", async () => {
+    const res = await fetchApp("/api/assets?unknownKey=x")
+    expect(res.status).toBe(400)
+  })
+
+  it("singular profileId still works (legacy contract)", async () => {
+    seedAsset("ast_a", { profileId: "chartlens" })
+    seedAsset("ast_b", { profileId: "other" })
+
+    const res = await fetchApp("/api/assets?profileId=chartlens")
+    const body = await res.json() as { assets: { id: string }[] }
+    expect(body.assets).toHaveLength(1)
+    expect(body.assets[0]?.id).toBe("ast_a")
   })
 })
 
