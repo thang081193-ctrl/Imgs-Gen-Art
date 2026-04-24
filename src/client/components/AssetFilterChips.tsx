@@ -167,6 +167,12 @@ function resolveChipContent(
       return { label, body: names.join(", "), overflow: 0 }
     }
     case "datePreset": {
+      // Session #32 F3 — custom range takes precedence over preset.
+      if (filter.dateFrom !== undefined || filter.dateTo !== undefined) {
+        const from = filter.dateFrom ?? "…"
+        const to = filter.dateTo ?? "…"
+        return { label, body: `${from} → ${to}`, overflow: 0 }
+      }
       const preset = filter.datePreset
       if (preset === undefined || preset === "all") return null
       return { label, body: DATE_PRESET_DISPLAY[preset], overflow: 0 }

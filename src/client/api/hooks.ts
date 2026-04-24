@@ -135,6 +135,8 @@ export interface AssetsFilter {
   tags?: string[] | undefined
   tagMatchMode?: TagMatchMode | undefined
   datePreset?: DatePreset | undefined
+  dateFrom?: string | undefined
+  dateTo?: string | undefined
   providerIds?: string[] | undefined
   modelIds?: string[] | undefined
   replayClasses?: ReplayClass[] | undefined
@@ -160,6 +162,8 @@ export function buildAssetsQueryString(filter: AssetsFilter): string {
   if (filter.tags         && filter.tags.length         > 0) parts.push(encodeCsvParam("tags",         filter.tags))
   if (filter.tagMatchMode) parts.push(`tagMatchMode=${filter.tagMatchMode}`)
   if (filter.datePreset && filter.datePreset !== "all") parts.push(`datePreset=${filter.datePreset}`)
+  if (filter.dateFrom) parts.push(`dateFrom=${encodeURIComponent(filter.dateFrom)}`)
+  if (filter.dateTo)   parts.push(`dateTo=${encodeURIComponent(filter.dateTo)}`)
   if (filter.providerIds && filter.providerIds.length > 0) parts.push(encodeCsvParam("providerIds", filter.providerIds))
   if (filter.modelIds    && filter.modelIds.length    > 0) parts.push(encodeCsvParam("modelIds",    filter.modelIds))
   if (filter.replayClasses !== undefined) {
@@ -186,6 +190,39 @@ export function useAssets(filter: AssetsFilter, refreshKey: number = 0): ApiStat
 
 export function useAsset(assetId: string | null): ApiState<AssetDto> {
   return useFetch<AssetDto>(assetId !== null ? `/api/assets/${assetId}` : null)
+}
+
+// Session #32 F4-FE — GET /api/tags autocomplete. `q === null` skips the
+// fetch (use when the combobox dropdown is closed). Empty string = "show
+// top N by count". Pure path builder extracted so tests don't need React.
+export interface AssetTagsResponse {
+  tags: { tag: string; count: number }[]
+  total: number
+}
+
+export function buildAssetTagsPath(q: string | null, limit: number): string | null {
+  if (q === null) return null
+  const params = new URLSearchParams()
+  if (q !== "") params.set("q", q)
+  params.set("limit", String(limit))
+  return `/api/tags?${params.toString()}`
+}
+
+export function useAssetTags(
+  q: string | null,
+  limit: number = 10,
+  debounceMs: number = 300,
+): ApiState<AssetTagsResponse> {
+  const [debounced, setDebounced] = useState<string | null>(q)
+  useEffect(() => {
+    if (q === null) {
+      setDebounced(null)
+      return undefined
+    }
+    const handle = setTimeout(() => { setDebounced(q) }, debounceMs)
+    return () => { clearTimeout(handle) }
+  }, [q, debounceMs])
+  return useFetch<AssetTagsResponse>(buildAssetTagsPath(debounced, limit))
 }
 
 // Session #20 — /api/keys CRUD + activate + test.

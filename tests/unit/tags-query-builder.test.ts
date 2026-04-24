@@ -1,11 +1,12 @@
-// Session #32 F4 — SQL shape guards for the /api/tags builder.
+// Session #32 F4 — SQL shape guards for the /api/tags builder + client path
+// builder (F4-FE). Unit scope so neither DB nor React runtime is required.
 //
-// The integration suite exercises real SQLite + json_each; these unit tests
-// lock the builder's output shape so a silent SQL-string regression would fail
-// fast without needing to boot a DB.
+// The integration suite exercises real SQLite + json_each for the SQL side;
+// Preview MCP covers the combobox UX. These tests cover the two pure pieces.
 
 import { describe, expect, it } from "vitest"
 
+import { buildAssetTagsPath } from "@/client/api/hooks"
 import {
   buildTagsCountQuery,
   buildTagsQuery,
@@ -36,5 +37,24 @@ describe("buildTagsCountQuery", () => {
     expect(q.sql).toContain("json_each(COALESCE(assets.tags, '[]'))")
     expect(q.sql).toContain("COLLATE NOCASE")
     expect(q.params).toEqual(["foo"])
+  })
+})
+
+// Session #32 F4-FE — client-side URL builder for the autocomplete hook.
+describe("buildAssetTagsPath (F4-FE)", () => {
+  it("returns null when q is null (skips the fetch)", () => {
+    expect(buildAssetTagsPath(null, 10)).toBeNull()
+  })
+
+  it("omits q param when q is empty string (top-N request)", () => {
+    expect(buildAssetTagsPath("", 10)).toBe("/api/tags?limit=10")
+  })
+
+  it("URL-encodes the q prefix", () => {
+    expect(buildAssetTagsPath("space here", 5)).toBe("/api/tags?q=space+here&limit=5")
+  })
+
+  it("always appends limit", () => {
+    expect(buildAssetTagsPath("foo", 20)).toBe("/api/tags?q=foo&limit=20")
   })
 })

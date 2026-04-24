@@ -183,6 +183,61 @@ describe("buildAssetListQuery — date preset", () => {
   })
 })
 
+// Session #32 F3 — custom dateFrom/dateTo range overrides datePreset per
+// DECISIONS §G F3. Local-day boundaries bracket the inclusive window.
+describe("buildAssetListQuery — custom date range (F3)", () => {
+  it("dateFrom only → created_at >= local-day-start", () => {
+    const { sql, params } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      dateFrom: "2026-03-15",
+    })
+    expect(sql).toContain("created_at >= ?")
+    expect(sql).not.toContain("created_at <= ?")
+    const boundary = params[0] as string
+    // Local 00:00 on 2026-03-15 → some UTC offset; just check date portion anchors nearby.
+    expect(boundary).toMatch(/^2026-03-1[45]/)
+  })
+
+  it("dateTo only → created_at <= local-day-end", () => {
+    const { sql, params } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      dateTo: "2026-03-20",
+    })
+    expect(sql).toContain("created_at <= ?")
+    expect(sql).not.toContain("created_at >= ?")
+    const boundary = params[0] as string
+    expect(boundary).toMatch(/^2026-03-2[01]/)
+    expect(boundary.endsWith("Z")).toBe(true)
+  })
+
+  it("both bounds → both clauses composed with AND", () => {
+    const { sql, params } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      dateFrom: "2026-03-15",
+      dateTo: "2026-03-20",
+    })
+    expect(sql).toContain("created_at >= ? AND created_at <= ?")
+    expect(params.slice(0, 2).every((p) => typeof p === "string")).toBe(true)
+  })
+
+  it("custom range overrides datePreset (preset silently ignored)", () => {
+    const { sql, params } = buildAssetListQuery({
+      ...emptyAssetListFilter(),
+      datePreset: "7d",
+      dateFrom: "2026-03-15",
+    })
+    expect(sql).toContain("created_at >= ?")
+    // Only one created_at WHERE clause — the preset's rolling-window
+    // boundary must not be emitted alongside the custom range. (ORDER BY
+    // created_at DESC always appears; scope the regex to comparison ops.)
+    const matches = sql.match(/created_at (>=|<=)/g) ?? []
+    expect(matches.length).toBe(1)
+    // Param at position 0 should be the custom dateFrom-derived ISO, NOT a
+    // 7-day rolling boundary.
+    expect(params[0] as string).toMatch(/^2026-03-1[45]/)
+  })
+})
+
 describe("buildAssetListQuery — pagination + composition", () => {
   it("appends limit + offset as the last two params", () => {
     const { params } = buildAssetListQuery({

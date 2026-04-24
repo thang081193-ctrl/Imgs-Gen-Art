@@ -25,6 +25,8 @@ export function hasAnyFilter(f: AssetListFilter): boolean {
     || f.tags !== undefined
     || f.tagMatchMode !== undefined
     || f.datePreset !== undefined
+    || f.dateFrom !== undefined
+    || f.dateTo !== undefined
     || f.providerIds !== undefined
     || f.modelIds !== undefined
     || f.replayClasses !== undefined

@@ -1,6 +1,8 @@
 // Phase 5 Step 3b (Session #29) — enum-style filter sections split out of
 // AssetFilterBar to keep the shell under the 250 LOC soft cap:
-//   - DateSection: 4-radio preset picker (all/today/7d/30d).
+//   - DateSection: 4-radio preset picker (all/today/7d/30d) + Session #32 F3
+//     custom-range expander (dateFrom/dateTo) that toggle-overrides the
+//     preset per DECISIONS §G F3.
 //   - ReplayClassSection: 3-checkbox group with Session #29 Q-29.E "match
 //     none" semantics (`[]` distinct from `undefined`).
 //   - MultiCheckboxSection: reusable N-checkbox group used for provider +
@@ -10,8 +12,9 @@
 // Each section wraps its controls in `id="filter-<schemaKey>"` + `tabIndex={-1}`
 // so AssetFilterChips' scroll-to-section handler can focus it.
 
+import { useEffect, useState } from "react"
 import type { ChangeEvent, ReactElement } from "react"
-import type { DatePreset } from "@/core/schemas/asset-list-filter"
+import type { AssetListFilter, DatePreset } from "@/core/schemas/asset-list-filter"
 import { DatePresetValues } from "@/core/schemas/asset-list-filter"
 import type { ReplayClass } from "@/core/dto/asset-dto"
 
@@ -29,12 +32,49 @@ const DATE_PRESET_LABEL: Record<DatePreset, string> = {
 }
 
 export function DateSection({
-  value, onChange,
+  preset, dateFrom, dateTo, onChange,
 }: {
-  value: DatePreset | undefined
-  onChange: (preset: DatePreset) => void
+  preset: DatePreset | undefined
+  dateFrom: string | undefined
+  dateTo: string | undefined
+  onChange: (patch: Partial<AssetListFilter>) => void
 }): ReactElement {
-  const active = value ?? "all"
+  const customActive = dateFrom !== undefined || dateTo !== undefined
+  const [expanded, setExpanded] = useState<boolean>(customActive)
+
+  // Auto-expand when a URL lands with custom range already set.
+  useEffect(() => {
+    if (customActive) setExpanded(true)
+  }, [customActive])
+
+  const activePreset = preset ?? "all"
+
+  const pickPreset = (p: DatePreset): void => {
+    onChange({
+      datePreset: p === "all" ? undefined : p,
+      dateFrom: undefined,
+      dateTo: undefined,
+    })
+  }
+
+  const setFrom = (v: string): void => {
+    onChange({
+      dateFrom: v === "" ? undefined : v,
+      datePreset: undefined,
+    })
+  }
+
+  const setTo = (v: string): void => {
+    onChange({
+      dateTo: v === "" ? undefined : v,
+      datePreset: undefined,
+    })
+  }
+
+  const rangeError = dateFrom !== undefined && dateTo !== undefined && dateFrom > dateTo
+    ? "Start date must be on or before end date."
+    : null
+
   return (
     <fieldset id="filter-datePreset" tabIndex={-1} className="space-y-1 outline-none">
       <legend className="text-xs text-slate-400">Date</legend>
@@ -45,13 +85,56 @@ export function DateSection({
               type="radio"
               name="datePreset"
               value={p}
-              checked={active === p}
-              onChange={() => onChange(p)}
+              checked={!customActive && activePreset === p}
+              onChange={() => pickPreset(p)}
             />
             {DATE_PRESET_LABEL[p]}
           </label>
         ))}
       </div>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+      >
+        {expanded ? "Hide custom range" : "Custom range..."}
+      </button>
+      {expanded && (
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-slate-300">
+              <span>From</span>
+              <input
+                type="date"
+                value={dateFrom ?? ""}
+                onChange={(e) => setFrom(e.target.value)}
+                className="input"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-slate-300">
+              <span>To</span>
+              <input
+                type="date"
+                value={dateTo ?? ""}
+                onChange={(e) => setTo(e.target.value)}
+                className="input"
+              />
+            </label>
+            {customActive && (
+              <button
+                type="button"
+                onClick={() => onChange({ dateFrom: undefined, dateTo: undefined })}
+                className="rounded-md bg-slate-800 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                Clear range
+              </button>
+            )}
+          </div>
+          {rangeError !== null && (
+            <p className="text-xs text-red-400" role="alert">{rangeError}</p>
+          )}
+        </div>
+      )}
     </fieldset>
   )
 }

@@ -73,10 +73,25 @@ export function buildAssetListQuery(
     params.push(...tagClause.params)
   }
 
-  const dateBoundary = datePresetBoundary(filter.datePreset ?? "all", opts.nowIso)
-  if (dateBoundary !== null) {
-    where.push("created_at >= ?")
-    params.push(dateBoundary)
+  // Session #32 F3 — custom dateFrom/dateTo override datePreset when either
+  // is set (DECISIONS §G F3). Local-day boundaries: dateFrom = 00:00 local,
+  // dateTo = 23:59:59.999 local — matches the existing datePreset=today
+  // semantics so UTC offsets don't drift rows across the boundary.
+  if (filter.dateFrom !== undefined || filter.dateTo !== undefined) {
+    if (filter.dateFrom !== undefined) {
+      where.push("created_at >= ?")
+      params.push(localDayStart(filter.dateFrom))
+    }
+    if (filter.dateTo !== undefined) {
+      where.push("created_at <= ?")
+      params.push(localDayEnd(filter.dateTo))
+    }
+  } else {
+    const dateBoundary = datePresetBoundary(filter.datePreset ?? "all", opts.nowIso)
+    if (dateBoundary !== null) {
+      where.push("created_at >= ?")
+      params.push(dateBoundary)
+    }
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
@@ -133,4 +148,16 @@ export function datePresetBoundary(
   const days = preset === "7d" ? 7 : 30
   const boundary = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
   return boundary.toISOString()
+}
+
+// "YYYY-MM-DD" → local 00:00:00.000 of that date as UTC ISO.
+export function localDayStart(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number) as [number, number, number]
+  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString()
+}
+
+// "YYYY-MM-DD" → local 23:59:59.999 of that date as UTC ISO (inclusive end).
+export function localDayEnd(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number) as [number, number, number]
+  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString()
 }

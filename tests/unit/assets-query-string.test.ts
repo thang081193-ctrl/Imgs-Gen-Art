@@ -145,3 +145,30 @@ describe("buildAssetsQueryString — full filter round-trip", () => {
     })
   })
 })
+
+// Session #32 F3 — custom dateFrom/dateTo URL round-trip.
+describe("buildAssetsQueryString — custom date range (F3)", () => {
+  it("encodes dateFrom + dateTo into separate params", () => {
+    const qs = buildAssetsQueryString({
+      dateFrom: "2026-03-15",
+      dateTo: "2026-03-20",
+    })
+    expect(qs).toContain("dateFrom=2026-03-15")
+    expect(qs).toContain("dateTo=2026-03-20")
+  })
+
+  it("single-bound custom range round-trips (dateFrom only)", () => {
+    const parsed = roundTrip({ dateFrom: "2026-03-15" })
+    expect(parsed.dateFrom).toBe("2026-03-15")
+    expect(parsed.dateTo).toBeUndefined()
+  })
+
+  it("both bounds round-trip intact", () => {
+    const parsed = roundTrip({
+      dateFrom: "2026-03-15",
+      dateTo: "2026-03-20",
+    })
+    expect(parsed.dateFrom).toBe("2026-03-15")
+    expect(parsed.dateTo).toBe("2026-03-20")
+  })
+})

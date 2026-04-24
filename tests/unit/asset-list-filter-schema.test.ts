@@ -134,4 +134,43 @@ describe("AssetListFilterSchema", () => {
       expect(r.tags).toBeUndefined()
     })
   })
+
+  // Session #32 F3 — custom-range dateFrom/dateTo fields. Strict ISO-date
+  // regex (YYYY-MM-DD) so a rogue timestamp or malformed value never flows
+  // through to the SQL builder.
+  describe("dateFrom / dateTo custom range", () => {
+    it("accepts valid YYYY-MM-DD on both bounds", () => {
+      const r = AssetListFilterSchema.parse({
+        dateFrom: "2026-03-15",
+        dateTo: "2026-03-20",
+      })
+      expect(r.dateFrom).toBe("2026-03-15")
+      expect(r.dateTo).toBe("2026-03-20")
+    })
+
+    it("accepts a single bound (dateFrom only, dateTo only)", () => {
+      const rFrom = AssetListFilterSchema.parse({ dateFrom: "2026-03-15" })
+      expect(rFrom.dateFrom).toBe("2026-03-15")
+      expect(rFrom.dateTo).toBeUndefined()
+
+      const rTo = AssetListFilterSchema.parse({ dateTo: "2026-03-20" })
+      expect(rTo.dateFrom).toBeUndefined()
+      expect(rTo.dateTo).toBe("2026-03-20")
+    })
+
+    it("rejects non-ISO date formats", () => {
+      expect(AssetListFilterSchema.safeParse({ dateFrom: "03/15/2026" }).success).toBe(false)
+      expect(AssetListFilterSchema.safeParse({ dateFrom: "2026-03-15T12:00:00Z" }).success).toBe(false)
+      expect(AssetListFilterSchema.safeParse({ dateTo: "not-a-date" }).success).toBe(false)
+    })
+
+    it("custom range coexists with datePreset in schema (precedence enforced at builder layer)", () => {
+      const r = AssetListFilterSchema.parse({
+        datePreset: "7d",
+        dateFrom: "2026-03-15",
+      })
+      expect(r.datePreset).toBe("7d")
+      expect(r.dateFrom).toBe("2026-03-15")
+    })
+  })
 })

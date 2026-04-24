@@ -91,6 +91,13 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
   }, [])
 
   const clearDimension = (d: AssetFilterDimension): void => {
+    // Session #32 F3 — the "Date" chip surfaces either datePreset OR custom
+    // dateFrom/dateTo; clearing the chip must reset all three fields so the
+    // next render doesn't leak a stale preset after custom range was used.
+    if (d === "datePreset") {
+      onChangeFilter({ datePreset: undefined, dateFrom: undefined, dateTo: undefined })
+      return
+    }
     onChangeFilter({ [d]: undefined } as Partial<AssetListFilter>)
   }
   const clearAll = (): void => { setFilter(emptyAssetListFilter()) }

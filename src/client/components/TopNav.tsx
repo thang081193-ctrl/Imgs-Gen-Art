@@ -24,6 +24,7 @@ export function TopNav({ page, onNav }: TopNavProps): ReactElement {
           <NavLink label="Home"     target="home"     current={page} onNav={onNav} />
           <NavLink label="Workflow" target="workflow" current={page} onNav={onNav} />
           <NavLink label="Gallery"  target="gallery"  current={page} onNav={onNav} />
+          <NavLink label="PromptLab" target="prompt-lab" current={page} onNav={onNav} />
           <NavLink label="Profiles" target="profiles" current={page} onNav={onNav} />
           <NavLink label="Settings" target="settings" current={page} onNav={onNav} />
         </div>

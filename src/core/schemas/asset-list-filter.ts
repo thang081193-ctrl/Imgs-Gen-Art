@@ -27,6 +27,12 @@ export const ReplayClassValues = [
 export const DatePresetValues = ["all", "today", "7d", "30d"] as const
 export type DatePreset = (typeof DatePresetValues)[number]
 
+// Session #32 F3 — custom range pickers. ISO date-only strings (no time
+// component). Either bound may be omitted for open-ended windows. When
+// either is set, the SQL builder ignores `datePreset` so power users aren't
+// double-filtered from a stale preset choice (DECISIONS §G F3).
+const DATE_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
 export const TagMatchModeValues = ["any", "all"] as const
 export type TagMatchMode = (typeof TagMatchModeValues)[number]
 
@@ -68,6 +74,8 @@ export const AssetListFilterSchema = z
     replayClasses: csvArrayPreserveEmpty(z.enum(ReplayClassValues)),
     tagMatchMode: z.enum(TagMatchModeValues).optional(),
     datePreset: z.enum(DatePresetValues).optional(),
+    dateFrom: z.string().regex(DATE_ISO_REGEX).optional(),
+    dateTo: z.string().regex(DATE_ISO_REGEX).optional(),
     batchId: z.string().min(1).optional(),
     profileId: z.string().min(1).optional(),
     workflowId: z.string().min(1).optional(),
@@ -87,6 +95,8 @@ export const AssetListFilterSchema = z
       replayClasses: raw.replayClasses as ReplayClass[] | undefined,
       tagMatchMode: raw.tagMatchMode,
       datePreset: raw.datePreset,
+      dateFrom: raw.dateFrom,
+      dateTo: raw.dateTo,
       batchId: raw.batchId,
       limit: raw.limit,
       offset: raw.offset,
@@ -115,6 +125,8 @@ export function emptyAssetListFilter(): AssetListFilter {
     replayClasses: undefined,
     tagMatchMode: undefined,
     datePreset: undefined,
+    dateFrom: undefined,
+    dateTo: undefined,
     batchId: undefined,
     limit: 50,
     offset: undefined,

@@ -96,20 +96,25 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
   }, [])
 
   if (assetId === null) {
+    // Session #32 F5 — standalone TopNav entry lands here (no seed asset).
+    // Q-32.D: CTA to /gallery + secondary hint re Edit & replay from batches.
     return (
       <main className="mx-auto max-w-3xl p-6 space-y-3">
         <h1 className="text-xl font-bold text-slate-200">PromptLab</h1>
         <p className="text-sm text-slate-400">
-          PromptLab opens from an asset. Go to Gallery, click an asset, then
-          press <span className="text-slate-200 font-medium">[Edit &amp; replay]</span>.
+          Select an asset from the Gallery to start editing.
         </p>
         <button
           type="button"
           onClick={() => navigator.go("gallery")}
           className="rounded-md bg-sky-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600"
         >
-          Back to Gallery
+          Go to Gallery →
         </button>
+        <p className="text-xs text-slate-500">
+          Or open an asset from any batch and click{" "}
+          <span className="text-slate-300 font-medium">[Edit &amp; replay]</span>.
+        </p>
       </main>
     )
   }

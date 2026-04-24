@@ -93,8 +93,10 @@ export function AssetFilterBar(props: AssetFilterBarProps): ReactElement {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <DateSection
-          value={filter.datePreset}
-          onChange={(p) => setSingle("datePreset", p === "all" ? undefined : p)}
+          preset={filter.datePreset}
+          dateFrom={filter.dateFrom}
+          dateTo={filter.dateTo}
+          onChange={onChange}
         />
         <ReplayClassSection
           value={filter.replayClasses}
