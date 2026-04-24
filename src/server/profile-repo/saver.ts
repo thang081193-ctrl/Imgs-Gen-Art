@@ -1,8 +1,11 @@
 // Persists an AppProfile to `data/profiles/{id}.json`.
-// Rule 14 — AppProfileSchema pins version to `z.literal(1)`; any shape
-// change bumps the literal and ships a migration. Saver writes whatever
-// the caller passes (already v1 today); an explicit bump path will land
-// alongside the first v2 migration.
+//
+// DECISIONS §F.3 (Session #31) — saver is storage-neutral. Callers
+// own version lifecycle: POST passes `version: 1`, PUT increments
+// (`existing.version + 1`), import echoes the round-tripped value.
+// Schema now accepts v1 (literal 1) or v2 (number >= 1) via union +
+// transform; any future v3 migration slots in at the schema level
+// without touching this file.
 
 import { writeFileSync, mkdirSync } from "node:fs"
 import { dirname } from "node:path"

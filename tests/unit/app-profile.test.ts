@@ -26,7 +26,7 @@ describe("canonical AppProfile seeds — Zod validation", () => {
     expect(() => AppProfileSchema.parse(loadSeed(filename))).not.toThrow()
   })
 
-  it("every seed pins version to the Rule 14 literal (1)", () => {
+  it("every seed matches the v1 union branch (version=1)", () => {
     for (const filename of seedFiles) {
       const profile = AppProfileSchema.parse(loadSeed(filename))
       expect(profile.version).toBe(1)

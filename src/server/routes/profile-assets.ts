@@ -130,12 +130,21 @@ export function createProfileUploadAssetRoute(): Hono {
       throw new NotFoundError(`Profile '${profileId}' not found`, { profileId })
     }
     if (existing.version !== expectedVersion) {
+      // DECISIONS §F.3.1 — augmented body (code + details) mirrors
+      // profiles.ts PUT 409 so the client ApiError envelope carries
+      // currentVersion/expectedVersion through to preserve-edits UI.
+      const message = `Profile '${profileId}' has been modified. Expected version ${expectedVersion}, current version ${existing.version}. Refetch and retry.`
       return c.json(
         {
           error: "VERSION_CONFLICT",
-          message: `Profile '${profileId}' has been modified. Expected version ${expectedVersion}, current version ${existing.version}. Refetch and retry.`,
+          code: "VERSION_CONFLICT",
+          message,
           currentVersion: existing.version,
           expectedVersion,
+          details: {
+            currentVersion: existing.version,
+            expectedVersion,
+          },
         },
         409,
       )
@@ -159,8 +168,10 @@ export function createProfileUploadAssetRoute(): Hono {
       fileSizeBytes: parsed.data.file.size,
     })
 
-    // Step 2: mutate + save profile (touches updatedAt; version stays 1 per
-    // AppProfileSchema literal — schema v2 bump lands with proper migration).
+    // Step 2: mutate + save profile (touches updatedAt; version NOT
+    // bumped — DECISIONS §F.3 keeps upload mutations out of the OC
+    // counter so multi-asset workflows don't force a refetch-per-
+    // upload. Only PUT /api/profiles/:id bumps the version.)
     const mutated = applyKindToProfile(existing, kind, assetId)
     saveProfile(mutated, { touchUpdatedAt: true })
 

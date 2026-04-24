@@ -140,22 +140,29 @@ export function createProfilesRoute(): Hono<ProfilesEnv> {
     if (!existing) throw new NotFoundError(`Profile '${id}' not found`, { profileId: id })
 
     if (existing.version !== body.expectedVersion) {
+      // DECISIONS §F.3.1 — augmented body: legacy flat fields retained
+      // for back-compat; `code` + `details` added so client ApiError
+      // envelope flows the conflict info through to preserve-edits UI.
+      const message = `Profile '${id}' has been modified. Expected version ${body.expectedVersion}, current version ${existing.version}. Refetch and retry.`
       return c.json(
         {
           error: "VERSION_CONFLICT",
-          message: `Profile '${id}' has been modified. Expected version ${body.expectedVersion}, current version ${existing.version}. Refetch and retry.`,
+          code: "VERSION_CONFLICT",
+          message,
           currentVersion: existing.version,
           expectedVersion: body.expectedVersion,
+          details: {
+            currentVersion: existing.version,
+            expectedVersion: body.expectedVersion,
+          },
         },
         409,
       )
     }
 
-    // AppProfileSchema.version is z.literal(1) — bumping on mutation requires
-    // a v2 migration. Until then, version stays 1 and only updatedAt changes;
-    // expectedVersion check here still rejects fabricated values so the
-    // contract is stable when the schema widens.
-    const next = mergeUpdate(existing, body)
+    // DECISIONS §F.3 — version bump lives in the route, not saver.
+    // saveProfile stays storage-neutral; PUT increments by 1 on success.
+    const next: AppProfile = { ...mergeUpdate(existing, body), version: existing.version + 1 }
     const saved = saveProfile(next, { touchUpdatedAt: true })
     return c.json(toProfileDto(saved))
   })

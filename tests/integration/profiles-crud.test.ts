@@ -105,19 +105,20 @@ describe("Profile CRUD lifecycle — one narrative story", () => {
     expect(fetched.assets.appLogoUrl).toBeNull()
     expect(fetched.assets.screenshotUrls).toEqual([])
 
-    // 3. PUT with correct expectedVersion → 200 + version=2 (schema-guarded:
-    //    literal 1 currently — route still echoes `version` but saver
-    //    clamps until v2 ships. Assert via name change instead of bump.)
+    // 3. PUT with correct expectedVersion → 200 + version bumps 1→2.
+    //    Session #31 v2 migration (DECISIONS §F.3) — PUT now bumps.
     const putRes = await postJson(
       `/api/profiles/${id}`,
       { name: "Crud Story — Updated", expectedVersion: 1 },
       "PUT",
     )
     expect(putRes.status).toBe(200)
-    const updated = await putRes.json() as { name: string }
+    const updated = await putRes.json() as { name: string; version: number }
     expect(updated.name).toBe("Crud Story — Updated")
+    expect(updated.version).toBe(2)
 
-    // 4. PUT with stale expectedVersion → 409 VERSION_CONFLICT (flat shape)
+    // 4. PUT with stale expectedVersion → 409 VERSION_CONFLICT.
+    //    currentVersion is 2 (post-bump); 999 expected forces the 409.
     const staleRes = await postJson(
       `/api/profiles/${id}`,
       { name: "Stale write attempt", expectedVersion: 999 },
@@ -125,11 +126,18 @@ describe("Profile CRUD lifecycle — one narrative story", () => {
     )
     expect(staleRes.status).toBe(409)
     const conflict = await staleRes.json() as {
-      error: string; currentVersion: number; expectedVersion: number
+      error: string
+      code: string
+      currentVersion: number
+      expectedVersion: number
+      details: { currentVersion: number; expectedVersion: number }
     }
     expect(conflict.error).toBe("VERSION_CONFLICT")
+    expect(conflict.code).toBe("VERSION_CONFLICT")
     expect(conflict.expectedVersion).toBe(999)
-    expect(conflict.currentVersion).toBe(1)
+    expect(conflict.currentVersion).toBe(2)
+    expect(conflict.details.currentVersion).toBe(2)
+    expect(conflict.details.expectedVersion).toBe(999)
 
     // 5. DELETE /api/profiles/:id → 204 (no assets blocker since in-memory store is empty)
     const delRes = await fetchApp(`/api/profiles/${id}`, { method: "DELETE" })
@@ -140,5 +148,84 @@ describe("Profile CRUD lifecycle — one narrative story", () => {
     expect(gone.status).toBe(404)
     const errBody = await gone.json() as { code: string }
     expect(errBody.code).toBe("NOT_FOUND")
+  })
+
+  // Session #31 — real preserve-edits-on-409 flow: two concurrent
+  // PUTs from separate client tabs; the loser refetches the latest
+  // version and issues an Overwrite-Save that succeeds (DECISIONS §F.4).
+  it("preserve-edits-on-409 — two tabs, loser refetches + Overwrite-Saves", async () => {
+    const id = `${TEST_PREFIX}preserve-edits`
+    const baseBody = {
+      id,
+      name: "Two Tab Story",
+      tagline: "v1 baseline",
+      category: "utility" as const,
+      assets: {
+        appLogoAssetId: null,
+        storeBadgeAssetId: null,
+        screenshotAssetIds: [],
+      },
+      visual: {
+        primaryColor: "#010203",
+        secondaryColor: "#040506",
+        accentColor: "#070809",
+        tone: "minimal" as const,
+        doList: ["x"],
+        dontList: ["y"],
+      },
+      positioning: {
+        usp: "u", targetPersona: "p", marketTier: "global" as const,
+      },
+      context: {
+        features: ["f"], keyScenarios: ["s"], forbiddenContent: ["c"],
+      },
+    }
+
+    // Create baseline — version=1.
+    const createRes = await postJson("/api/profiles", baseBody)
+    expect(createRes.status).toBe(201)
+
+    // Tab A wins the race: PUT succeeds, version 1 → 2.
+    const tabARes = await postJson(
+      `/api/profiles/${id}`,
+      { tagline: "tab A won", expectedVersion: 1 },
+      "PUT",
+    )
+    expect(tabARes.status).toBe(200)
+    const tabA = await tabARes.json() as { version: number; tagline: string }
+    expect(tabA.version).toBe(2)
+    expect(tabA.tagline).toBe("tab A won")
+
+    // Tab B loses with stale expectedVersion=1. 409 body carries
+    // currentVersion=2 via both legacy flat + new `details` fields.
+    const tabBFail = await postJson(
+      `/api/profiles/${id}`,
+      { tagline: "tab B edits — preserved", expectedVersion: 1 },
+      "PUT",
+    )
+    expect(tabBFail.status).toBe(409)
+    const conflict = await tabBFail.json() as {
+      details: { currentVersion: number }
+    }
+    expect(conflict.details.currentVersion).toBe(2)
+
+    // Tab B refetches latest to learn remote version. UI would show
+    // the banner here while preserving the user's "tab B edits" draft.
+    const refetch = await fetchApp(`/api/profiles/${id}`)
+    const latest = await refetch.json() as { version: number; tagline: string }
+    expect(latest.version).toBe(2)
+    expect(latest.tagline).toBe("tab A won")
+
+    // Tab B Overwrite-Saves with expectedVersion = latest.version.
+    // Its preserved edits ("tab B edits — preserved") overwrite tab A's.
+    const overwriteRes = await postJson(
+      `/api/profiles/${id}`,
+      { tagline: "tab B edits — preserved", expectedVersion: latest.version },
+      "PUT",
+    )
+    expect(overwriteRes.status).toBe(200)
+    const final = await overwriteRes.json() as { version: number; tagline: string }
+    expect(final.version).toBe(3)
+    expect(final.tagline).toBe("tab B edits — preserved")
   })
 })

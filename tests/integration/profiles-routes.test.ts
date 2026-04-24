@@ -192,11 +192,13 @@ describe("PUT /api/profiles/:id", () => {
       body: JSON.stringify({ expectedVersion: 1, tagline: "updated tagline" }),
     })
     expect(res.status).toBe(200)
-    const dto = await res.json() as { tagline: string }
+    const dto = await res.json() as { tagline: string; version: number }
     expect(dto.tagline).toBe("updated tagline")
+    // Session #31 v2 — PUT bumps version on success (DECISIONS §F.3).
+    expect(dto.version).toBe(2)
   })
 
-  it("version conflict returns flat 409 shape", async () => {
+  it("version conflict returns augmented 409 shape (legacy flat + code + details)", async () => {
     const body = freshBody("put-conflict")
     await fetchApp("/api/profiles", {
       method: "POST",
@@ -212,12 +214,19 @@ describe("PUT /api/profiles/:id", () => {
     expect(res.status).toBe(409)
     const err = await res.json() as {
       error: string
+      code: string
       currentVersion: number
       expectedVersion: number
+      details: { currentVersion: number; expectedVersion: number }
     }
+    // Legacy flat fields — retained for back-compat (DECISIONS §F.3.1).
     expect(err.error).toBe("VERSION_CONFLICT")
     expect(err.currentVersion).toBe(1)
     expect(err.expectedVersion).toBe(99)
+    // New Session #31 fields — flows conflict info through ApiError envelope.
+    expect(err.code).toBe("VERSION_CONFLICT")
+    expect(err.details.currentVersion).toBe(1)
+    expect(err.details.expectedVersion).toBe(99)
   })
 
   it("unknown id → 404", async () => {

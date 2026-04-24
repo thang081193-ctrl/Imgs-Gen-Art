@@ -11,10 +11,13 @@
 // concurrency. Import body: full AppProfile shape (round-trip from export).
 
 import { z } from "zod"
-import { AppProfileSchema } from "@/core/schemas/app-profile"
+import { AppProfileBodyFields, AppProfileSchema } from "@/core/schemas/app-profile"
 
-const ProfileWritableSchema = AppProfileSchema.omit({
-  version: true,
+// Session #31 — AppProfileSchema is now z.union([V1,V2]).transform(...)
+// so `.omit()` is unavailable on it. AppProfileBodyFields is the
+// version-agnostic base that both branches extend; omit id/createdAt/
+// updatedAt for the writable subset (version is not on the base).
+const ProfileWritableSchema = AppProfileBodyFields.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
