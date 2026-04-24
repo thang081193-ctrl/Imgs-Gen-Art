@@ -483,8 +483,146 @@ the upload endpoint targets `:id` which doesn't exist yet.
 
 ---
 
-*Last updated: 2026-04-24 with Session #30 (Phase 5 Step 4 —
-Profile CMS frontend; F1 optimistic-concurrency UI deferred to v2
-migration session; Q-30.F slug UI dropped entirely after schema audit).*
-*Status: Phase 5 Steps 1/2/3/4/5a/5b closed. Step 6 (v2 schema
-migration, trigger-driven) pending.*
+## §F — Session #31 (Phase 5 Step 6 — AppProfileSchema v2 migration + preserve-edits-on-409)
+
+**F.1 — Migration pattern: on-read via `z.union` + `.transform`.
+Rejected in-place-on-write.** Bro pushback on the handoff's in-place
+recommendation. Four reasons against in-place-on-write:
+
+1. *Fragments disk state* — v1 + v2 coexist indefinitely until every
+   profile is individually saved, yielding mixed-version on-disk state
+   that's easy to mistake for data loss.
+2. *Assumes additive-only changes* — breaks the first time v3 renames
+   or removes a field (in-place can only set defaults, not translate).
+3. *Boot-time shape check masks real bugs* — a v1-shaped file passes
+   the v2 schema if v2 happens to be a superset; no signal that a
+   migration is needed.
+4. *Consumer code stays bilingual forever* — every read site must
+   handle both shapes until the last save touches the last file, which
+   may never happen.
+
+Accepted pattern (`src/core/schemas/app-profile.ts`):
+
+```ts
+const ProfileBodyFields = z.object({ /* shape minus version */ })
+const V1Schema = ProfileBodyFields.extend({ version: z.literal(1) })
+const V2Schema = ProfileBodyFields.extend({ version: z.number().int().min(1) })
+
+function migrateToV2(parsed: V1 | V2): V2 { /* transform */ }
+
+export const AppProfileSchema = z.union([V1Schema, V2Schema]).transform(migrateToV2)
+export type AppProfile = z.output<typeof AppProfileSchema>
+```
+
+Rules for extending to v3+:
+
+- Add `V3Schema` branch to the union.
+- Extend `migrateToV2` → `migrateToV3` chain (or compose
+  `migrateV1ToV2` + `migrateV2ToV3`). Each migration step
+  unidirectional (forward only).
+- Consumers import `AppProfile` = latest output type; never see v1/v2.
+- Run `scripts/migrate-profiles-v1-to-v2.ts` (rename per version
+  bump) as a one-off to converge on-disk state. Idempotent — safe to
+  re-run.
+
+**F.2 — v2a minimal scope: pure version type widening.** Q-31.C.1
+locked "v2a" over "v2b" (which would add an explicit `schemaVersion`
+field separate from the OC counter). v2a means:
+
+- V1 `version: z.literal(1)`, V2 `version: z.number().int().min(1)`.
+- Transform is **identity** (`parsed as V2`) — v1's `1` already
+  satisfies v2's number check; no field added or renamed.
+- On-disk v1 files stay as-is until next PUT bumps them; migration
+  script is effectively a validation pass for v2a.
+- Test case #6 from bro's Q-31.C spec ("migration fn sets defaults for
+  v2-only required fields") is a comment placeholder in
+  `tests/unit/app-profile-migration.test.ts`; activates when v3 adds
+  a required field.
+
+Rationale for v2a over v2b: handoff scope explicitly said "no shape
+change". v2a stays inside that scope while establishing the v3+
+pattern. v2b's `schemaVersion` vs OC `version` separation is cleaner
+long-term but expands surface now for no immediate gain.
+
+**F.3 — Version bump location: PUT route, not saver.** `saveProfile`
+stays storage-neutral: writes whatever the caller passes (create
+passes `version: 1`, import echoes, PUT passes `existing.version +
+1`). The alternative (bump inside saver with a `bumpVersion: boolean`
+option) couples storage to OC lifecycle; route-level bump keeps the
+concerns separate.
+
+Saver change scope for v2: zero. Route change scope: one line +
+comment.
+
+**F.3.1 — 409 body augmentation: keep legacy flat shape, add
+`code` + `details`.** Existing tests + docs assert the flat
+`{error: "VERSION_CONFLICT", currentVersion, expectedVersion}`
+shape that bypasses the error-handler envelope (see Session #13 Q1
+at `profiles.ts:6-12`). Client `ApiError` reads
+`{code, message, details?}`, so `currentVersion` was lost on the
+wire pre-v2. Augmented shape:
+
+```json
+{
+  "error": "VERSION_CONFLICT",
+  "code": "VERSION_CONFLICT",
+  "message": "...",
+  "currentVersion": N,
+  "expectedVersion": M,
+  "details": { "currentVersion": N, "expectedVersion": M }
+}
+```
+
+Redundant but non-breaking: existing tests pass, new `ApiError.details.currentVersion`
+client read path works. Same augmentation applied to
+`/api/profile-assets/:id` 409 body for consistency.
+
+**F.4 — Preserve-edits-on-409 state machine: non-dismissible banner +
+discard-with-confirm.** Reopens the F1 flow deferred in Session #30
+(unreachable under `version: z.literal(1)`, now reachable under v2
+OC). Locked copy (Q-31.D):
+
+- Banner: *"This profile was updated on the server. Your edits are
+  preserved. Saving will overwrite the server's version."*
+- Toast (on 409 intercept): *"Remote updated — reloaded latest, your
+  edits kept."*
+- Save button label swap: `"Save"` → `"Overwrite & Save"` while
+  banner is visible.
+- Discard CTA in banner: `"Discard my edits"` → native
+  `window.confirm("Discard your unsaved edits? This cannot be
+  undone.")` → revert + hide banner.
+
+State machine:
+
+```
+saved           → banner hidden
+409 conflict    → banner shown + edits preserved + remoteVersion updated
+overwrite save  → 2xx → banner hidden (back to saved)
+discard edits   → confirm → revert form to refetched remote → banner hidden
+```
+
+Not-dismissible rationale: the only legitimate resolutions are
+Overwrite or Discard. A dismiss-X button leaves the UI in a confusing
+"edits kept but banner gone" state that re-triggers the same 409 on
+next save with no visual warning.
+
+Navigation with banner + dirty state reuses the existing unsaved-
+changes guard (Q-30.A pattern): `navigator.registerGuard` +
+`beforeunload`. No new nav UX required.
+
+**F.5 — Test coverage anchored for v3+.** Five union-schema unit
+tests (v1 valid / v2 valid / v1 invalid / v2 invalid / unknown
+version rejected) + one real-409 integration test (two concurrent
+PUTs with refetch + Overwrite-Save + version bump assertion) +
+Preview MCP UI smoke of the conflict banner flow. Future v3 session
+extends: add V3Schema branch test + rename/default-field transform
+tests (the comment placeholder in `app-profile-migration.test.ts`
+activates here).
+
+---
+
+*Last updated: 2026-04-24 with Session #31 (Phase 5 Step 6 —
+AppProfileSchema v2 migration via z.union + transform;
+preserve-edits-on-409 UI re-opened from Session #30 F1 defer).*
+*Status: Phase 5 all steps closed (1/2/3/4/5a/5b/6). Phase 5 polish
+backlog remains (CF #10-27 in HANDOFF-SESSION32.md).*

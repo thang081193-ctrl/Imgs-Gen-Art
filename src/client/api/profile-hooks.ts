@@ -1,9 +1,10 @@
-// Session #30 Step 4 — Profile CMS mutations + client helpers.
+// Session #30 Step 4 / Session #31 Step 6 — Profile CMS mutations + helpers.
 //
-// F1 (simplified, deferred to v2 migration session): 409 VERSION_CONFLICT is
-// unreachable under AppProfileSchema v1 (version: z.literal(1) → expected
-// always 1 → last-write-wins). Update path surfaces a warning toast + forces
-// a refetch if the server ever returns 409 (fabricated expectedVersion only).
+// Session #31 reopened the F1 preserve-edits flow: v2 schema made 409
+// reachable (PUT bumps version on success → second tab's stale
+// expectedVersion mismatches). `parseVersionConflict` reads
+// `currentVersion` off `ApiError.details` (DECISIONS §F.3.1 augmented
+// 409 body); ProfileEdit consumes it to drive the banner state machine.
 //
 // F4: export uses the already-fetched ProfileDto + GET /api/profiles/:id cache
 // in common case; skips backend GET /:id/export to avoid redundant work.
@@ -207,8 +208,9 @@ export function exportProfileToFile(profile: ProfileDto): void {
   URL.revokeObjectURL(url)
 }
 
-// Save-failure → toast message mapper (F1 simplified). Keep the shape
-// close to ShowToast input so callers can spread directly.
+// Save-failure → toast message mapper. 409 path intentionally concise:
+// ProfileEdit's banner carries the full preserve-edits copy; the toast
+// just confirms "we reloaded the remote version and kept your edits."
 export interface SaveFailureMessage {
   message: string
   variant: "warning" | "danger"
@@ -223,10 +225,8 @@ export function describeSaveFailure(err: unknown): SaveFailureMessage {
       return { message: "Profile not found", variant: "danger" }
     }
     if (err.status === 409) {
-      // 409 VERSION_CONFLICT is unreachable under v1 schema but the backend
-      // contract supports it — surface as warning + let the caller refetch.
       return {
-        message: "Profile modified elsewhere. Refreshing.",
+        message: "Remote updated — reloaded latest, your edits kept.",
         variant: "warning",
       }
     }
@@ -239,6 +239,26 @@ export function describeSaveFailure(err: unknown): SaveFailureMessage {
     message: err instanceof Error ? err.message : "Save failed — try again",
     variant: "danger",
   }
+}
+
+// DECISIONS §F.3.1 — the 409 body includes `details: {currentVersion,
+// expectedVersion}` so `ApiError.details` carries the conflict info.
+// Returns null when the error isn't a version-conflict response (or
+// when details lost its shape — defensive parse).
+export interface VersionConflictInfo {
+  currentVersion: number
+  expectedVersion: number
+}
+
+export function parseVersionConflict(err: unknown): VersionConflictInfo | null {
+  if (!(err instanceof ApiError)) return null
+  if (err.status !== 409 || err.code !== "VERSION_CONFLICT") return null
+  const details = err.details
+  if (!details) return null
+  const current = details["currentVersion"]
+  const expected = details["expectedVersion"]
+  if (typeof current !== "number" || typeof expected !== "number") return null
+  return { currentVersion: current, expectedVersion: expected }
 }
 
 function readStringField(body: Record<string, unknown>, key: string): string | null {

@@ -1,32 +1,35 @@
-// Session #30 Step 4 — Profile CMS editor page. Dedicated page (Q-30.A
-// confirmed). Two modes driven by navigator.params:
+// Session #30 Step 4 / Session #31 Step 6 — Profile CMS editor page.
 //
-//   - Create: profileId === undefined. May include `initialProfile` from the
-//     Profiles list duplicate flow (Q-30.C clone-to-draft).
+// Session #31 reopened the preserve-edits-on-409 flow (DECISIONS §F.4):
+// v2 migration made 409 reachable (concurrent tabs → second-writer's
+// expectedVersion goes stale). On 409 we refetch latest (to learn
+// remote version) but KEEP the user's form dirty state; the
+// ProfileConflictBanner + Save-button label swap drive the state
+// machine (saved / conflict / overwrite-save / discard-with-confirm).
+//
+// Modes (unchanged from Session #30):
+//   - Create: profileId === undefined. May include `initialProfile`
+//     from the Profiles list duplicate flow (Q-30.C clone-to-draft).
 //   - Edit: profileId set → fetch via useProfileDetail.
 //
-// Form state covers identity + visual + positioning + context. Assets are
-// owned by ProfileAssetsSection (out-of-band: upload/delete hit the server
-// directly → editor refetches profile to re-sync).
-//
-// Unsaved-changes guard: dirty state registers a window.confirm guard on
-// the navigator + a beforeunload handler. Both unmount on clean state.
-//
-// F1 simplified: 409 VERSION_CONFLICT is unreachable under v1 schema but we
-// still wire it — toast + refetch + reset form to server state.
+// Unsaved-changes guard (unchanged): dirty state registers a
+// window.confirm guard on the navigator + a beforeunload handler.
 
 import { useEffect, useState } from "react"
 import type { ReactElement } from "react"
 import type { Navigator } from "@/client/navigator"
-import { ApiError } from "@/client/api/client"
+import type { ProfileDto } from "@/core/dto/profile-dto"
+import { apiGet } from "@/client/api/client"
 import {
   createProfile,
   describeSaveFailure,
+  parseVersionConflict,
   updateProfile,
   useProfileDetail,
 } from "@/client/api/profile-hooks"
 import type { ShowToast } from "@/client/components/ToastHost"
 import { ProfileAssetsSection } from "@/client/components/profile-editor/ProfileAssetsSection"
+import { ProfileConflictBanner } from "@/client/components/profile-editor/ProfileConflictBanner"
 import { ProfileContextSection } from "@/client/components/profile-editor/ProfileContextSection"
 import { ProfileIdentitySection } from "@/client/components/profile-editor/ProfileIdentitySection"
 import { ProfilePositioningSection } from "@/client/components/profile-editor/ProfilePositioningSection"
@@ -61,6 +64,10 @@ export function ProfileEdit({
   const [initial, setInitial] = useState<EditableSlice | null>(null)
   const [saving, setSaving] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
+  // Session #31 preserve-edits state. Non-null when last save hit 409;
+  // `remoteVersion` is the server's current version fetched post-409,
+  // used as expectedVersion on the overwrite-save attempt.
+  const [conflict, setConflict] = useState<{ remoteVersion: number } | null>(null)
 
   // Initialize form for create mode (uses initialProfile if present for the
   // duplicate flow, otherwise the blank template). Runs once per mount.
@@ -125,21 +132,45 @@ export function ProfileEdit({
         navigator.unregisterGuard()
         navigator.go("profile-edit", { profileId: created.id })
       } else {
-        const version = detail.data?.version ?? 1
-        const updated = await updateProfile(profileId!, buildUpdateInput(form, version))
+        // Use conflict.remoteVersion if we're overwriting after a 409;
+        // otherwise the hook's cached version is authoritative.
+        const expectedVersion = conflict?.remoteVersion ?? detail.data?.version ?? 1
+        const updated = await updateProfile(profileId!, buildUpdateInput(form, expectedVersion))
         showToast({ variant: "success", message: "Profile saved." })
         const slice = sliceFromDto(updated)
         setForm(slice)
         setInitial(slice)
+        setConflict(null)
       }
     } catch (err) {
-      showToast(describeSaveFailure(err))
-      if (err instanceof ApiError && err.status === 409 && !isCreateMode) {
-        setRefreshKey((k) => k + 1)
+      const vc = parseVersionConflict(err)
+      if (vc !== null && !isCreateMode) {
+        // DECISIONS §F.4 — preserve edits: refetch latest (to learn the
+        // server's current version) but keep `form` dirty. Update
+        // `initial` to the refetched slice so isDirty reflects form-vs-
+        // remote, not form-vs-pre-conflict. Banner renders via
+        // conflict !== null; Save becomes "Overwrite & Save".
+        try {
+          const latest = await apiGet<ProfileDto>(`/api/profiles/${profileId}`)
+          const latestSlice = sliceFromDto(latest)
+          setInitial(latestSlice)
+          setConflict({ remoteVersion: latest.version })
+          showToast(describeSaveFailure(err))
+        } catch {
+          showToast({ variant: "danger", message: "Save failed — could not reload latest. Try again." })
+        }
+      } else {
+        showToast(describeSaveFailure(err))
       }
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDiscardEdits = (): void => {
+    if (initial === null) return
+    setForm(initial)
+    setConflict(null)
   }
 
   const handleCancel = (): void => {
@@ -168,8 +199,16 @@ export function ProfileEdit({
   // Save semantics differ by mode: create always commits (even a clone-
   // to-draft prefill the user doesn't tweak), edit requires a dirty form
   // to avoid no-op PUTs. Both modes still gate on a non-empty name.
+  // Conflict-mode reuses the dirty check — post-refetch, the form may
+  // or may not differ from the refetched remote; Save is enabled iff
+  // the user's preserved edits differ from what's now the remote base.
   const canSave =
     form.name.trim() !== "" && !saving && (isCreateMode || isDirty)
+  const saveLabel = saving
+    ? "Saving…"
+    : conflict !== null
+      ? "Overwrite & Save"
+      : "Save"
 
   return (
     <PageShell>
@@ -202,10 +241,14 @@ export function ProfileEdit({
             disabled={!canSave}
             className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-700"
           >
-            {saving ? "Saving…" : "Save"}
+            {saveLabel}
           </button>
         </div>
       </header>
+
+      {conflict !== null && (
+        <ProfileConflictBanner onDiscard={handleDiscardEdits} />
+      )}
 
       <ProfileIdentitySection
         value={{ name: form.name, tagline: form.tagline, category: form.category }}
