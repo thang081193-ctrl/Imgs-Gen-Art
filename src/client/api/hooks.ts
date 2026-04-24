@@ -176,8 +176,12 @@ export function buildAssetsQueryString(filter: AssetsFilter): string {
 
 export function useAssets(filter: AssetsFilter, refreshKey: number = 0): ApiState<AssetsListResponse> {
   const qs = buildAssetsQueryString(filter)
-  // refreshKey in path so external triggers re-fetch; query-string dedupe OK.
-  return useFetch<AssetsListResponse>(`/api/assets?${qs}&_=${refreshKey}`)
+  // refreshKey used as a useFetch dependency suffix. Schema-strict validation
+  // (Session #28a) rejects unknown query params, so we keep the cache-buster
+  // off the URL and out of the server's parser. Instead, thread it through
+  // the React dependency key by appending a URL-fragment sentinel the server
+  // never sees (fragments don't traverse the network).
+  return useFetch<AssetsListResponse>(`/api/assets?${qs}#r=${refreshKey}`)
 }
 
 export function useAsset(assetId: string | null): ApiState<AssetDto> {

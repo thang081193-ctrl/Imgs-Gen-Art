@@ -46,6 +46,7 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
     if (hasAnyFilter(fromUrl)) return fromUrl
     const base = emptyAssetListFilter()
     if (navigator.params.batchId !== undefined) return { ...base, batchId: navigator.params.batchId }
+    if (navigator.params.profileIds !== undefined) return { ...base, profileIds: navigator.params.profileIds }
     return base
   })
   const [page, setPage] = useState<number>(0)
@@ -74,6 +75,16 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
       setFilter((f) => ({ ...f, batchId: navigator.params.batchId }))
     }
   }, [navigator.params.batchId, filter.batchId])
+
+  // Honor navigator.params.profileIds updates after mount (Session #30
+  // F6 DeleteProfileDialog "View in Gallery" deep-link).
+  useEffect(() => {
+    const incoming = navigator.params.profileIds
+    if (incoming === undefined) return
+    const current = filter.profileIds ?? []
+    const same = incoming.length === current.length && incoming.every((id, i) => id === current[i])
+    if (!same) setFilter((f) => ({ ...f, profileIds: incoming }))
+  }, [navigator.params.profileIds, filter.profileIds])
 
   const onChangeFilter = useCallback((patch: Partial<AssetListFilter>) => {
     setFilter((f) => ({ ...f, ...patch }))
