@@ -6,8 +6,8 @@
 // `currentVersion` off `ApiError.details` (DECISIONS §F.3.1 augmented
 // 409 body); ProfileEdit consumes it to drive the banner state machine.
 //
-// F4: export uses the already-fetched ProfileDto + GET /api/profiles/:id cache
-// in common case; skips backend GET /:id/export to avoid redundant work.
+// F4: client-side export uses the already-fetched ProfileDto + GET
+// /api/profiles/:id cache; no backend export endpoint (removed in S#32 F2).
 //
 // F6: deleteProfile returns a discriminated union so Profiles.tsx can swap a
 // confirm dialog into PROFILE_HAS_ASSETS error state with asset count + CTA.

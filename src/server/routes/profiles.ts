@@ -1,4 +1,4 @@
-// BOOTSTRAP-PHASE3 Step 5 — /api/profiles CRUD + export/import.
+// BOOTSTRAP-PHASE3 Step 5 — /api/profiles CRUD.
 //
 // Storage: JSON-file-per-profile under data/profiles/{id}.json (loader/saver
 // in src/server/profile-repo). Route layer maps AppProfile → ProfileDto /
@@ -34,16 +34,14 @@ import {
 import { BadRequestError, NotFoundError } from "@/core/shared/errors"
 import {
   ProfileCreateBodySchema,
-  ProfileImportBodySchema,
   ProfileUpdateBodySchema,
   type ProfileCreateBody,
-  type ProfileImportBody,
   type ProfileUpdateBody,
 } from "./profiles.body"
 
 type ProfilesEnv = {
   Variables: {
-    validatedBody: ProfileCreateBody | ProfileUpdateBody | ProfileImportBody
+    validatedBody: ProfileCreateBody | ProfileUpdateBody
   }
 }
 
@@ -92,33 +90,11 @@ export function createProfilesRoute(): Hono<ProfilesEnv> {
     return c.json({ profiles })
   })
 
-  // Static path registered BEFORE dynamic `/:id` so `POST /import` doesn't
-  // collide with any future `POST /:id` handler — Hono dispatches by
-  // registration order for specificity ties.
-  route.post("/import", validateBody(ProfileImportBodySchema), (c) => {
-    const body = c.get("validatedBody") as ProfileImportBody
-    if (tryLoadProfile(body.id)) {
-      throw new BadRequestError(`Profile '${body.id}' already exists`, {
-        profileId: body.id,
-      })
-    }
-    const saved = saveProfile(body, { touchUpdatedAt: false })
-    return c.json(toProfileDto(saved), 201)
-  })
-
   route.get("/:id", (c) => {
     const id = c.req.param("id")
     const profile = tryLoadProfile(id)
     if (!profile) throw new NotFoundError(`Profile '${id}' not found`, { profileId: id })
     return c.json(toProfileDto(profile))
-  })
-
-  route.get("/:id/export", (c) => {
-    const id = c.req.param("id")
-    const profile = tryLoadProfile(id)
-    if (!profile) throw new NotFoundError(`Profile '${id}' not found`, { profileId: id })
-    c.header("Content-Disposition", `attachment; filename="${id}.json"`)
-    return c.json(profile)
   })
 
   route.post("/", validateBody(ProfileCreateBodySchema), (c) => {

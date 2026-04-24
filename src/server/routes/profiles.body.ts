@@ -8,10 +8,10 @@
 // Create body: AppProfile minus {version, id, createdAt, updatedAt}; id
 // optional (server slugifies from name if absent). Update body: same shape
 // but top-level .partial() + required expectedVersion for optimistic
-// concurrency. Import body: full AppProfile shape (round-trip from export).
+// concurrency.
 
 import { z } from "zod"
-import { AppProfileBodyFields, AppProfileSchema } from "@/core/schemas/app-profile"
+import { AppProfileBodyFields } from "@/core/schemas/app-profile"
 
 // Session #31 — AppProfileSchema is now z.union([V1,V2]).transform(...)
 // so `.omit()` is unavailable on it. AppProfileBodyFields is the
@@ -31,8 +31,5 @@ export const ProfileUpdateBodySchema = ProfileWritableSchema.partial().extend({
   expectedVersion: z.number().int().nonnegative(),
 })
 
-export const ProfileImportBodySchema = AppProfileSchema
-
 export type ProfileCreateBody = z.infer<typeof ProfileCreateBodySchema>
 export type ProfileUpdateBody = z.infer<typeof ProfileUpdateBodySchema>
-export type ProfileImportBody = z.infer<typeof ProfileImportBodySchema>

@@ -41,8 +41,8 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i
 // Fields shared across every version. When v3+ adds or renames a
 // field, branch-specific overrides go on the branch (V1/V2/V3Schema);
 // shared shape lives here. Exported so the body-schema layer (create/
-// update/import) can `.omit({version})` without reaching into a
-// specific version branch — v2 migration DECISIONS §F.1.
+// update) can `.omit({version})` without reaching into a specific
+// version branch — v2 migration DECISIONS §F.1.
 export const AppProfileBodyFields = z.object({
   id: z.string(),
   name: z.string(),
