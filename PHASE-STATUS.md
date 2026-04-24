@@ -1,7 +1,8 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/3/5a/5b CLOSED. Session #29 landed Step 3b (frontend — expanded Gallery filter UI): `AssetFilterChips` summary row (specificity-order chips, click-body scroll + flash + focus, × clear, Clear-all when ≥ 2); `AssetFilterBar` rewritten around a single `onChange(patch)` with 8 anchor sections (profile dropdown, workflow colored chips, batch input, tags section with free-text Enter/comma/Tab + OR/AND toggle, date preset 4-radio, replayClass 3-checkbox, provider + model multi-select with cascade toast); `GalleryEmptyState` empty-filter result block; Gallery page owns one `AssetListFilter` + bidirectional URL sync (`history.replaceState` on change, `AssetListFilterSchema.safeParse` on mount). Mid-session scope delta authorized by bro: backend schema helper `csvArrayPreserveEmpty` + query-builder `1 = 0` clause so `replayClasses === []` round-trips as "match-none" (Q-29.E option b — distinct from absent). 3 new client components + 2 new utils + 1 expanded bar + 1 expanded hooks module + 1 Gallery rewrite + 2 tiny test files (14 URL round-trip + 7 date-presets) + 8 appended schema / query-builder tests. 641 pass / 10 skipped / 1 todo / 652 total regression (+29 net vs Session #28a). Phase 4 remains closed; Phase 5 Step 4 (Profile CMS) targets Session #30; Step 6 (v2 schema migration) pending.)
-Last updated: 2026-04-24 (Session #29 — Phase 5 Step 3b ship (frontend + a narrow backend schema relax for Q-29.E match-none semantics). 6 Qs locked pre-code with one bro pushback: Q-29.A chips in specificity order (batch → profile → workflow → tags → replayClass → provider → model → date) rather than card-order; Q-29.B tags free-text with Enter/comma/Tab delimiters + trim/lowercase/whitespace-collapse normalization + dedup toast + backspace-on-empty removes last; Q-29.C URL CSV with per-value `encodeURIComponent` + un-escaped comma separator (keeps `?tags=sunset,neon` readable in the address bar); Q-29.D provider → model cascade clears only invalid models, toast once per transition; Q-29.E (option b) replayClasses `[]` preserved on the wire + SQL builder emits `1 = 0` so "0 of 3 checkboxes selected" = return zero rows (new schema helper `csvArrayPreserveEmpty` leaves plural non-replay fields unchanged); Q-29.F Step 3b clean ship + CMS deferred to Session #30 with a 30–60min dogfood window between sessions. Scope notes: (1) tag filter = LIKE scan on the JSON `tags` column (honors DECISIONS §C1 post-v1 deferral); (2) path layout — new schema at `src/core/schemas/asset-list-filter.ts`, SQL builder alongside asset-repo at `src/server/asset-store/asset-list-query.ts`, no new `src/server/assets/` or `src/client/hooks/` dirs; (3) skip totalCount v1 (response shape stays `{ assets, limit, offset }`). Commit chain: (1) `feat(gallery)` ships 2 new files + 5 modified (asset-repo drops 20 LOC of inline WHERE building; assets.body.ts reduced to re-export shim; assets.ts route drops custom `coerceQuery` in favor of schema-strict `.safeParse` with CSV preprocess). Wire contract: plural CSV params (`profileIds=a,b,c`) preferred; legacy singular (`profileId=a`) still parses and merges into plural array via `.transform()`. Cursor-based pagination explicitly deferred to Session #30+ with inline TODO. 39 new tests: 12 in `asset-list-filter-schema.test.ts` (strict-allowlist + CSV preprocess + enum bounds + limit clamp + legacy merge), 19 in `asset-list-query-builder.test.ts` (WHERE composition + tag OR|AND + LIKE escape + datePreset boundaries + param ordering), 8 appended to `assets-routes.test.ts` (HTTP end-to-end on profileIds / replayClasses / providerIds+modelIds / tags OR|AND / datePreset=7d / strict-allowlist 400 / legacy singular backward-compat). 1 existing test updated in `asset-store.test.ts` (`profileId` → `profileIds: [X]` for the new interface shape — non-API-breaking, only the repo filter param renamed). 612/623 regression pass — clean full run with no flake observed. `test:live:smoke-all` NOT run (no provider surface change). Manual UI smoke remains deferred (Step 2 + Step 5b batch) since 28a is backend-only; 28b Session #29 + smoke can co-locate or run as a separate Chrome MCP session at office.)
+Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/3/4/5a/5b CLOSED. Session #30 landed Step 4 (frontend Profile CMS): `Profiles` list page (5-column table — logo+initials fallback / name+tagline / category / updatedAt relative / row actions edit-duplicate-export-delete); `ProfileEdit` dedicated editor page (create + edit modes, unsaved-changes guard via `navigator.registerGuard` + `beforeunload`, 5 sections — Identity + Assets + Visual + Positioning + Context); shared `StringListEditor` chip input with pure `normalizeItem` + `tryAddItem` + `shouldCommitOnKey` helpers for 6 schema consumers; `DeleteProfileDialog` state machine with PROFILE_HAS_ASSETS branch + View-in-Gallery CTA; client-side export via `{schemaVersion, profile, notes}` envelope + `${slugify(name)}.profile.json` download; clone-to-draft (`cloneProfileToDraft` clears assets — profile-asset FK is per-profile); `apiPut` added to API client; `profile-hooks` adds `useProfilesList`, `useProfileDetail`, mutations with 409-aware error describer. 15 new client files + 4 modified + 31 new unit tests. F1 simplified — 409 VERSION_CONFLICT preserve-edits flow deferred to v2 migration session (unreachable under `version: z.literal(1)`). 670/683 regression pass (2 remaining = known parallel ENOTEMPTY race, not introduced). Session #30 landed Step 4 (frontend — expanded Gallery filter UI): `AssetFilterChips` summary row (specificity-order chips, click-body scroll + flash + focus, × clear, Clear-all when ≥ 2); `AssetFilterBar` rewritten around a single `onChange(patch)` with 8 anchor sections (profile dropdown, workflow colored chips, batch input, tags section with free-text Enter/comma/Tab + OR/AND toggle, date preset 4-radio, replayClass 3-checkbox, provider + model multi-select with cascade toast); `GalleryEmptyState` empty-filter result block; Gallery page owns one `AssetListFilter` + bidirectional URL sync (`history.replaceState` on change, `AssetListFilterSchema.safeParse` on mount). Mid-session scope delta authorized by bro: backend schema helper `csvArrayPreserveEmpty` + query-builder `1 = 0` clause so `replayClasses === []` round-trips as "match-none" (Q-29.E option b — distinct from absent). 3 new client components + 2 new utils + 1 expanded bar + 1 expanded hooks module + 1 Gallery rewrite + 2 tiny test files (14 URL round-trip + 7 date-presets) + 8 appended schema / query-builder tests. 641 pass / 10 skipped / 1 todo / 652 total regression (+29 net vs Session #28a). Phase 4 remains closed; Phase 5 Step 4 (Profile CMS) targets Session #30; Step 6 (v2 schema migration) pending.)
+Last updated: 2026-04-24 (Session #30 — Phase 5 Step 4 ship (frontend Profile CMS only — no backend changes touched `src/server/**` or `src/core/schemas/app-profile.ts`). 7 Qs locked pre-code with one bro pushback that reversed direction mid-audit: Q-30.A dedicated `/profiles/:id` editor page with unsaved-changes guard (useBlocker + beforeunload); Q-30.B pushback — verify schema first, landed at 5 columns (logo+initials / name+tagline / category / updatedAt relative / actions) after audit revealed `tone`/`marketTier`/`assets count` not in `ProfileSummaryDto`; Q-30.C pushback — clone-to-draft (client-side `cloneProfileToDraft` clears assets + prefills editor) instead of immediate-save clone (avoids orphans on abandonment + clean delete semantics given profile-asset FK); Q-30.D client-side export with `{schemaVersion:1, profile, notes}` envelope + `${slugify(name)}.profile.json` filename + pretty-print (backend `GET /:id/export` endpoint untouched, deprecation CF); Q-30.E reversed to simplify (b) — 409 VERSION_CONFLICT unreachable under `version: z.literal(1)`, preserve-edits flow deferred to v2 migration session; Q-30.F DROP entirely — audit confirmed no `slug` field in `AppProfileSchema` (id IS slug-like, server-derived via `slugify(name)` on create, immutable); Q-30.G StringListEditor shared component + 12-prop API (value / onChange / placeholder / maxItems / maxItemLength / delimiter / allowDuplicates / normalize / label / helpText / errorText / disabled) with pure helpers (`normalizeItem` + `tryAddItem` + `shouldCommitOnKey`) for 6 schema consumers (doList / dontList / competitors / features / keyScenarios / forbiddenContent). Plus F6 added mid-audit: DeleteProfileDialog state machine with PROFILE_HAS_ASSETS blocked-state + View-in-Gallery deep-link CTA. Audit preconditions: (1) isolated flake retry — all 4 known parallel-race tests (`edit-and-run` / `replay-route` / `workflows-full` / `workflows-routes`) pass solo → Phase 5 polish CF entry "Test cleanup race — mutex or retry-with-backoff in afterAll"; (2) schema + route audit — AppProfile 5-section shape enumerated, id-based URL + slugify-on-create confirmed, `ProfileSummaryDto` field list locked. Files: 15 new (`profile-hooks.ts` 253 / `Profiles.tsx` 253 / `ProfileEdit.tsx` 243 + `profile-edit-helpers.ts` 121 / `StringListEditor.tsx` 207 / `ProfileAssetsSection.tsx` 199 + `AssetSlot.tsx` 64 + `asset-url-helpers.ts` 64 / `DeleteProfileDialog.tsx` 164 / `ProfileVisualSection.tsx` 125 / `ProfileIdentitySection.tsx` 96 / `ProfilePositioningSection.tsx` 96 / `ProfileContextSection.tsx` 46 / `profile-list.ts` util 66 / 2 test files — 18 StringListEditor + 13 profile-list-helpers) + 4 modified (`App.tsx` guard wire + 2 page renders, `TopNav.tsx` Profiles link, `navigator.ts` Page/NavParams/NavGuard extension, `api/client.ts` apiPut). 670/683 regression pass (+31 net vs Session #29; 2 remaining = known parallel ENOTEMPTY race, confirmed not introduced via isolated retry). Assets section is gated by `profileId !== null` — create-mode placeholder prompts Save-first; edit-mode handles upload/delete out-of-band vs the form's Save button (server mutates profile on upload so the form refetches via `setRefreshKey`). Manual UI smoke = CF for bro self-verify (no jsdom; component mount tests still deferred).)
+Last updated-prior: 2026-04-24 (Session #29 — Phase 5 Step 3b ship (frontend + a narrow backend schema relax for Q-29.E match-none semantics). 6 Qs locked pre-code with one bro pushback: Q-29.A chips in specificity order (batch → profile → workflow → tags → replayClass → provider → model → date) rather than card-order; Q-29.B tags free-text with Enter/comma/Tab delimiters + trim/lowercase/whitespace-collapse normalization + dedup toast + backspace-on-empty removes last; Q-29.C URL CSV with per-value `encodeURIComponent` + un-escaped comma separator (keeps `?tags=sunset,neon` readable in the address bar); Q-29.D provider → model cascade clears only invalid models, toast once per transition; Q-29.E (option b) replayClasses `[]` preserved on the wire + SQL builder emits `1 = 0` so "0 of 3 checkboxes selected" = return zero rows (new schema helper `csvArrayPreserveEmpty` leaves plural non-replay fields unchanged); Q-29.F Step 3b clean ship + CMS deferred to Session #30 with a 30–60min dogfood window between sessions. Scope notes: (1) tag filter = LIKE scan on the JSON `tags` column (honors DECISIONS §C1 post-v1 deferral); (2) path layout — new schema at `src/core/schemas/asset-list-filter.ts`, SQL builder alongside asset-repo at `src/server/asset-store/asset-list-query.ts`, no new `src/server/assets/` or `src/client/hooks/` dirs; (3) skip totalCount v1 (response shape stays `{ assets, limit, offset }`). Commit chain: (1) `feat(gallery)` ships 2 new files + 5 modified (asset-repo drops 20 LOC of inline WHERE building; assets.body.ts reduced to re-export shim; assets.ts route drops custom `coerceQuery` in favor of schema-strict `.safeParse` with CSV preprocess). Wire contract: plural CSV params (`profileIds=a,b,c`) preferred; legacy singular (`profileId=a`) still parses and merges into plural array via `.transform()`. Cursor-based pagination explicitly deferred to Session #30+ with inline TODO. 39 new tests: 12 in `asset-list-filter-schema.test.ts` (strict-allowlist + CSV preprocess + enum bounds + limit clamp + legacy merge), 19 in `asset-list-query-builder.test.ts` (WHERE composition + tag OR|AND + LIKE escape + datePreset boundaries + param ordering), 8 appended to `assets-routes.test.ts` (HTTP end-to-end on profileIds / replayClasses / providerIds+modelIds / tags OR|AND / datePreset=7d / strict-allowlist 400 / legacy singular backward-compat). 1 existing test updated in `asset-store.test.ts` (`profileId` → `profileIds: [X]` for the new interface shape — non-API-breaking, only the repo filter param renamed). 612/623 regression pass — clean full run with no flake observed. `test:live:smoke-all` NOT run (no provider surface change). Manual UI smoke remains deferred (Step 2 + Step 5b batch) since 28a is backend-only; 28b Session #29 + smoke can co-locate or run as a separate Chrome MCP session at office.)
 
 ## Phase 5 Summary (in progress)
 
@@ -11,7 +12,7 @@ Last updated: 2026-04-24 (Session #29 — Phase 5 Step 3b ship (frontend + a nar
 | 2 | Replay UI (modal button + gallery badge) | ✅ Session #26 — 5 new src files (useReplay hook + useReplayClass hook + replay-errors mapper + ReplayBadge + ReplaySection) + 3 src edits (AssetDetailModal slim, AssetThumbnail badge wiring, Gallery prop threading) + Gap A fold-in across 4 server files (asset-dto NotReplayableReason type, replay-class helper, replay-service probeReplayClass, replay.ts route reshape) + 2 test files (5 new unit for reason helper + 11 new unit for error taxonomy) + 1 existing integration test updated (flip 400 → 200 + 3 new reason cases). Pure-logic tests only; hook/component tests deferred (no jsdom). |
 | 3a | Filter schema + SQL query builder backend | ✅ Session #28a — 2 new src files (`src/core/schemas/asset-list-filter.ts` 108 LOC + `src/server/asset-store/asset-list-query.ts` 129 LOC) + 5 modified (asset-repo.list delegates, asset-store barrel, types re-export, routes/assets.body shim, routes/assets uses schema-strict parse) + 39 new tests (12 schema / 19 builder / 8 integration) + 1 existing test updated (asset-store.test profileId→profileIds). 612/623 pass. |
 | 3b | Gallery filter UI (chips + empty state + URL sync) | ✅ Session #29 — 3 new client components (`AssetFilterChips` 244 LOC / `FilterBarTagsSection` 144 / `FilterBarEnumSections` 139) + 1 new empty-state (`GalleryEmptyState` 27) + 2 new utils (`date-presets` 36 / `gallery-filter-url` 38) + 1 expanded bar (147 → 242) + 1 expanded hooks module (+39 LOC for `buildAssetsQueryString` + explicit `\| undefined` unions) + 1 Gallery rewrite (single `AssetListFilter` state + `history.replaceState` sync) + 1 CSS keyframe for chip-click flash + Q-29.E scope delta (`csvArrayPreserveEmpty` schema helper + `1 = 0` query-builder clause for replayClasses match-none). 29 new tests: 14 URL round-trip + 7 date-presets + 5 schema empty-array + 3 builder 1=0. 641/652 regression pass (+29 net vs 28a). Interactive UI smoke = CF for bro self-verify. |
-| 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending (Session #30) |
+| 4 | Profile CMS (CRUD UI + optimistic concurrency) | ✅ Session #30 — 15 new client files (`profile-hooks` 253 LOC / `StringListEditor` 207 LOC + 18 unit tests / `profile-list` util 66 LOC + 13 unit tests / `Profiles` list page 253 LOC / `ProfileEdit` editor 243 LOC + `profile-edit-helpers` 121 LOC / 5 section components — `ProfileIdentitySection` 96 / `ProfileVisualSection` 125 / `ProfilePositioningSection` 96 / `ProfileContextSection` 46 / `ProfileAssetsSection` 199 + `AssetSlot` 64 + `asset-url-helpers` 64 / `DeleteProfileDialog` 164) + 4 modified (`App.tsx` guard wire + Profiles/ProfileEdit render, `TopNav` Profiles link, `navigator.ts` Page/NavParams/NavGuard extension, `client.ts` apiPut). 31 new unit tests. F1 simplified — 409 VERSION_CONFLICT preserve-edits flow deferred to v2 migration session (unreachable under `version: z.literal(1)`); v1 ships LWW + graceful warning toast + refetch on 409. F2 — 5-column list (logo+initials fallback / name+tagline / category / updatedAt relative / row actions). F3 — Q-30.F DROP (no slug field, id IS slug-like). F4 — client-side export envelope via `GET /:id/export` skip (reuses existing detail fetch). F6 — DeleteProfileDialog state machine: confirm → busy → blocked (PROFILE_HAS_ASSETS) with View-in-Gallery CTA. Clone-clears-assets (weak profile-asset FK). 670/683 regression pass (+31 net; 2 remaining = known parallel ENOTEMPTY race — handoff CF, not introduced). |
 | 5a | Canonical payload migration + `mode=edit` backend | ✅ Session #27a — 4 writers migrated, dual reader + 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` / `CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD`, `AssetDto.editable` flag, 11 new integration tests + 1 unit. 546/557 pass (+11 net vs Session #26). |
 | 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | ✅ Session #27b — 2 commits (refactor extracts `applyOverride` + drops `EDIT_REQUIRES_PROMPT` dead code; feat ships `prompt_history` table + repo + `GET /api/assets/:id/prompt-history` route + replay-service edit-only history writes + PromptLab page + PromptEditor + DiffViewer + PromptHistorySidebar + `diff-words.ts` LCS util + `useAsset` + `usePromptHistory` + `useReplay.start({overridePayload?})` ext + `[Edit & replay]` entry on AssetDetailModal). 573/584 regression pass (+27 net vs Session #27a). |
 | 6 | AppProfileSchema v2 migration (trigger-driven, defer unless blocked) | pending |
@@ -28,6 +29,218 @@ Last updated: 2026-04-24 (Session #29 — Phase 5 Step 3b ship (frontend + a nar
 | 6 | Compatibility warning banner (client) | ✅ Session #22 — 1 new src file (`workflow/compatibility-warning.tsx`) + 2 edits (Workflow.tsx wiring + tooltip, ProviderModelSelector strip-incompat-branch) + 1 new unit test file (5 tests) |
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
+
+## Completed in Session #30 (Phase 5 Step 4 — Profile CMS frontend)
+
+Session #30 is frontend-only. Backend `/api/profiles` CRUD + optimistic
+concurrency shell + `/api/profiles/:id/upload-asset` shipped in Phase 3
+(Sessions #13, #14); this session wires the CMS on top.
+
+### Qs locked before coding (7 + 6 audit findings)
+
+Bro pushed back on 3 of the 7 verdicts after opening audit. `src/server/**`
+and `src/core/schemas/app-profile.ts` stayed untouched — the schema audit
+is what triggered F1's reversal + F2 column adjustment.
+
+- **Q-30.A (confirmed)** Dedicated `/profiles/:id` editor page + unsaved-
+  changes guard (`navigator.registerGuard` wraps in-app `go()` + a
+  `beforeunload` handler for tab close). `go()` consults the ref-backed
+  guard synchronously so TopNav clicks respect dirty state.
+- **Q-30.B (pushback → schema-audit-first)** Audit revealed `tone` /
+  `marketTier` / `assets count` NOT in `ProfileSummaryDto` (dto-mapper
+  exposes only `{id, name, tagline, category, version, logoUrl,
+  updatedAt}`). Final: 5 columns = logo thumb (24×24) with initials
+  fallback / name + tagline / category (enum → display label) /
+  updatedAt relative ("5m ago" / "2h ago" / absolute ISO beyond 30
+  days, absolute shown as hover tooltip) / actions (edit / duplicate /
+  export / delete icon buttons).
+- **Q-30.C (pushback → clone-to-draft)** Duplicate clones client-side
+  (`cloneProfileToDraft` assembles a `ProfileCreateInput` with
+  `name: "${original} (Copy)"`) and navigates to `ProfileEdit` in
+  create-mode with the clone prefilled. Assets are cleared because
+  profile-asset rows carry a single `profileId` FK — sharing asset IDs
+  across profiles would break the delete HAS_ASSETS guard. User
+  re-uploads on the clone.
+- **Q-30.D (confirmed + client-side)** Export envelope
+  `{schemaVersion: 1, profile: ProfileDto, notes}` with notes
+  "Asset IDs reference binary files not included. Re-upload assets
+  after import." Filename `${slugify(profile.name)}.profile.json` (id
+  fallback). Pretty-print 2-space. Reuses `GET /api/profiles/:id` —
+  backend `/export` endpoint stays untouched (deprecation CF).
+- **Q-30.E (reversed → defer to v2)** Audit surfaced `version:
+  z.literal(1)` — the 409 VERSION_CONFLICT preserve-edits flow is
+  unreachable under v1 schema. Two tabs editing same profile both send
+  `expectedVersion=1` → both pass → silent LWW. Bro reversed F1 from
+  "ship preserve-edits as placeholder" to "simplify + defer to v2
+  migration session with fresh context + full schema migration
+  awareness". v1 ships: 400 → field-level toast, 404 → not-found toast,
+  409 VERSION_CONFLICT → warning toast + refetch (unreachable in
+  practice), 5xx → retry toast.
+- **Q-30.F (DROP entirely)** Audit: no `slug` field anywhere in
+  `AppProfileSchema`. `id` IS the slug-like identifier — server derives
+  via `slugify(body.name)` on create (or `shortId("profile", 8)`
+  fallback) and stays immutable after. URL uses `id`; UI displays
+  `name`. No slug editor, no lock affordance, no "edit slug" warning.
+- **Q-30.G (confirmed)** `StringListEditor` shared component with 12
+  props (value / onChange / placeholder / maxItems / maxItemLength /
+  delimiter — `"enter" | "comma" | "both"` / allowDuplicates /
+  normalize — `"trim" | "trimLowercase" | "none"` / label / helpText /
+  errorText / disabled). 3 pure helpers (`normalizeItem`, `tryAddItem`,
+  `shouldCommitOnKey`) exported for unit tests so behavior-prop
+  coverage doesn't need jsdom. Consumed by: `doList`, `dontList`,
+  `competitors`, `features`, `keyScenarios`, `forbiddenContent`.
+- **F6 (added mid-audit)** Delete UX upgrade beyond bro's original
+  spec: `DeleteProfileDialog` is a state machine —
+  `confirm → busy → { deleted | blocked | other-error }`. `blocked`
+  state fires when server returns 409 `PROFILE_HAS_ASSETS`, shows
+  "Cannot delete: N asset(s) exist. Delete them from Gallery first."
+  + a "View in Gallery" CTA that deep-links to
+  `/gallery?profileIds={id}` via `navigator.go("gallery", {profileIds})`.
+
+### What shipped — file surface
+
+**NEW (15 files):**
+- `src/client/api/profile-hooks.ts` (253 LOC) — `useProfilesList` +
+  `useProfileDetail` (refresh-capable — bumped by upload/delete/409),
+  `createProfile` / `updateProfile` / `deleteProfile` (raw fetch for
+  the latter to pull `assetCount` out of the `{error, message,
+  assetCount}` body shape that bypasses the error-handler envelope),
+  `cloneProfileToDraft`, `exportProfileToFile`, `describeSaveFailure`.
+- `src/client/pages/Profiles.tsx` (253 LOC) — list page + row actions
+  + `DeleteProfileDialog` orchestration. Empty state offers "Create
+  your first profile" CTA. Loading + error blocks mirror Settings
+  page idiom.
+- `src/client/pages/ProfileEdit.tsx` (243 LOC) — editor page shell.
+  Owns form state for identity + visual + positioning + context
+  (assets are owned by `ProfileAssetsSection` against the backend).
+  Dirty state compares via JSON-canonical equality. Guard +
+  beforeunload effects mount only when dirty. Save handler branches
+  on create vs edit; create success navigates into edit mode at the
+  new id.
+- `src/client/pages/profile-edit-helpers.ts` (121 LOC) —
+  `BLANK_PROFILE` template + `sliceFromCreateInput` /
+  `sliceFromDto` / `buildCreateInput` / `buildUpdateInput` /
+  `slicesEqual`. Split out so `ProfileEdit.tsx` stays under the LOC
+  cap.
+- `src/client/components/profile-editor/StringListEditor.tsx`
+  (207 LOC) — shared chip input.
+- `src/client/components/profile-editor/ProfileIdentitySection.tsx`
+  (96 LOC) — name (with `nameError` surface) + tagline + category
+  select.
+- `src/client/components/profile-editor/ProfileVisualSection.tsx`
+  (125 LOC) — 3 `ColorField`s (native color picker + hex text, hex
+  committed on blur when the 6-hex regex matches) + tone select +
+  do/don't lists.
+- `src/client/components/profile-editor/ProfilePositioningSection.tsx`
+  (96 LOC) — usp + persona (textareas) + marketTier select +
+  competitors (StringListEditor).
+- `src/client/components/profile-editor/ProfileContextSection.tsx`
+  (46 LOC) — 3 StringListEditor instances.
+- `src/client/components/profile-editor/ProfileAssetsSection.tsx`
+  (199 LOC) — logo / badge slots + screenshot grid. Create-mode
+  renders placeholder; edit-mode handles upload/delete directly
+  against `POST /api/profiles/:id/upload-asset` + `DELETE
+  /api/profile-assets/:id` + follow-up `PUT /api/profiles/:id`
+  (clear the reference). `onChanged` callback triggers the page's
+  `refreshKey` bump.
+- `src/client/components/profile-editor/AssetSlot.tsx` (64 LOC) —
+  single thumbnail + Upload/Replace/Remove buttons; used by logo +
+  badge. Extracted so AssetsSection stays under LOC cap.
+- `src/client/components/profile-editor/asset-url-helpers.ts`
+  (64 LOC) — `URL_PATTERN` + `parseAssetId` +
+  `extractAssetIds` + `removeAssetReference` + `safeJson` + `labelFor`.
+  Mirrors `src/client/workflows/style-transform.tsx` precedent for
+  client-trusted URL → asset-id parsing.
+- `src/client/components/profile-editor/DeleteProfileDialog.tsx`
+  (164 LOC) — F6 state machine (confirm/busy/blocked).
+- `src/client/utils/profile-list.ts` (66 LOC) — `initialsFor`
+  (Intl.Segmenter word-boundary + grapheme-safe first-char),
+  `hueFor` (FNV-1a → 360-modulo for stable HSL), `formatRelative`
+  ("just now" / "Nm ago" / "Nh ago" / "Nd ago" / ISO date beyond
+  30d).
+- `tests/unit/string-list-editor.test.ts` (135 LOC, 18 cases) —
+  covers `normalizeItem` (4 modes) + `tryAddItem` (empty / dup /
+  maxItems / maxItemLength / allowDuplicates / normalize-before-
+  dedupe) + `shouldCommitOnKey` (4 delimiter branches).
+- `tests/unit/profile-list-helpers.test.ts` (74 LOC, 13 cases) —
+  `initialsFor` (4) + `hueFor` (3) + `formatRelative` (6 across
+  just-now / minutes / hours / days / absolute / invalid).
+
+**MODIFIED (4 files):**
+- `src/client/App.tsx` — `guardRef` + `registerGuard` /
+  `unregisterGuard` on the `Navigator` object; `go()` consults guard
+  synchronously. Profiles + ProfileEdit page renders added.
+- `src/client/components/TopNav.tsx` — "Profiles" link between
+  Gallery and Settings.
+- `src/client/navigator.ts` — `Page` union adds `"profiles"` +
+  `"profile-edit"`; `NavParams` adds `profileId?` + `initialProfile?`
+  (clone-to-draft carrier) + `profileIds?` (for the F6 View-in-Gallery
+  deep-link); `Navigator` interface adds `registerGuard` /
+  `unregisterGuard` + `NavGuard` type alias. Additive — existing
+  consumers (Home / Workflow / Gallery / PromptLab / Settings) are
+  unaffected.
+- `src/client/api/client.ts` — `apiPut<T>` helper (PUT with
+  JSON body + standard error handling). Fills a pre-existing gap;
+  `useProfileDetail` could otherwise not wire update mutations to
+  `PUT /api/profiles/:id` through the typed client.
+
+**REGRESSION:** 670 pass / 2 fail / 10 skipped / 1 todo / 683 total.
++31 tests net vs Session #29 (652 → 683 — exactly the new unit cases).
+2 failures = the same known parallel ENOTEMPTY cleanup race that
+produced 4 failures in Session #29 baseline; isolated retry of all
+4 tests pre-fire confirmed they pass solo. Phase 5 polish CF entry
+added ("Test cleanup race in `data/assets/{profile}/{date}/` rmdir —
+fix via mutex or retry-with-backoff in afterAll").
+
+**MANUAL UI SMOKE:** Deferred (no jsdom; bro self-smoke CF). Target
+flows: create → save → edit → save, duplicate (verify clone-to-draft
+prefill + abandonment = no orphan), export (file downloads + envelope
+shape), delete (happy path + F6 blocked state with View-in-Gallery),
+unsaved guard (in-app nav + tab close), asset upload/remove cycle.
+
+**NOT SHIPPED (v2 / polish backlog):**
+- Preserve-edits on 409 VERSION_CONFLICT (v2 trigger — version bump
+  on mutation + real contention surface).
+- Profile import (sibling to F4 export).
+- 3-way merge UI.
+- Bulk operations (multi-select delete/export).
+- Search/filter in list (defer unless >15 profiles surface).
+- Read-only view route.
+- `/api/profiles/:id/export` backend endpoint deprecation (unused
+  post-#30; remove when next backend-touching session opens).
+
+### Smoke-driven fixes (bundled into Session #30)
+
+End-of-session manual UI smoke via Claude Preview MCP exercised every
+flow (list / create / edit / save / dirty guard / duplicate / export /
+delete happy / F6 blocked) end-to-end and surfaced three issues fixed
+in-session before commit:
+
+1. **ProfileEdit Save disabled on clone-to-draft** —
+   `isDirty = !slicesEqual(form, initial)` returned false when the
+   clone's initial state matched form state (user opens duplicate,
+   doesn't tweak, hits Save — blocked). Split Save semantics per mode:
+   create mode enables Save whenever name is non-empty (even if
+   untouched from a prefilled clone); edit mode still requires dirty
+   to avoid no-op PUTs. "Unsaved changes." badge is edit-mode-only
+   now. [ProfileEdit.tsx:167-205]
+2. **Gallery didn't honor `navigator.params.profileIds`** — the F6
+   "View in Gallery" CTA passes `{profileIds: [id]}` but Gallery's
+   init + sync effect only read `batchId`. Added a parallel
+   `profileIds` path to both (mount-time seed + post-mount sync
+   with stable array-equality check). [Gallery.tsx:48-50 + 78-86]
+3. **Pre-existing: `useAssets` cache-buster failed strict-allowlist**
+   (since Session #28a). `/api/assets?...&_=0` → 400 `Unrecognized
+   key(s): '_'`. Gallery would silently always error with "Invalid
+   query" under any filter. Moved the refreshKey dedupe to a URL
+   fragment (`#r=${refreshKey}`) — fragments don't traverse the
+   network, React's useFetch still keys on the full path. Silent fix
+   for Gallery asset list fetches that's been broken for 2 sessions.
+   [api/hooks.ts:177-186]
+
+Regression stayed green through the fixes: 672 pass / 10 skipped /
+1 todo / 683 total. Parallel ENOTEMPTY flake didn't surface this
+run.
 
 ## Completed in Session #29 (Phase 5 Step 3b — Gallery filter UI + Q-29.E backend scope delta)
 

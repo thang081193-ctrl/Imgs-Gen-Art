@@ -357,7 +357,134 @@ to every plural field (`profileIds`, `workflowIds`, `providerIds`,
 
 ---
 
-*Last updated: 2026-04-24 with Session #29 (Phase 5 Step 3b —
-Gallery filter UI + Q-29.E backend scope delta).*
-*Status: Phase 5 Steps 1/2/3/5a/5b closed. Step 4 (Profile CMS,
-Session #30) + Step 6 (v2 schema migration) pending.*
+## §E — Profile CMS v1 semantics (Session #30 addendum)
+
+**Optimistic concurrency UI deferred to v2 migration session.** Session
+#30 opening audit confirmed `AppProfileSchema.version = z.literal(1)`
+(`src/core/schemas/app-profile.ts:33`), meaning the version field never
+bumps on mutation and the 409 `VERSION_CONFLICT` flow is **unreachable
+under v1**. Two tabs editing the same profile both send
+`expectedVersion: 1` → server check passes → silent last-write-wins.
+The 409 can only fire if a client fabricates `expectedVersion` (e.g.
+0 or 2).
+
+Bro initially authored Q-30.E as "preserve user edits on 409 + warning
+banner + last-write-wins semantic documented". After audit, F1 was
+reversed: v1 ships a simplified path (warning toast + refetch on 409,
+LWW otherwise) and the preserve-edits UI is deferred to the dedicated
+v2 migration session — matching the Session #27a RATE_LIMIT deferral
+pattern (CF #6) where unreachable-under-current-schema flows are
+postponed until the schema change brings them into scope.
+
+Implementation:
+- `src/client/api/profile-hooks.ts describeSaveFailure` maps 409 →
+  `{message: "Profile modified elsewhere. Refreshing.", variant:
+  "warning"}`.
+- `src/client/pages/ProfileEdit.tsx handleSave` bumps `refreshKey` on
+  409, which triggers `useProfileDetail` to refetch and reseed form
+  state (losing any dirty edits — documented in the deferred
+  preserve-edits flow).
+- The server contract (`src/server/routes/profiles.ts:142-157`)
+  remains unchanged — it already emits the `{error:
+  "VERSION_CONFLICT", currentVersion, expectedVersion}` body shape
+  that a future v2-aware editor can consume for 3-way merge or
+  preserve-edits rendering.
+
+**Profile id is the slug; no separate slug field.** Audit confirmed
+no `slug` in `AppProfileSchema`. Server auto-derives `id` via
+`slugify(body.name)` (or `shortId("profile", 8)` fallback if name
+slugs to empty) when `body.id` is absent on POST. Id is immutable
+after create — URL uses id, UI displays name. No slug editor, no
+lock affordance, no "edit slug" warning. Q-30.F dropped entirely.
+VN diacritic handling is preserved (`id.ts slugify` maps `đ/Đ → d/D`
+explicitly; NFKD-decomposition strips other diacritics).
+
+**Clone-to-draft: client-side prefill, assets cleared.** Q-30.C
+pushback rationale: immediate-save duplicates create orphans when
+users abandon the editor + bypass naming review. Client-side draft
+flow: `cloneProfileToDraft(source)` returns a `ProfileCreateInput`
+with `name: "${source.name} (Copy)"`, cleared assets, and deep-cloned
+arrays (`doList`, `dontList`, `competitors`, `features`,
+`keyScenarios`, `forbiddenContent`). `navigator.go("profile-edit",
+{initialProfile: clone})` opens the editor in create-mode with the
+prefill. Save → POST (no id) → server slugifies new name → new id.
+
+Assets are cleared (not shared) because profile-asset rows carry a
+single `profileId` FK (`src/server/asset-store` repo). Cloning asset
+IDs would put the owning `profileId` on the original — delete of the
+original then hits HAS_ASSETS guard pointing at rows that *visually*
+belong to the clone, and deleting the clone cascades to files the
+original still renders. Weak referential integrity is a v1 constraint;
+revisit if asset-sharing becomes a real use case.
+
+**Client-side export envelope + filename.** Q-30.D picked client-side
+wrap using the already-fetched `ProfileDto` (or a fresh `GET
+/api/profiles/:id` for Profiles list row actions). Envelope:
+
+```json
+{
+  "schemaVersion": 1,
+  "profile": { ...ProfileDto... },
+  "notes": "Asset IDs reference binary files not included. Re-upload assets after import."
+}
+```
+
+Filename: `${slugify(profile.name) || profile.id}.profile.json`.
+Pretty-printed (2-space indent). Backend endpoint `GET
+/api/profiles/:id/export` (`src/server/routes/profiles.ts:116-122`)
+is unused post-#30 — deprecation deferred to the next backend-touching
+session so the removal isn't an isolated backend commit. Import is
+**not** implemented in v1 (notes field explicitly warns re: binary
+asset gap); sibling to Phase 5+ polish.
+
+**F6 Delete dialog = state machine, not simple confirm.** Original
+bro spec was a confirm dialog. F6 upgraded it mid-audit after noting
+the backend already emits a rich 409 `PROFILE_HAS_ASSETS` body with
+`assetCount`. State machine:
+
+```
+confirm  ──(click Delete)──▶  busy
+busy     ──(204)──────────▶   (close + refresh list)
+busy     ──(409 HAS_ASSETS)─▶ blocked { assetCount, message }
+busy     ──(other error)───▶  confirm { error }
+blocked  ──(View Gallery)──▶  gallery?profileIds={id}  (close)
+blocked  ──(Close)─────────▶  (close, profile kept)
+```
+
+The blocked state is explicit UX improvement over a generic error
+toast: it tells the user *why* deletion failed + offers the concrete
+next step (remove the assets first) + a one-click deep-link to the
+gallery already filtered to that profile. Rationale: delete is
+irreversible and the HAS_ASSETS guard is a frequent-enough block at
+real-profile scale that a dedicated dialog beats a toast the user
+must re-read.
+
+`/api/profiles/:id` DELETE response bypasses the error-handler
+envelope (profiles.ts:163-183 header comment, Session #13 Q2) —
+client uses raw `fetch` in `deleteProfile` rather than the typed
+`apiDelete` so `assetCount` isn't lost in the `ApiError` type-cast
+(which expects `{code, message}` and drops the `{error,
+assetCount}` shape the route actually emits).
+
+**Assets section is out-of-band from the form's Save button.** Upload
+(`POST /api/profiles/:id/upload-asset`) mutates the profile server-
+side (`touchUpdatedAt: true` + mutates `appLogoAssetId` /
+`storeBadgeAssetId` / `screenshotAssetIds`). Delete requires both
+`DELETE /api/profile-assets/:id` + a follow-up `PUT
+/api/profiles/:id` to null the reference (backend mergeUpdate replaces
+assets entirely). Rather than coupling this two-step mutation to the
+form's Save, the AssetsSection owns its own network workflow and
+calls `onChanged` to bump the page's `refreshKey` — `useProfileDetail`
+refetches, form state re-seeds from the new DTO, and the Save button
+sends the form's identity/visual/positioning/context slice **without**
+touching `assets` in the PUT body (server keeps whatever assets are
+currently on disk). Create-mode renders an Assets placeholder since
+the upload endpoint targets `:id` which doesn't exist yet.
+
+---
+
+*Last updated: 2026-04-24 with Session #30 (Phase 5 Step 4 —
+Profile CMS frontend; F1 optimistic-concurrency UI deferred to v2
+migration session; Q-30.F slug UI dropped entirely after schema audit).*
+*Status: Phase 5 Steps 1/2/3/4/5a/5b closed. Step 6 (v2 schema
+migration, trigger-driven) pending.*
