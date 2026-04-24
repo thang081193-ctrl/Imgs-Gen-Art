@@ -6,8 +6,18 @@
 // `deriveSeed(batchSeed, "${layoutId}:${copyKey}")`.
 //
 // Output is deterministic for a fixed (featureFocus, batchSeed).
+//
+// Session #35 F2 (language-drift fix): the cartesian product is now
+// locked to a single copyKey (= the form's top-level language, narrowed
+// to CopyLang with "en" fallback). Previously all 10 copyKeys entered
+// the shuffle and the prompt-composer baked `concept.copyKey` into the
+// prompt's `language=` directive, so batches with form `language=en`
+// still rendered pt/th/vi headlines whenever the shuffle picked those
+// keys — visible as "font chữ sai" in dogfood. Locking at generator
+// time keeps the single-column cartesian deterministic and makes the
+// form input authoritative.
 
-import type { AdLayoutsFile, CopyTemplatesFile, FeatureFocus } from "@/core/templates"
+import type { AdLayoutsFile, CopyTemplatesFile, CopyLang, FeatureFocus } from "@/core/templates"
 import { shortId } from "@/core/shared/id"
 import { deriveSeed, mulberry32 } from "@/core/shared/rand"
 
@@ -19,27 +29,32 @@ export interface AdConceptSelectionInput {
   batchSeed: number
   layouts: AdLayoutsFile
   copyTemplates: CopyTemplatesFile
+  locale: CopyLang
 }
 
-interface Pair { layoutId: string; copyKey: string }
+interface Pair { layoutId: string; copyKey: CopyLang }
 
-/** Build the (layouts_for_feature × copyKeys) cartesian product.
- *  Exported for testability. */
+/** Build the (layouts_for_feature × {locale}) cartesian product.
+ *  Exported for testability. Locale is required — the caller narrows
+ *  the top-level LanguageCode down to a CopyLang at run boundary. */
 export function cartesianPairs(
   layouts: AdLayoutsFile,
   copyTemplates: CopyTemplatesFile,
   feature: FeatureFocus,
+  locale: CopyLang,
 ): Pair[] {
   const layoutIds = Object.keys(layouts.layouts)
     .filter((id) => layouts.layouts[id]!.feature === feature)
     .sort()  // stable ordering for deterministic shuffle
-  const copyKeys = Object.keys(copyTemplates.templates).sort()
+  if (!(locale in copyTemplates.templates)) {
+    throw new Error(
+      `ad-production: copyTemplates missing required locale '${locale}'`,
+    )
+  }
 
   const pairs: Pair[] = []
   for (const layoutId of layoutIds) {
-    for (const copyKey of copyKeys) {
-      pairs.push({ layoutId, copyKey })
-    }
+    pairs.push({ layoutId, copyKey: locale })
   }
   return pairs
 }
@@ -56,9 +71,9 @@ export function pickPairs(pairs: Pair[], count: number, seed: number): Pair[] {
 }
 
 export function generateAdConcepts(input: AdConceptSelectionInput): AdConcept[] {
-  const { conceptCount, featureFocus, batchSeed, layouts, copyTemplates } = input
+  const { conceptCount, featureFocus, batchSeed, layouts, copyTemplates, locale } = input
 
-  const pairs = cartesianPairs(layouts, copyTemplates, featureFocus)
+  const pairs = cartesianPairs(layouts, copyTemplates, featureFocus, locale)
   if (pairs.length === 0) {
     throw new Error(
       `ad-production: no layouts registered for featureFocus '${featureFocus}'`,

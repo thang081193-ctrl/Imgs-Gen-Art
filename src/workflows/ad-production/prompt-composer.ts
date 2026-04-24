@@ -10,15 +10,17 @@
 // headlines without re-seeding the random draw.
 
 import type { AppProfile } from "@/core/schemas/app-profile"
-import type { LanguageCode } from "@/core/model-registry/types"
 import type { AdLayoutsFile, CopyTemplatesFile, CopyLang } from "@/core/templates"
 
 import type { AdConcept } from "./types"
 
+// Session #35 F2 — locale typed as CopyLang (run.ts narrows the top-level
+// LanguageCode via CopyLangSchema + "en" fallback), so prompt + concept
+// share a single authoritative lang key throughout the batch.
 export interface BuildAdPromptParams {
   concept: AdConcept
   profile: AppProfile
-  locale: LanguageCode
+  locale: CopyLang
   variantIndex: number
   layouts: AdLayoutsFile
   copyTemplates: CopyTemplatesFile

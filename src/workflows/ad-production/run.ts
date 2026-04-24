@@ -13,7 +13,18 @@ import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
 import { finalizeBatch, type AssetRepo, type BatchRepo } from "@/server/asset-store"
 import { getAdLayouts, getCopyTemplates } from "@/server/templates"
+import { CopyLangSchema, type CopyLang } from "@/core/templates"
+import type { LanguageCode } from "@/core/model-registry/types"
 import type { WorkflowRunParams } from "@/workflows/types"
+
+// Session #35 F2 — narrow the top-level LanguageCode down to a CopyLang.
+// LanguageCode is wider (hi/zh*) but copy-templates only ship 10 CopyLang
+// keys; anything outside that set (or undefined) falls back to "en" so the
+// concept-generator never faces a missing locale bucket.
+function resolveCopyLocale(lang: LanguageCode | undefined): CopyLang {
+  const parsed = CopyLangSchema.safeParse(lang)
+  return parsed.success ? parsed.data : "en"
+}
 
 import { DEFAULT_ASSETS_DIR, writeAdAsset } from "./asset-writer"
 import { generateAdConcepts } from "./concept-generator"
@@ -41,7 +52,7 @@ export function createAdProductionRun(
   return async function* run(params: WorkflowRunParams): AsyncGenerator<WorkflowEvent> {
     const deps = resolveDeps(params)
     const input = params.input as AdProductionInput
-    const locale = params.language ?? "en"
+    const locale = resolveCopyLocale(params.language)
     const batchSeed = input.seed ?? Date.now()
 
     const model = getModel(params.modelId)
@@ -56,6 +67,7 @@ export function createAdProductionRun(
       batchSeed,
       layouts,
       copyTemplates,
+      locale,
     })
     const total = concepts.length * input.variantsPerConcept
 

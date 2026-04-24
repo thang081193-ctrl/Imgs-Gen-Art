@@ -134,37 +134,45 @@ function baseRunParams(overrides?: Partial<WorkflowRunParams>): WorkflowRunParam
 
 // ---------- concept-generator ----------
 
-describe("cartesianPairs — restricts to feature subset", () => {
-  it("returns only layouts whose feature matches, paired with every copy lang (sorted)", () => {
-    const pairs = cartesianPairs(layoutsFixture, copyFixture, "restore")
-    expect(pairs.length).toBe(2 * 10)  // 2 restore layouts × 10 langs
-    const uniqueLayouts = new Set(pairs.map((p) => p.layoutId))
-    expect(uniqueLayouts).toEqual(new Set(["restore_slider_reveal", "restore_split_view"]))
+describe("cartesianPairs — restricts to feature subset × single locale", () => {
+  it("returns only matching-feature layouts paired with the chosen locale", () => {
+    const pairs = cartesianPairs(layoutsFixture, copyFixture, "restore", "en")
+    // Session #35 F2: 2 restore layouts × 1 locale (was 2 × 10 before the
+    // lang-drift fix). Every copyKey must equal the requested locale.
+    expect(pairs).toHaveLength(2)
+    expect(pairs.every((p) => p.copyKey === "en")).toBe(true)
+    expect(new Set(pairs.map((p) => p.layoutId))).toEqual(
+      new Set(["restore_slider_reveal", "restore_split_view"]),
+    )
   })
 
   it("returns empty array when feature has no layouts", () => {
-    const pairs = cartesianPairs(layoutsFixture, copyFixture, "polaroid")
+    const pairs = cartesianPairs(layoutsFixture, copyFixture, "polaroid", "en")
     expect(pairs).toEqual([])
   })
 })
 
 describe("pickPairs — deterministic shuffle", () => {
   it("same seed → same picks", () => {
-    const all = cartesianPairs(layoutsFixture, copyFixture, "restore")
+    const all = cartesianPairs(layoutsFixture, copyFixture, "restore", "en")
     const a = pickPairs(all, 5, 42)
     const b = pickPairs(all, 5, 42)
     expect(a).toEqual(b)
   })
 
-  it("different seeds → different picks (probabilistically)", () => {
-    const all = cartesianPairs(layoutsFixture, copyFixture, "restore")
-    const a = pickPairs(all, 5, 1)
-    const b = pickPairs(all, 5, 999)
-    expect(a).not.toEqual(b)
+  it("different seeds → different pick order", () => {
+    // Post-F2 the per-locale pool is only 2 layouts for this fixture, so
+    // mulberry32 on seeds 1 and 999 coincidentally lands on the same
+    // ordering. Seed 7 flips them — enough to prove the shuffle reads
+    // the seed input.
+    const restoreEn = cartesianPairs(layoutsFixture, copyFixture, "restore", "en")
+    const a = pickPairs(restoreEn, 2, 1)
+    const b = pickPairs(restoreEn, 2, 7)
+    expect(a.map((p) => p.layoutId)).not.toEqual(b.map((p) => p.layoutId))
   })
 
   it("clamps count to pool size", () => {
-    const all = cartesianPairs(layoutsFixture, copyFixture, "restore")
+    const all = cartesianPairs(layoutsFixture, copyFixture, "restore", "en")
     const picked = pickPairs(all, 999, 7)
     expect(picked).toHaveLength(all.length)
   })
@@ -179,28 +187,46 @@ describe("generateAdConcepts — integration", () => {
         batchSeed: 42,
         layouts: layoutsFixture,
         copyTemplates: copyFixture,
+        locale: "en",
       }),
     ).toThrow(/no layouts registered/)
   })
 
-  it("produces N concepts with unique deterministic seeds", () => {
+  it("produces N concepts with unique deterministic seeds, all using the chosen locale", () => {
     const concepts = generateAdConcepts({
-      conceptCount: 3,
+      conceptCount: 2,
       featureFocus: "restore",
       batchSeed: 42,
       layouts: layoutsFixture,
       copyTemplates: copyFixture,
+      locale: "en",
     })
-    expect(concepts).toHaveLength(3)
+    expect(concepts).toHaveLength(2)
     const seeds = new Set(concepts.map((c) => c.seed))
-    expect(seeds.size).toBe(3)
+    expect(seeds.size).toBe(2)
     for (const c of concepts) {
       expect(c.id).toMatch(/^cpt_/)
       expect(c.featureFocus).toBe("restore")
+      expect(c.copyKey).toBe("en")
       expect(c.tags).toContain("restore")
       expect(c.tags).toContain(c.layoutId)
-      expect(c.tags).toContain(c.copyKey)
+      expect(c.tags).toContain("en")
     }
+  })
+
+  // Session #35 F2 regression guard: before the fix the generator shuffled
+  // across all 10 copyKeys, so form `language=en` still produced pt/th/vi
+  // assets. This test pins the one-locale-per-batch contract.
+  it("locks every concept to the form's locale (no multi-lang bleed)", () => {
+    const vi = generateAdConcepts({
+      conceptCount: 2,
+      featureFocus: "restore",
+      batchSeed: 42,
+      layouts: layoutsFixture,
+      copyTemplates: copyFixture,
+      locale: "vi",
+    })
+    expect(vi.every((c) => c.copyKey === "vi")).toBe(true)
   })
 })
 
@@ -214,6 +240,7 @@ describe("buildAdPrompt — variant rotation", () => {
       batchSeed: 42,
       layouts: layoutsFixture,
       copyTemplates: copyFixture,
+      locale: "en",
     })
     const p0 = buildAdPrompt({
       concept: concept!,
