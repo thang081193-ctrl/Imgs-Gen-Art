@@ -834,3 +834,129 @@ F1 race fix + F2 dead-code sweep + F3 custom date picker + F4
 /api/tags + F5 PromptLab entry + F6 close; §G above).*
 *Status: Phase 6 CLOSED. v1 READY. Next = Session #33 post-ship
 support.*
+
+---
+
+## §H — Session #33 theme overlay (scope override of handoff default)
+
+Same-day continuation after Session #32 close. Bro opened with "làm
+lại themes cho project theo format này" pointing at `D:\Dev\Tools\
+Meta Tiktok Video Transform\starter-packages\jm-slate-starter` as
+the reference + `D:\Dev\JM Studio Pack` as the asset pack. Explicit
+ask for both dark and light themes.
+
+This OVERRIDES the Session #33 default mode from HANDOFF-SESSION33
+("post-ship support, no new feature work by default"). 6 Qs locked
+pre-code, 3 bro pushbacks accepted:
+
+- **Q-T.A (X2 token overlay confirmed)** — do NOT rewrite Tailwind
+  utility literals into `jm-*` semantic classes (that's the X1
+  full-migration path, ~20-40h, zero functional value, high
+  regression risk). Ship CSS custom properties for the slate
+  palette + a `<html data-theme>` toggle. Brand colors (blue /
+  violet / pink / emerald / amber / indigo / green / red / yellow
+  / sky) stay literal Tailwind classes. Reversible in one commit.
+- **Q-T.B (Framing A accepted)** — "I want to code theme now because
+  it's a tool I'm excited to apply" is a legit personal motivation
+  call. Reclassify Session #33 as "polish sprint" not "Phase 6
+  close-out" — Phase 6 was Session #32. Scope shift documented here
+  so future Claude doesn't treat the theme work as post-ship
+  support work. After the theme sprint lands, Session #33
+  returns to bug-fix-only mode for real dogfood findings (handoff
+  playbook still valid).
+- **Q-T.C.1 (full lockup confirmed)** — ship the JM Studio lockup
+  (icon mark + "JM Studio" wordmark) at TopNav h-9 (36px square
+  per logo's 1:1 aspect) + reserve icon-only crop as Session #34
+  polish if bro flags the TopNav cramped.
+- **Q-T.D (derive-via-Sharp rejected)** — favicon = full-lockup
+  PNG; browser scales for 16/32px tab icon; icon-mark dominates at
+  small sizes so wordmark degrades gracefully. Zero new dep.
+  Session #34 can add Sharp-derived icon-only crop if needed.
+- **Q-T.E (PUSHBACK accepted — system fonts, skip Google Fonts
+  CDN)** — starter recommends Roboto but ArtForge is local-first.
+  Loading Google Fonts costs 30-50KB per weight + a network
+  round-trip + FOUT flash + breaks the offline story + leaks
+  page-load telemetry to Google. Keep native stack: -apple-system,
+  BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial.
+  Roboto lands natively on Android / ChromeOS. If a future design
+  truly requires Roboto, self-host via `@fontfamily-src` not CDN.
+- **Q-T.F (confirmed — keep "Images Gen Art" name)** — JM Slate
+  is the theme identity; JM Studio is the studio / brand mark on
+  the masthead + favicon + og-card. Product name stays "Images Gen
+  Art" in-page (H1s, meta tags, DECISIONS / PHASE-STATUS / HANDOFF
+  references). Defer any rebrand consideration to a v1.0 pre-
+  release session if one ever happens.
+
+### H.1 — Implementation notes
+
+The critical design decision is the slate-palette inversion. v1 uses
+hundreds of `bg-slate-*` / `text-slate-*` / `border-slate-*` literals
+across ~50 files. Rewriting would be catastrophic churn. Instead:
+
+```css
+:root,
+:root[data-theme="dark"] {
+  --color-slate-950: 11 15 20;   /* app bg — JM dark bg */
+  --color-slate-50:  247 249 252; /* ink — JM dark ink */
+  /* ... 11 shades interpolated to match JM Slate dark tokens */
+}
+:root[data-theme="light"] {
+  --color-slate-950: 238 243 249; /* app bg — JM light bg */
+  --color-slate-50:  15 23 42;    /* ink — JM light ink (flipped) */
+  /* ... 11 shades, numerically same scale but visually inverted */
+}
+```
+
+And in tailwind.config.ts:
+
+```ts
+slate: {
+  50:  'rgb(var(--color-slate-50)  / <alpha-value>)',
+  ...
+  950: 'rgb(var(--color-slate-950) / <alpha-value>)',
+}
+```
+
+RGB-tuple form (space-separated, not hex) is required for Tailwind's
+`<alpha-value>` interpolation — this keeps `bg-slate-900/40` working
+on both themes without opaqueness drift.
+
+`darkMode` was switched from `"class"` to
+`["selector", '[data-theme="dark"]']` so Tailwind's `dark:` variant
+keys off our controller's attribute rather than a redundant `.dark`
+class toggle.
+
+### H.2 — Logo sizing gotcha (flex-collapse)
+
+Initial attempt used `<img className="h-9 w-auto">` inside a
+`<button className="flex items-center ...">` inside the TopNav outer
+flex row. Result: `width: 0px` consistently. Root cause = Tailwind
+base sets `img { max-width: 100%; height: auto; }` — combined with
+an intrinsically-undefined parent width, the mutual
+dependency collapses to 0. Fix: explicit `width={36} height={36}` +
+`className="h-9 w-9 block"` + `shrink-0` on the outer button so
+flex siblings don't squeeze it. Document here because the same
+failure mode will reappear if anyone adds another logo variant
+without the fix pattern.
+
+### H.3 — Out of scope for this sprint (carry-forward for Session #34+)
+
+- Sharp-derived icon-only favicon crop (promote if TopNav cramped at
+  real screen widths or if bro wants sharper 16/32px tab icons).
+- jm-* semantic class migration (only if X2 overlay's maintenance
+  cost proves higher than X1 full-migration's one-time cost —
+  dogfood signal required).
+- Theme-aware brand-color ramps (v1 brand colors stay fixed; if
+  violet/blue look too bright on light theme, revisit with eval
+  evidence).
+- Roboto self-hosting (only if a future typographic design target
+  demands it).
+
+Session #33 now returns to HANDOFF-SESSION33 default mode:
+bug-fix on real dogfood findings, NOT new feature work.
+
+---
+
+*Last updated: 2026-04-24 with Session #33 theme overlay (§H above).*
+*Status: v1 shipped + theme layer shipped. Next = bug-fix on
+dogfood findings.*
