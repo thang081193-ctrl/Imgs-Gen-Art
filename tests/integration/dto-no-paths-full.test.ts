@@ -95,6 +95,8 @@ const AUDIT_TARGETS: readonly AuditTarget[] = [
   { label: "GET /api/profiles", method: "GET", path: "/api/profiles" },
   { label: "GET /api/profiles/chartlens", method: "GET", path: "/api/profiles/chartlens" },
   { label: "GET /api/profiles/unknown-id → 404 JSON", method: "GET", path: "/api/profiles/does-not-exist" },
+  // Tags
+  { label: "GET /api/tags", method: "GET", path: "/api/tags" },
   // Profile-assets — seeded `pa_audit` (kind=logo); /file endpoint streams
   // binary, so we only audit the 404 JSON path for consistency. The file
   // endpoint itself returns image bytes, not a JSON envelope.

@@ -19,6 +19,7 @@ import { createPromptHistoryRoute } from "./routes/prompt-history"
 import { createProvidersRoute } from "./routes/providers"
 import { createReplayRoute } from "./routes/replay"
 import { createStubsRoute } from "./routes/stubs"
+import { createTagsRoute } from "./routes/tags"
 import { createTemplatesRoute } from "./routes/templates"
 import { createWorkflowRunsRoute } from "./routes/workflow-runs"
 import { createWorkflowsRoute } from "./routes/workflows"
@@ -51,6 +52,7 @@ export function createApp(config: AppConfig): Hono {
   app.route("/api/assets", createReplayRoute())
   app.route("/api/assets", createPromptHistoryRoute())
   app.route("/api/assets", createAssetsRoute())
+  app.route("/api/tags", createTagsRoute())
   app.route("/api/debug", createDebugRoute())
   // Workflow-runs mounted FIRST under /api/workflows/runs so its DELETE
   // /:batchId wins over the broader /api/workflows/:id/run route below.

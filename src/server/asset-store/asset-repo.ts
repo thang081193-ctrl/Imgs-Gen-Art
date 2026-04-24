@@ -10,6 +10,7 @@ import type {
   AssetListFilter,
 } from "./types"
 import { buildAssetListQuery } from "./asset-list-query"
+import { buildTagsCountQuery, buildTagsQuery } from "./tags-query"
 
 const COLUMNS = [
   "id",
@@ -183,6 +184,22 @@ export function createAssetRepo(db: Database.Database) {
       const { sql, params } = buildAssetListQuery(filter)
       const rows = db.prepare(sql).all(...params) as AssetRow[]
       return rows.map(rowToAsset)
+    },
+
+    listTags(opts: { q: string; limit: number }): {
+      tags: { tag: string; count: number }[]
+      total: number
+    } {
+      const tagsQ = buildTagsQuery(opts)
+      const tags = db.prepare(tagsQ.sql).all(...tagsQ.params) as {
+        tag: string
+        count: number
+      }[]
+      const totalQ = buildTagsCountQuery({ q: opts.q })
+      const totalRow = db.prepare(totalQ.sql).get(...totalQ.params) as {
+        total: number
+      }
+      return { tags, total: totalRow.total }
     },
   }
 }
