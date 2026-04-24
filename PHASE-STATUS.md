@@ -1,7 +1,7 @@
 # PHASE-STATUS — Images Gen Art
 
-Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/3a/5a/5b CLOSED. Session #28 split at pre-alignment into 28a backend + 28b frontend (same pattern as 27a/27b). 28a landed: `AssetListFilterSchema` in `src/core/schemas/asset-list-filter.ts` with strict allowlist, CSV-string preprocess for plural array params, enum validation for datePreset / tagMatchMode / replayClasses, backward-compat merge for legacy singular `profileId` / `workflowId` → plural; `buildAssetListQuery` pure SQL builder in `src/server/asset-store/asset-list-query.ts` composing conditional WHERE clauses for all 7 dimensions (profileIds / workflowIds / batchId / providerIds / modelIds / replayClasses / tags × OR|AND / datePreset × all|today|7d|30d); `asset-repo.list()` delegates to the builder; `GET /api/assets` route accepts the full wire contract. Tag filter stays on the JSON `tags TEXT` column via LIKE scan per DECISIONS §C1 (asset_tags JOIN table deferred). 612 pass / 10 skipped / 1 todo / 623 total regression (+39 net vs Session #27b). Phase 4 remains closed; Phase 5 Step 3b (filter UI + chips + URL sync) targets Session #29; Step 4 Profile CMS + Step 6 v2 migration pending.)
-Last updated: 2026-04-24 (Session #28a — Phase 5 Step 3a ship (backend only). Scope split at pre-alignment: 28a = schema + SQL builder + route + unit/integration tests; 28b = frontend UI (Session #29). 3 clarify decisions locked pre-code: (1) tag filter = LIKE scan on the JSON `tags` column (honors DECISIONS §C1 post-v1 deferral); (2) path layout — new schema at `src/core/schemas/asset-list-filter.ts`, SQL builder alongside asset-repo at `src/server/asset-store/asset-list-query.ts`, no new `src/server/assets/` or `src/client/hooks/` dirs; (3) skip totalCount v1 (response shape stays `{ assets, limit, offset }`). Commit chain: (1) `feat(gallery)` ships 2 new files + 5 modified (asset-repo drops 20 LOC of inline WHERE building; assets.body.ts reduced to re-export shim; assets.ts route drops custom `coerceQuery` in favor of schema-strict `.safeParse` with CSV preprocess). Wire contract: plural CSV params (`profileIds=a,b,c`) preferred; legacy singular (`profileId=a`) still parses and merges into plural array via `.transform()`. Cursor-based pagination explicitly deferred to Session #30+ with inline TODO. 39 new tests: 12 in `asset-list-filter-schema.test.ts` (strict-allowlist + CSV preprocess + enum bounds + limit clamp + legacy merge), 19 in `asset-list-query-builder.test.ts` (WHERE composition + tag OR|AND + LIKE escape + datePreset boundaries + param ordering), 8 appended to `assets-routes.test.ts` (HTTP end-to-end on profileIds / replayClasses / providerIds+modelIds / tags OR|AND / datePreset=7d / strict-allowlist 400 / legacy singular backward-compat). 1 existing test updated in `asset-store.test.ts` (`profileId` → `profileIds: [X]` for the new interface shape — non-API-breaking, only the repo filter param renamed). 612/623 regression pass — clean full run with no flake observed. `test:live:smoke-all` NOT run (no provider surface change). Manual UI smoke remains deferred (Step 2 + Step 5b batch) since 28a is backend-only; 28b Session #29 + smoke can co-locate or run as a separate Chrome MCP session at office.)
+Current phase: **Phase 5 — IN PROGRESS** (Steps 1/2/3/5a/5b CLOSED. Session #29 landed Step 3b (frontend — expanded Gallery filter UI): `AssetFilterChips` summary row (specificity-order chips, click-body scroll + flash + focus, × clear, Clear-all when ≥ 2); `AssetFilterBar` rewritten around a single `onChange(patch)` with 8 anchor sections (profile dropdown, workflow colored chips, batch input, tags section with free-text Enter/comma/Tab + OR/AND toggle, date preset 4-radio, replayClass 3-checkbox, provider + model multi-select with cascade toast); `GalleryEmptyState` empty-filter result block; Gallery page owns one `AssetListFilter` + bidirectional URL sync (`history.replaceState` on change, `AssetListFilterSchema.safeParse` on mount). Mid-session scope delta authorized by bro: backend schema helper `csvArrayPreserveEmpty` + query-builder `1 = 0` clause so `replayClasses === []` round-trips as "match-none" (Q-29.E option b — distinct from absent). 3 new client components + 2 new utils + 1 expanded bar + 1 expanded hooks module + 1 Gallery rewrite + 2 tiny test files (14 URL round-trip + 7 date-presets) + 8 appended schema / query-builder tests. 641 pass / 10 skipped / 1 todo / 652 total regression (+29 net vs Session #28a). Phase 4 remains closed; Phase 5 Step 4 (Profile CMS) targets Session #30; Step 6 (v2 schema migration) pending.)
+Last updated: 2026-04-24 (Session #29 — Phase 5 Step 3b ship (frontend + a narrow backend schema relax for Q-29.E match-none semantics). 6 Qs locked pre-code with one bro pushback: Q-29.A chips in specificity order (batch → profile → workflow → tags → replayClass → provider → model → date) rather than card-order; Q-29.B tags free-text with Enter/comma/Tab delimiters + trim/lowercase/whitespace-collapse normalization + dedup toast + backspace-on-empty removes last; Q-29.C URL CSV with per-value `encodeURIComponent` + un-escaped comma separator (keeps `?tags=sunset,neon` readable in the address bar); Q-29.D provider → model cascade clears only invalid models, toast once per transition; Q-29.E (option b) replayClasses `[]` preserved on the wire + SQL builder emits `1 = 0` so "0 of 3 checkboxes selected" = return zero rows (new schema helper `csvArrayPreserveEmpty` leaves plural non-replay fields unchanged); Q-29.F Step 3b clean ship + CMS deferred to Session #30 with a 30–60min dogfood window between sessions. Scope notes: (1) tag filter = LIKE scan on the JSON `tags` column (honors DECISIONS §C1 post-v1 deferral); (2) path layout — new schema at `src/core/schemas/asset-list-filter.ts`, SQL builder alongside asset-repo at `src/server/asset-store/asset-list-query.ts`, no new `src/server/assets/` or `src/client/hooks/` dirs; (3) skip totalCount v1 (response shape stays `{ assets, limit, offset }`). Commit chain: (1) `feat(gallery)` ships 2 new files + 5 modified (asset-repo drops 20 LOC of inline WHERE building; assets.body.ts reduced to re-export shim; assets.ts route drops custom `coerceQuery` in favor of schema-strict `.safeParse` with CSV preprocess). Wire contract: plural CSV params (`profileIds=a,b,c`) preferred; legacy singular (`profileId=a`) still parses and merges into plural array via `.transform()`. Cursor-based pagination explicitly deferred to Session #30+ with inline TODO. 39 new tests: 12 in `asset-list-filter-schema.test.ts` (strict-allowlist + CSV preprocess + enum bounds + limit clamp + legacy merge), 19 in `asset-list-query-builder.test.ts` (WHERE composition + tag OR|AND + LIKE escape + datePreset boundaries + param ordering), 8 appended to `assets-routes.test.ts` (HTTP end-to-end on profileIds / replayClasses / providerIds+modelIds / tags OR|AND / datePreset=7d / strict-allowlist 400 / legacy singular backward-compat). 1 existing test updated in `asset-store.test.ts` (`profileId` → `profileIds: [X]` for the new interface shape — non-API-breaking, only the repo filter param renamed). 612/623 regression pass — clean full run with no flake observed. `test:live:smoke-all` NOT run (no provider surface change). Manual UI smoke remains deferred (Step 2 + Step 5b batch) since 28a is backend-only; 28b Session #29 + smoke can co-locate or run as a separate Chrome MCP session at office.)
 
 ## Phase 5 Summary (in progress)
 
@@ -10,8 +10,8 @@ Last updated: 2026-04-24 (Session #28a — Phase 5 Step 3a ship (backend only). 
 | 1 | Replay API (`POST /api/assets/:id/replay` + `GET /:id/replay-class`) | ✅ Session #25 — 5 new src files (replay-service + replay-asset-writer + stored-payload-shape + replay.ts + replay.body.ts) + migration + 3 DB-layer edits (types + batch-repo + schema.sql) + app.ts wire + 2 test files (11 unit + 8 integration) + 1 existing test update + 1 housekeeping commit. Generic workflow-agnostic service — does NOT modify the 4 workflow runners (per bro's B-option chat decision). |
 | 2 | Replay UI (modal button + gallery badge) | ✅ Session #26 — 5 new src files (useReplay hook + useReplayClass hook + replay-errors mapper + ReplayBadge + ReplaySection) + 3 src edits (AssetDetailModal slim, AssetThumbnail badge wiring, Gallery prop threading) + Gap A fold-in across 4 server files (asset-dto NotReplayableReason type, replay-class helper, replay-service probeReplayClass, replay.ts route reshape) + 2 test files (5 new unit for reason helper + 11 new unit for error taxonomy) + 1 existing integration test updated (flip 400 → 200 + 3 new reason cases). Pure-logic tests only; hook/component tests deferred (no jsdom). |
 | 3a | Filter schema + SQL query builder backend | ✅ Session #28a — 2 new src files (`src/core/schemas/asset-list-filter.ts` 108 LOC + `src/server/asset-store/asset-list-query.ts` 129 LOC) + 5 modified (asset-repo.list delegates, asset-store barrel, types re-export, routes/assets.body shim, routes/assets uses schema-strict parse) + 39 new tests (12 schema / 19 builder / 8 integration) + 1 existing test updated (asset-store.test profileId→profileIds). 612/623 pass. |
-| 3b | Gallery filter UI (chips + empty state + URL sync) | pending (Session #29) |
-| 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending |
+| 3b | Gallery filter UI (chips + empty state + URL sync) | ✅ Session #29 — 3 new client components (`AssetFilterChips` 244 LOC / `FilterBarTagsSection` 144 / `FilterBarEnumSections` 139) + 1 new empty-state (`GalleryEmptyState` 27) + 2 new utils (`date-presets` 36 / `gallery-filter-url` 38) + 1 expanded bar (147 → 242) + 1 expanded hooks module (+39 LOC for `buildAssetsQueryString` + explicit `\| undefined` unions) + 1 Gallery rewrite (single `AssetListFilter` state + `history.replaceState` sync) + 1 CSS keyframe for chip-click flash + Q-29.E scope delta (`csvArrayPreserveEmpty` schema helper + `1 = 0` query-builder clause for replayClasses match-none). 29 new tests: 14 URL round-trip + 7 date-presets + 5 schema empty-array + 3 builder 1=0. 641/652 regression pass (+29 net vs 28a). Interactive UI smoke = CF for bro self-verify. |
+| 4 | Profile CMS (CRUD UI + optimistic concurrency) | pending (Session #30) |
 | 5a | Canonical payload migration + `mode=edit` backend | ✅ Session #27a — 4 writers migrated, dual reader + 3 new error codes (`EDIT_FIELD_NOT_ALLOWED` / `CAPABILITY_NOT_SUPPORTED` / `LEGACY_PAYLOAD_NOT_EDITABLE`) + `MALFORMED_PAYLOAD`, `AssetDto.editable` flag, 11 new integration tests + 1 unit. 546/557 pass (+11 net vs Session #26). |
 | 5b | PromptLab UI (dedicated page + editor + diff viewer + history) | ✅ Session #27b — 2 commits (refactor extracts `applyOverride` + drops `EDIT_REQUIRES_PROMPT` dead code; feat ships `prompt_history` table + repo + `GET /api/assets/:id/prompt-history` route + replay-service edit-only history writes + PromptLab page + PromptEditor + DiffViewer + PromptHistorySidebar + `diff-words.ts` LCS util + `useAsset` + `usePromptHistory` + `useReplay.start({overridePayload?})` ext + `[Edit & replay]` entry on AssetDetailModal). 573/584 regression pass (+27 net vs Session #27a). |
 | 6 | AppProfileSchema v2 migration (trigger-driven, defer unless blocked) | pending |
@@ -29,7 +29,171 @@ Last updated: 2026-04-24 (Session #28a — Phase 5 Step 3a ship (backend only). 
 | 7 | 11 live smoke tests (= Σ compatible pairs) | ✅ Session #23 — 1 new test file (391 LOC, 11 combos) + 8 src edits (4× run.ts + 4× index.ts, provider-wiring fix) + 4 unit-test arg-sig updates + vitest.config exclude fix + `test:live:smoke-all` script (live run itself bro-gated on creds + $0.92 budget) |
 | 8 | Phase 4 close (browser E2E + PHASE-STATUS) | ✅ Session #24 — BOOTSTRAP-PHASE4 doc fixes + addWatermark blocker bug fix (4×run.ts) + 3/3 Vertex live smokes PASS ($0.12) + browser E2E (4 workflows × Vertex, incl. compat banner + Gallery PNG display + Cancel visible); Gemini real-key deferred (not a blocker) |
 
-## Completed in Session #28a (Phase 5 Step 3a — AssetListFilter schema + SQL builder backend)
+## Completed in Session #29 (Phase 5 Step 3b — Gallery filter UI + Q-29.E backend scope delta)
+
+Session #28 was split pre-alignment into 28a (backend) + 28b. Session #29
+is 28b — the frontend ship — plus one mid-session scope delta bro
+authorized to make the `replayClasses` "0 of 3 checkboxes" state
+round-trip cleanly through the schema.
+
+### Qs locked before coding (6 total — 1 bro pushback, 5 confirms)
+
+- **Q-29.A (pushback → specificity order)** Chips render in specificity
+  order, not card-position order: batch → profile → workflow → tags →
+  replayClass → provider → model → date. Rationale: chips summarize
+  what's constraining the query; narrowest constraint first reads best.
+  Click-to-edit affordance (Q-3.A hybrid) covers the source-mapping
+  need. Stored as a static `CHIP_ORDER` array — easy to tweak post-
+  dogfood.
+- **Q-29.B (free-text Enter-to-chip)** Tag input delimiters: Enter /
+  comma / Tab. Normalization: trim + lowercase + collapse internal
+  whitespace + reject empty + cap at 50 chars. Dedupe via toast on
+  duplicate attempt. Backspace on empty input removes the last chip.
+  Nonexistent tags silently allowed (empty result-set signals invalid).
+  Autocomplete + validation endpoint deferred to polish backlog.
+- **Q-29.C (raw CSV + encodeURIComponent)** URL encoding: per-value
+  `encodeURIComponent`, joined with un-escaped commas so
+  `?tags=sunset,neon` stays human-readable in the browser address bar.
+  Same pattern for every plural field (`workflowIds`, `providerIds`,
+  `modelIds`, `replayClasses`). Round-trips losslessly because tag
+  normalization forbids commas anyway (the input uses `,` as a
+  delimiter).
+- **Q-29.D (cascade clears only invalid models)** Provider → model
+  cascade: add/swap provider → drop any currently-selected models not
+  offered by the new provider set; remove all providers → keep existing
+  model selection as-is (no constraint). Toast fires exactly once per
+  transition, only when the reduction dropped ≥ 1 model. Copy: "Model
+  filter updated — removed models not offered by selected provider(s)."
+- **Q-29.E (option b — backend scope delta, authorized mid-session)**
+  Chip rendering for replayClasses: 3 selected → no chip (≡ undefined),
+  2 → `Replay: X, Y`, 1 → `Replay: X`, 0 → `Replay: none`. v1
+  (option a) would have UI-clamped min-1 checkbox to stay frontend-only,
+  but bro picked option b. Delta: new `csvArrayPreserveEmpty`
+  preprocessor in `src/core/schemas/asset-list-filter.ts` distinguishes
+  absent (`undefined`) from present-but-empty (`[]`) — applied only to
+  `replayClasses`; other plural fields keep their empty-collapses-to-
+  undefined behavior. Query builder in
+  `src/server/asset-store/asset-list-query.ts` emits a `1 = 0` WHERE
+  clause when `replayClasses === []` (match-none sentinel). Wire: URL
+  param `replayClasses=` (key present, value empty) distinguishes from
+  absent. 8 new tests cover the behavior (5 schema, 3 query builder);
+  existing `replayClasses IN (…)` path untouched.
+- **Q-29.F (full 3b, CMS to #30)** Target Session #29 = clean Step 3b
+  ship (5–7h). Step 4 Profile CMS dedicated to Session #30 (6–8h). 30–
+  60min dogfood window in between — bro exercises Gallery filters +
+  PromptLab + Replay on real work to surface CMS scope priorities
+  before #30 kickoff.
+
+### What shipped — file surface
+
+**NEW (7 files):**
+- `src/client/utils/date-presets.ts` (36 LOC) — `datePresetToRange`
+  client-side deriver mirroring the server's `datePresetBoundary`. ISO
+  `{ after }` shape so a future custom-range picker (carry-forward #16)
+  extends cleanly with `{ before }`.
+- `src/client/utils/gallery-filter-url.ts` (38 LOC) — `decodeGalleryFilter`
+  / `hasAnyFilter` / `stripPagination`. Split out of `Gallery.tsx` to
+  keep the page under the 250 LOC soft cap.
+- `src/client/components/AssetFilterChips.tsx` (244 LOC) — active-filter
+  summary row. Click body → scroll + flash + focus; click × → clear
+  dimension; Clear-all when ≥ 2 chips. Multi-value truncation at 3 +
+  "+N more".
+- `src/client/components/FilterBarTagsSection.tsx` (144 LOC) — tag
+  input with Enter/comma/Tab delimiters + OR/AND toggle + chip list +
+  backspace-to-remove-last + dedupe-toast. Split out of bar shell.
+- `src/client/components/FilterBarEnumSections.tsx` (139 LOC) — shared
+  `DateSection` (4-radio) + `ReplayClassSection` (3-checkbox, empty-
+  array-aware) + `MultiCheckboxSection` (reusable N-checkbox with
+  `emptyHint` for the cascade-empty Model section).
+- `src/client/components/GalleryEmptyState.tsx` (27 LOC) — "no assets
+  match" block with a single Clear-all CTA. No "Try loosening one" in
+  v1 (would need N+1 probe queries).
+- `tests/unit/date-presets.test.ts` (76 LOC) — 7 cases including a
+  parity guard against the server `datePresetBoundary`.
+- `tests/unit/assets-query-string.test.ts` (147 LOC) — 14 cases
+  covering absent / CSV array / match-none / scalar / full round-trip.
+
+**MODIFIED (6 files):**
+- `src/client/components/AssetFilterBar.tsx` (147 → 242 LOC) — rebuilt
+  around a single `onChange(patch: Partial<AssetListFilter>)` prop. 8
+  anchor sections each with `id="filter-<schemaKey>"` + `tabIndex={-1}`
+  so chips' scroll-focus handler lands on them. Provider → Model
+  cascade logic lives here (reads the model registry, emits the toast).
+- `src/client/api/hooks.ts` (228 → 267 LOC) — expanded `AssetsFilter`
+  interface with explicit `T | undefined` unions (needed under
+  `exactOptionalPropertyTypes: true` so callers can spread an
+  `AssetListFilter`); `buildAssetsQueryString` exported for Gallery's
+  URL-sync path + the round-trip test. Manual CSV param construction
+  preserves unescaped commas between per-value `encodeURIComponent`
+  outputs.
+- `src/client/pages/Gallery.tsx` — single `AssetListFilter` state seeded
+  by URL → navigator.batchId → default precedence. `useEffect` writes
+  `history.replaceState` on filter change (pagination stripped); a
+  second effect honors post-mount `navigator.params.batchId` updates
+  (e.g. Workflow toast CTA). `EmptyGallery` vs `GalleryEmptyState`
+  branches on `hasAnyFilter`.
+- `src/client/styles/index.css` — `@keyframes flash-highlight` (1.2s
+  box-shadow pulse) + `.flash-highlight` class applied by chips'
+  scroll-to handler.
+- `src/core/schemas/asset-list-filter.ts` (+13 LOC) — new
+  `csvArrayPreserveEmpty<T>` helper applied to `replayClasses` only;
+  distinguishes absent from present-but-empty. `csvArray` behavior for
+  every other plural field unchanged.
+- `src/server/asset-store/asset-list-query.ts` (+6 LOC) — `replayClasses`
+  branch splits on `length === 0` → emits `1 = 0`; non-empty path
+  unchanged.
+
+**TEST FILES:**
+- `tests/unit/asset-list-filter-schema.test.ts` (+5) — new describe
+  block `replayClasses preserves present-but-empty`: absent →
+  undefined, `""` → `[]`, single / multi values preserve, other plural
+  fields still collapse.
+- `tests/unit/asset-list-query-builder.test.ts` (+3) — `[]` → `1 = 0`,
+  composes with other filters in WHERE chain, undefined → no clause.
+
+### Scope deltas
+
+- **Backend schema relax (Q-29.E option b, mid-session).** Handoff
+  explicitly scoped Session #29 as "frontend only — NO backend
+  changes". Bro re-aligned mid-kickoff to pick option b over the
+  UI-only option a (UI-clamp min-1 checkbox). Delta was small (+19 LOC
+  schema + query builder, +8 tests) and makes the UI 0-of-3 state
+  meaningful on the wire without a client-side "match-none" shim.
+  Logged in DECISIONS `§D — Filter empty-state semantics` addendum.
+- **Gallery DOM mount test downscoped to unit round-trip.** Handoff
+  suggested `tests/integration/gallery-filter-url.test.ts` — push URL
+  state, mount Gallery, assert fetch query mirrors. That requires
+  jsdom (carry-forward #5, still deferred). Ship ported the coverage
+  to `tests/unit/assets-query-string.test.ts` which exercises the
+  exact encoder + schema round-trip the Gallery's `history.
+  replaceState` uses. Full Gallery DOM mount remains CF.
+
+### Evidence
+
+- `npm run typecheck:server`, `npm run typecheck:client`, `npm run lint`
+  all clean.
+- `npm run build` clean (89 modules, 349 KB / 100 KB gzipped).
+- `npm run regression:full`: **641 passed / 10 skipped / 1 todo / 652
+  total** (+29 net vs Session #28a). Pre-existing `replay-route.test`
+  ENOTEMPTY flake reproduced once in parallel run; isolated run
+  `npx vitest run tests/integration/replay-route.test.ts` → 10/10
+  pass. No new flakes.
+- LOC under caps: chips 244 / bar 242 / tags 144 / enum 139 / Gallery
+  240 / empty 27 / date-presets 36 / gallery-filter-url 38 / hooks 267
+  (under 300 hard). Every section anchor (`filter-<schemaKey>`) wired
+  for chip scroll-focus.
+
+### Deferred to bro self-smoke (carry-forward #7 + #9 pattern)
+
+Interactive UI behavior — chip click-body scroll + flash + focus, tag
+backspace-remove, cascade toast timing, URL round-trip across browser
+back/forward — ran in tests but not in a live browser this session.
+Bro exercises those during the 30–60min dogfood window before #30 per
+Q-29.F.
+
+---
+
+
 
 Bro split Session #28 at pre-alignment into 28a (this — backend) and 28b
 (Session #29 — frontend). Matches the Session #27 split precedent.

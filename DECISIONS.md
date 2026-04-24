@@ -301,8 +301,63 @@ replay/edit pipeline.
 
 ---
 
-*Last updated: 2026-04-24 with Session #28a (Phase 5 Step 3a —
-AssetListFilter backend).*
-*Status: Phase 5 Steps 1/2/3a/5a/5b closed. Step 3b (filter UI,
-Session #29) + Step 4 (Profile CMS) + Step 6 (v2 schema migration)
-pending.*
+## §D — Filter empty-state semantics (Session #29 addendum)
+
+**`replayClasses` wire shape preserves present-but-empty.** Session #29
+Q-29.E picked option b: UI "0 of 3 checkboxes selected" must round-trip
+to the server as a distinct state from "absent". Rationale: UI 0/3 is
+an honest user intent ("show me nothing in these classes"), and
+client-side `[]` → silently treating as `undefined` would lie about
+the filter on the URL + break back-button reproducibility.
+
+Implementation:
+
+- **Schema helper** `csvArrayPreserveEmpty<T>` in
+  `src/core/schemas/asset-list-filter.ts`. Unlike the sibling
+  `csvArray`, it does NOT collapse `""` → `undefined` — instead:
+  `undefined` → `undefined`, `""` → `[]`, CSV string → `string[]`.
+  Applied **only** to `replayClasses`; every other plural field
+  (`profileIds` / `workflowIds` / `tags` / `providerIds` / `modelIds`)
+  keeps the empty-collapses-to-undefined behavior, because their UIs
+  don't have a meaningful "present-but-empty" state (unchecking all
+  providers = no provider filter, not "match no providers").
+- **Query builder** `buildAssetListQuery` branches on
+  `filter.replayClasses === []` → emits `WHERE … AND 1 = 0` so the
+  query returns zero rows. Non-empty array path unchanged
+  (`replay_class IN (?, ?, …)`).
+- **Wire contract** `?replayClasses=` (key present, value empty) =
+  match-none; `?replayClasses=deterministic,best_effort` = subset; key
+  absent = no filter (all-3-on equivalent). UI collapses all-3-checked
+  back to `undefined` so the URL stays clean in the common case.
+
+This pattern is **not** extended to other plural fields. If a future
+filter gains a similar "0 of N selected" UI (e.g. workflow opt-out),
+re-apply `csvArrayPreserveEmpty` on a per-field basis; don't flip the
+base `csvArray` behavior (existing clients rely on empty-CSV = absent
+for tags + profileIds + friends).
+
+**Chips render in specificity order, not card-position.** Session #29
+Q-29.A pushback from bro. The `AssetFilterChips` summary row orders
+dimensions by how narrowly they constrain the result-set, not by where
+the controls appear on the bar: `batch → profile → workflow → tags →
+replayClass → provider → model → date`. Stored as a static
+`CHIP_ORDER` array in `AssetFilterChips.tsx` — easy to tweak post-
+dogfood. Click-to-edit (the chip body scrolls + flashes + focuses its
+matching bar section) carries the spatial-mapping affordance, so
+positional parity isn't needed.
+
+**URL encoding: per-value `encodeURIComponent` + un-escaped comma
+separators.** Session #29 Q-29.C. `?tags=sunset,neon` stays readable
+in the browser address bar, unicode + spaces + slashes in individual
+values are safely percent-encoded, commas between values remain
+literal. The tag input forbids commas in values (comma is a chip
+delimiter) so the round-trip is lossless. Pattern applies uniformly
+to every plural field (`profileIds`, `workflowIds`, `providerIds`,
+`modelIds`, `replayClasses`).
+
+---
+
+*Last updated: 2026-04-24 with Session #29 (Phase 5 Step 3b —
+Gallery filter UI + Q-29.E backend scope delta).*
+*Status: Phase 5 Steps 1/2/3/5a/5b closed. Step 4 (Profile CMS,
+Session #30) + Step 6 (v2 schema migration) pending.*
