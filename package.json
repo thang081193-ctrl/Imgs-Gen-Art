@@ -18,6 +18,7 @@
     "typecheck": "npm run typecheck:server && npm run typecheck:client",
     "check-loc": "tsx scripts/check-loc.ts",
     "seed:profiles": "tsx scripts/seed-profiles.ts",
+    "migrate:profiles-v1-to-v2": "tsx scripts/migrate-profiles-v1-to-v2.ts",
     "extract:all": "tsx scripts/extract-all.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
