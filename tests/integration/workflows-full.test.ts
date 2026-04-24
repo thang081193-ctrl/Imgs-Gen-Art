@@ -115,7 +115,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  if (existsSync(ASSETS_CLEANUP)) rmSync(ASSETS_CLEANUP, { recursive: true, force: true })
+  if (existsSync(ASSETS_CLEANUP)) rmSync(ASSETS_CLEANUP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 })
 
 describe("4 workflows — happy-path E2E", () => {

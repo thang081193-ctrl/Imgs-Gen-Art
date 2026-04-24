@@ -124,7 +124,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (existsSync(ASSET_CLEANUP_DIR)) {
-    rmSync(ASSET_CLEANUP_DIR, { recursive: true, force: true })
+    rmSync(ASSET_CLEANUP_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
 })
 

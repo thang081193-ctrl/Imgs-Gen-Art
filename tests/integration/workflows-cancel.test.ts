@@ -68,7 +68,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  if (existsSync(ASSET_CLEANUP)) rmSync(ASSET_CLEANUP, { recursive: true, force: true })
+  if (existsSync(ASSET_CLEANUP)) rmSync(ASSET_CLEANUP, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 })
 
 describe("DELETE /api/workflows/runs/:batchId — mid-flight cancel E2E", () => {

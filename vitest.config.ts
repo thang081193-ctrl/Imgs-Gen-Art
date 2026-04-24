@@ -13,6 +13,20 @@ export default defineConfig({
     exclude: ["node_modules", "dist", "vendor"],
     reporters: ["default"],
     pool: "threads",
+    // CF#27 — 5 integration tests share data/assets/chartlens/ cleanup dir;
+    // under the default threads pool their afterEach rmSync calls race and
+    // surface as intermittent ENOTEMPTY. Route these files to a forks pool
+    // with singleFork so they serialize. Rest of suite stays on threads.
+    poolMatchGlobs: [
+      ["tests/integration/edit-and-run.test.ts", "forks"],
+      ["tests/integration/replay-route.test.ts", "forks"],
+      ["tests/integration/workflows-full.test.ts", "forks"],
+      ["tests/integration/workflows-routes.test.ts", "forks"],
+      ["tests/integration/workflows-cancel.test.ts", "forks"],
+    ],
+    poolOptions: {
+      forks: { singleFork: true },
+    },
     env: {
       LOG_LEVEL: "warn",
     },
