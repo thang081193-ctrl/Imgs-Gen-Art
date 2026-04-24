@@ -20,13 +20,16 @@ import { AssetFilterChips } from "@/client/components/AssetFilterChips"
 import type { AssetFilterDimension } from "@/client/components/AssetFilterChips"
 import { AssetThumbnail } from "@/client/components/AssetThumbnail"
 import { AssetDetailModal } from "@/client/components/AssetDetailModal"
+import { ConfirmDialog } from "@/client/components/ConfirmDialog"
 import { GalleryEmptyState } from "@/client/components/GalleryEmptyState"
+import { GallerySelectionBar } from "@/client/components/GallerySelectionBar"
 import type { AssetDto } from "@/core/dto/asset-dto"
 import type { AssetListFilter } from "@/core/schemas/asset-list-filter"
 import { emptyAssetListFilter } from "@/core/schemas/asset-list-filter"
 import type { Navigator } from "@/client/navigator"
 import type { ShowToast } from "@/client/components/ToastHost"
 import { formatCost } from "@/client/utils/format"
+import { useGallerySelection } from "@/client/utils/use-gallery-selection"
 import {
   decodeGalleryFilter,
   hasAnyFilter,
@@ -105,7 +108,16 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
   const profilesQ = useProfiles()
   const workflowsQ = useWorkflows()
   const providersQ = useProviders()
-  const assetsQ = useAssets({ ...filter, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+
+  // useAssets depends on sel.refreshKey; sel depends on pageAssetIds (for
+  // "Select all on page" + the membership check). Resolve the cycle by
+  // mirroring asset ids into local state after each fetch lands.
+  const [pageAssetIds, setPageAssetIds] = useState<string[]>([])
+  const sel = useGallerySelection(pageAssetIds, showToast)
+  const assetsQ = useAssets(
+    { ...filter, limit: PAGE_SIZE, offset: page * PAGE_SIZE },
+    sel.refreshKey,
+  )
 
   const assets = assetsQ.data?.assets ?? []
   const profiles = profilesQ.data?.profiles ?? []
@@ -118,6 +130,12 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
     () => assets.reduce((sum, a) => sum + (a.costUsd ?? 0), 0),
     [assets],
   )
+  useEffect(() => {
+    const ids = assets.map((a) => a.id)
+    setPageAssetIds((prev) =>
+      prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+    )
+  }, [assets])
 
   const openSourceAsset = (sourceId: string): void => {
     const match = assets.find((a) => a.id === sourceId)
@@ -132,20 +150,31 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-4">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Gallery</h1>
-        <p className="text-xs text-slate-500">
-          Sorted by created_at DESC · page {page + 1}
-          {pageCostTotal > 0 && (
-            <>
-              {" "}· page total{" "}
-              <span className="font-mono text-slate-300">
-                {formatCost(pageCostTotal, "aggregate")}
-              </span>
-            </>
-          )}
-        </p>
-      </header>
+      {sel.selectionActive ? (
+        <GallerySelectionBar
+          pickedCount={sel.pickedIds.size}
+          allOnPageSelected={sel.allOnPageSelected}
+          deleting={sel.deleting}
+          onClear={sel.clearSelection}
+          onToggleSelectPage={sel.togglePageSelection}
+          onDelete={sel.openBulkConfirm}
+        />
+      ) : (
+        <header className="flex items-baseline justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Gallery</h1>
+          <p className="text-xs text-slate-500">
+            Sorted by created_at DESC · page {page + 1}
+            {pageCostTotal > 0 && (
+              <>
+                {" "}· page total{" "}
+                <span className="font-mono text-slate-300">
+                  {formatCost(pageCostTotal, "aggregate")}
+                </span>
+              </>
+            )}
+          </p>
+        </header>
+      )}
 
       <AssetFilterBar
         filter={filter}
@@ -183,6 +212,9 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
               asset={a}
               onSelect={setSelected}
               onOpenSource={openSourceAsset}
+              selected={sel.pickedIds.has(a.id)}
+              selectionActive={sel.selectionActive}
+              onToggleSelect={sel.togglePick}
             />
           ))}
         </div>
@@ -208,7 +240,27 @@ export function Gallery({ navigator, showToast }: GalleryPageProps): ReactElemen
           setSelected(null)
           navigator.go("prompt-lab", { assetId: a.id })
         }}
+        onDelete={(id) => {
+          sel.dropPick(id)
+          sel.bumpRefresh()
+        }}
         showToast={showToast}
+      />
+
+      <ConfirmDialog
+        open={sel.bulkConfirmOpen}
+        title={`Delete ${sel.pickedIds.size} asset${sel.pickedIds.size === 1 ? "" : "s"}?`}
+        body={
+          <>
+            {sel.pickedIds.size} asset{sel.pickedIds.size === 1 ? "" : "s"} will be
+            removed. This can't be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        danger
+        onCancel={sel.closeBulkConfirm}
+        onConfirm={sel.runBulkDelete}
       />
     </main>
   )

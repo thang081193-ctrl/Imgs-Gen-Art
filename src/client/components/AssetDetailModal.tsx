@@ -9,12 +9,14 @@
 // + [Open ↗] (swap modal to new asset) + [Open in Gallery] (filter by new
 // batchId). Errors surface as toasts with category-specific copy (Q5).
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import type { ReactElement } from "react"
 import type { AssetDto } from "@/core/dto/asset-dto"
 import { formatCost } from "@/client/utils/format"
 import { ReplaySection } from "./ReplaySection"
+import { ConfirmDialog } from "./ConfirmDialog"
 import type { ShowToast } from "@/client/components/ToastHost"
+import { useDeleteAsset } from "@/client/utils/use-delete-asset"
 
 export interface AssetDetailModalProps {
   asset: AssetDto | null
@@ -22,6 +24,7 @@ export interface AssetDetailModalProps {
   onFilterBatch: (batchId: string) => void
   onOpenAsset: (asset: AssetDto) => void
   onEditAsset: (asset: AssetDto) => void
+  onDelete?: (assetId: string) => void
   showToast: ShowToast
 }
 
@@ -31,8 +34,11 @@ export function AssetDetailModal({
   onFilterBatch,
   onOpenAsset,
   onEditAsset,
+  onDelete,
   showToast,
 }: AssetDetailModalProps): ReactElement | null {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const del = useDeleteAsset()
   useEffect(() => {
     if (asset === null) return undefined
     const h = (e: KeyboardEvent): void => {
@@ -150,7 +156,48 @@ export function AssetDetailModal({
           onEditAsset={onEditAsset}
           showToast={showToast}
         />
+
+        <div className="mt-5 border-t border-slate-800 pt-4 flex justify-end">
+          <button
+            type="button"
+            disabled={del.loading}
+            onClick={() => setConfirmOpen(true)}
+            className="rounded-md border border-red-800/70 bg-red-900/60 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {del.loading ? "Deleting…" : "Delete asset"}
+          </button>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete asset?"
+        body={
+          <>
+            Asset <code className="font-mono text-slate-200">{asset.id.slice(0, 12)}…</code>{" "}
+            will be removed. This can't be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        danger
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          const id = asset.id
+          void del.mutate(id)
+            .then(() => {
+              setConfirmOpen(false)
+              showToast({ variant: "success", message: "Asset deleted." })
+              onDelete?.(id)
+              onClose()
+            })
+            .catch((err: unknown) => {
+              setConfirmOpen(false)
+              const msg = err instanceof Error ? err.message : "Delete failed"
+              showToast({ variant: "danger", message: `Delete failed: ${msg}` })
+            })
+        }}
+      />
     </div>
   )
 }
