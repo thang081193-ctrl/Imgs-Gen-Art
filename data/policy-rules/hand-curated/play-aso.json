@@ -58,6 +58,34 @@
       },
       "lastReviewedAt": "2026-04-25",
       "source": "hand-curated"
+    },
+    {
+      "id": "play-incentives-free-download-001",
+      "platform": "play",
+      "category": "incentives",
+      "description": "Phase F1 (Session #44) integration seed — block 'free download' as a stand-in for incentivized-install language Play disallows. Bro replaces with researched incentives keyword bag during dogfood.",
+      "severity": "block",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["free download"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "play-rating-manipulation-five-stars-001",
+      "platform": "play",
+      "category": "rating-manipulation",
+      "description": "Phase F1 (Session #44) integration seed — warn on '5 stars' as a stand-in for review-manipulation copy. Overrideable for genuine review embeds.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["5 stars"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
     }
   ]
 }

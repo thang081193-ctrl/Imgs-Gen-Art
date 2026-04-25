@@ -69,4 +69,5 @@ export {
 export type {
   BuildGoogleAdsCheckInputArgs,
   BuildMetaCheckInputArgs,
+  BuildPlayCheckInputArgs,
 } from "./build-check-input"

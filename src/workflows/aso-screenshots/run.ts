@@ -13,10 +13,16 @@ import type { AssetDto } from "@/core/dto/asset-dto"
 import type { WorkflowEvent } from "@/core/dto/workflow-dto"
 import { getModel } from "@/core/model-registry/models"
 import type { ImageProvider } from "@/core/providers/types"
+import type { PolicyDecision } from "@/core/schemas/policy-decision"
 import { RuntimeValidationError } from "@/core/shared/errors"
 import { deriveSeed } from "@/core/shared/rand"
 import { finalizeBatch, type AssetRepo, type BatchRepo } from "@/server/asset-store"
+import {
+  buildPlayCheckInput,
+  checkPolicy as defaultCheckPolicy,
+} from "@/server/services/policy-rules"
 import { getAdLayouts, getCopyTemplates } from "@/server/templates"
+import type { CopyLang } from "@/core/templates"
 import type { WorkflowRunParams } from "@/workflows/types"
 
 import { DEFAULT_ASSETS_DIR, writeAsoAsset } from "./asset-writer"
@@ -33,6 +39,10 @@ export interface AsoScreenshotsDeps {
 export interface AsoScreenshotsOptions {
   assetsDir?: string
   now?: () => Date
+  // Phase F1 (Session #44) — DI seam mirroring D1's ad-production
+  // pattern. Tests stub checkPolicy here to bypass the on-disk
+  // play-aso.json rule set.
+  checkPolicy?: typeof defaultCheckPolicy
 }
 
 export function createAsoScreenshotsRun(
@@ -41,6 +51,7 @@ export function createAsoScreenshotsRun(
 ): (params: WorkflowRunParams) => AsyncGenerator<WorkflowEvent> {
   const assetsDir = options.assetsDir ?? DEFAULT_ASSETS_DIR
   const nowFn = options.now ?? (() => new Date())
+  const checkPolicyFn = options.checkPolicy ?? defaultCheckPolicy
 
   return async function* run(params: WorkflowRunParams): AsyncGenerator<WorkflowEvent> {
     const deps = resolveDeps(params)
@@ -87,6 +98,68 @@ export function createAsoScreenshotsRun(
 
     yield { type: "started", batchId: params.batchId, total }
 
+    // ---- Phase F1 preflight (mirrors D1 ad-production wiring) ----
+    let auditDecision: PolicyDecision | undefined
+    const conceptZero = concepts[0]
+    const langZero = input.targetLangs[0]
+    if (conceptZero && langZero) {
+      const preflightPrompt = buildAsoPrompt({
+        concept: conceptZero,
+        profile: params.profile,
+        locale,
+        targetLang: langZero,
+        variantIndex: 0,
+        layouts,
+        copyTemplates,
+      })
+      const copyEntry = copyTemplates.templates[langZero as CopyLang]
+      const copyTexts: string[] =
+        copyEntry !== undefined
+          ? [copyEntry.h[0] ?? "", copyEntry.s[0] ?? ""].filter((s) => s.length > 0)
+          : []
+      const decision = checkPolicyFn(
+        buildPlayCheckInput({
+          profile: params.profile,
+          prompt: preflightPrompt,
+          copyTexts,
+          aspectRatio: params.aspectRatio,
+        }),
+        params.policyOverrides !== undefined
+          ? { overrides: params.policyOverrides }
+          : {},
+      )
+      if (!decision.ok) {
+        yield { type: "policy_blocked", decision, batchId: params.batchId }
+        finalizeBatch({
+          batchId: params.batchId,
+          status: "error",
+          assetRepo: deps.assetRepo,
+          batchRepo: deps.batchRepo,
+          at: nowFn().toISOString(),
+          policyDecision: decision,
+        })
+        yield {
+          type: "error",
+          error: {
+            message: "Workflow blocked by policy violation.",
+            code: "PolicyBlocked",
+          },
+          context: "policy-preflight",
+        }
+        return
+      }
+      const hasUnoverriddenWarning = decision.violations.some(
+        (v) => v.details?.["overridden"] !== true,
+      )
+      if (hasUnoverriddenWarning) {
+        yield { type: "policy_warned", decision, batchId: params.batchId }
+      }
+      const isEmpty =
+        decision.violations.length === 0 &&
+        (decision.overrides === undefined || decision.overrides.length === 0)
+      auditDecision = isEmpty ? undefined : decision
+    }
+
     const assets: AssetDto[] = []
     let successfulAssets = 0
     let globalIndex = 0
@@ -106,6 +179,9 @@ export function createAsoScreenshotsRun(
               assetRepo: deps.assetRepo,
               batchRepo: deps.batchRepo,
               at: nowFn().toISOString(),
+              ...(auditDecision !== undefined
+                ? { policyDecision: auditDecision }
+                : {}),
             })
             yield {
               type: "aborted",
@@ -181,6 +257,7 @@ export function createAsoScreenshotsRun(
       assetRepo: deps.assetRepo,
       batchRepo: deps.batchRepo,
       at: nowFn().toISOString(),
+      ...(auditDecision !== undefined ? { policyDecision: auditDecision } : {}),
     })
     yield { type: "complete", assets, batchId: params.batchId }
   }

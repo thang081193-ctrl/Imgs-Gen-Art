@@ -94,8 +94,19 @@ describe("buildGoogleAdsCheckInput — Phase E shipped", () => {
   })
 })
 
-describe("buildPlayCheckInput — D1/D2/E placeholder", () => {
-  it("throws until Phase F1 un-stubs", () => {
-    expect(() => buildPlayCheckInput()).toThrow(/Phase F1/)
+describe("buildPlayCheckInput — Phase F1 shipped", () => {
+  it("packages prompt + copyTexts + aspectRatio with platform='play'", () => {
+    const out = buildPlayCheckInput({
+      profile: profileFixture,
+      prompt: "App store screenshot for ChartLens.",
+      copyTexts: ["Headline VI", "Subheadline VI"],
+      aspectRatio: "9:16",
+    })
+    expect(out).toEqual({
+      platform: "play",
+      prompt: "App store screenshot for ChartLens.",
+      copyTexts: ["Headline VI", "Subheadline VI"],
+      assetAspectRatio: "9:16",
+    })
   })
 })

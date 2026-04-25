@@ -37,6 +37,7 @@ export default defineConfig({
       // workflows-full suite. Serialize via singleFork.
       ["tests/integration/ad-production-policy.test.ts", "forks"],
       ["tests/integration/google-ads-policy.test.ts", "forks"],
+      ["tests/integration/aso-screenshots-policy.test.ts", "forks"],
     ],
     poolOptions: {
       forks: { singleFork: true },

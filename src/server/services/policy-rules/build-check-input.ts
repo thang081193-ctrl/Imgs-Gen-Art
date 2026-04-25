@@ -70,9 +70,27 @@ export function buildGoogleAdsCheckInput(
   }
 }
 
-/** PLACEHOLDER — Phase F1 (Play ASO) un-stubs this helper. */
-export function buildPlayCheckInput(): PolicyCheckInput {
-  throw new Error(
-    "buildPlayCheckInput: not implemented yet — wired in Phase F1",
-  )
+export interface BuildPlayCheckInputArgs {
+  profile: AppProfile
+  /** Composed concept-0 / lang-0 / variant-0 prompt — runner runs the
+   *  prompt-composer once at preflight time. */
+  prompt: string
+  /** Headline + subheadline copy lines surfaced to keyword + claim
+   *  checkers (Q-47.B LOCKED). */
+  copyTexts: string[]
+  /** Aspect ratio of the rendered screenshot — the asset-side
+   *  aspect-ratio rule reads this. */
+  aspectRatio: string
+}
+
+export function buildPlayCheckInput(
+  args: BuildPlayCheckInputArgs,
+): PolicyCheckInput {
+  void args.profile
+  return {
+    platform: "play",
+    prompt: args.prompt,
+    copyTexts: args.copyTexts,
+    assetAspectRatio: args.aspectRatio,
+  }
 }
