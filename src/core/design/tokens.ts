@@ -9,6 +9,7 @@ export const WORKFLOW_COLORS: Record<WorkflowId, ColorVariant> = {
   "ad-production":    "blue",
   "style-transform":  "pink",
   "aso-screenshots":  "emerald",
+  "google-ads":       "sky",
 }
 
 export const SEMANTIC_COLORS = {

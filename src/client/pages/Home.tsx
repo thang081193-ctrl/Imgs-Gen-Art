@@ -63,7 +63,7 @@ export function Home({ onNav, showToast }: HomeProps): ReactElement {
           subtitle="Headlines + descriptions text-only ad variants."
           colorVariant="sky"
           Icon={GoogleAdsLaneIcon}
-          onClick={() => onPendingLaneClick("google-ads")}
+          onClick={() => onNav("wizard-google-ads")}
         />
         <LaneCtaCard
           laneId="play-aso"

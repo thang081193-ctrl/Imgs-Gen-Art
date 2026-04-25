@@ -10,6 +10,9 @@ export const WORKFLOW_IDS = [
   "ad-production",
   "style-transform",
   "aso-screenshots",
+  // Phase E (Session #44) — text-only Google Ads workflow (X-1 LOCKED).
+  // Color variant: "sky" (CF#17 LOCKED).
+  "google-ads",
 ] as const
 
 export type WorkflowId = (typeof WORKFLOW_IDS)[number]

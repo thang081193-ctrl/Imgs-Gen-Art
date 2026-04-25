@@ -7,6 +7,7 @@ import { NotFoundError } from "@/core/shared/errors"
 import { adProductionWorkflow } from "./ad-production"
 import { artworkBatchWorkflow } from "./artwork-batch"
 import { asoScreenshotsWorkflow } from "./aso-screenshots"
+import { googleAdsWorkflow } from "./google-ads"
 import { styleTransformWorkflow } from "./style-transform"
 import type { WorkflowDefinition } from "./types"
 
@@ -14,6 +15,7 @@ export * from "./types"
 export { adProductionWorkflow } from "./ad-production"
 export { artworkBatchWorkflow } from "./artwork-batch"
 export { asoScreenshotsWorkflow } from "./aso-screenshots"
+export { googleAdsWorkflow } from "./google-ads"
 export { styleTransformWorkflow } from "./style-transform"
 
 export const ALL_WORKFLOWS: readonly WorkflowDefinition[] = [
@@ -21,6 +23,7 @@ export const ALL_WORKFLOWS: readonly WorkflowDefinition[] = [
   adProductionWorkflow,
   styleTransformWorkflow,
   asoScreenshotsWorkflow,
+  googleAdsWorkflow,
 ] as const
 
 export function getWorkflow(id: string): WorkflowDefinition {

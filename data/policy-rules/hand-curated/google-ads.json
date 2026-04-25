@@ -43,6 +43,34 @@
       },
       "lastReviewedAt": "2026-04-25",
       "source": "hand-curated"
+    },
+    {
+      "id": "google-ads-claims-lawsuit-001",
+      "platform": "google-ads",
+      "category": "legal-risk",
+      "description": "Phase E (Session #44) integration seed — block 'lawsuit' as a stand-in for legal-risk claims. Bro replaces with researched legal-risk keyword bag during dogfood.",
+      "severity": "block",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["lawsuit"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "google-ads-style-click-here-001",
+      "platform": "google-ads",
+      "category": "style-discouragement",
+      "description": "Phase E (Session #44) integration seed — warn on 'click here' (Google Ads-discouraged generic CTA). Overrideable for special cases.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["click here"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
     }
   ]
 }

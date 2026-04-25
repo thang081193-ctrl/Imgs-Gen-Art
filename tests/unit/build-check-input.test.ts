@@ -77,12 +77,25 @@ describe("buildMetaCheckInput", () => {
   })
 })
 
-describe("buildGoogleAdsCheckInput / buildPlayCheckInput — D1 placeholders", () => {
-  it("buildGoogleAdsCheckInput throws until Phase E un-stubs", () => {
-    expect(() => buildGoogleAdsCheckInput()).toThrow(/Phase E/)
+describe("buildGoogleAdsCheckInput — Phase E shipped", () => {
+  it("packages prompt + copyTexts with platform='google-ads'; no asset-* (text-only)", () => {
+    const out = buildGoogleAdsCheckInput({
+      profile: profileFixture,
+      prompt: "Generate Google Responsive Search Ads — feature focus restore.",
+      copyTexts: ["Headline 1", "Headline 2", "Description 1"],
+    })
+    expect(out).toEqual({
+      platform: "google-ads",
+      prompt: "Generate Google Responsive Search Ads — feature focus restore.",
+      copyTexts: ["Headline 1", "Headline 2", "Description 1"],
+    })
+    expect(out.assetWidth).toBeUndefined()
+    expect(out.assetAspectRatio).toBeUndefined()
   })
+})
 
-  it("buildPlayCheckInput throws until Phase F1 un-stubs", () => {
+describe("buildPlayCheckInput — D1/D2/E placeholder", () => {
+  it("throws until Phase F1 un-stubs", () => {
     expect(() => buildPlayCheckInput()).toThrow(/Phase F1/)
   })
 })

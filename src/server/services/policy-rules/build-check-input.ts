@@ -45,12 +45,29 @@ export function buildMetaCheckInput(
   }
 }
 
-/** PLACEHOLDER — Phase E (Google Ads) un-stubs this helper. Calling it
- *  from D1/D2 throws so the typed call-site doesn't silently no-op. */
-export function buildGoogleAdsCheckInput(): PolicyCheckInput {
-  throw new Error(
-    "buildGoogleAdsCheckInput: not implemented yet — wired in Phase E",
-  )
+export interface BuildGoogleAdsCheckInputArgs {
+  profile: AppProfile
+  /** LLM prompt (the runner hands the composed instruction to the
+   *  LLM; we expose it so the claim-regex / keyword-blocklist checkers
+   *  can scan it before generation kicks off). */
+  prompt: string
+  /** Headline + description copy lines surfaced to the policy checks
+   *  so style-discouragement rules (e.g. "click here") match before
+   *  the LLM call burns. Synthesized from the deterministic fallback
+   *  at preflight; the actual generated copy lands in the audit blob
+   *  via finalizeBatch. */
+  copyTexts: string[]
+}
+
+export function buildGoogleAdsCheckInput(
+  args: BuildGoogleAdsCheckInputArgs,
+): PolicyCheckInput {
+  void args.profile
+  return {
+    platform: "google-ads",
+    prompt: args.prompt,
+    copyTexts: args.copyTexts,
+  }
 }
 
 /** PLACEHOLDER — Phase F1 (Play ASO) un-stubs this helper. */

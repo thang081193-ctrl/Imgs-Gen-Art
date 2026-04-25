@@ -43,7 +43,7 @@ describe("design-tokens: mapping integrity", () => {
     expect(Object.keys(COLOR_CLASSES)).toHaveLength(10)
   })
 
-  it("exactly 4 workflows mapped", () => {
-    expect(Object.keys(WORKFLOW_COLORS)).toHaveLength(4)
+  it("exactly 5 workflows mapped (S#44 Phase E adds google-ads)", () => {
+    expect(Object.keys(WORKFLOW_COLORS)).toHaveLength(5)
   })
 })
