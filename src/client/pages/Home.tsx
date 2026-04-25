@@ -1,11 +1,10 @@
 // S#38 PLAN-v3 §1 — Home rewrite. The old single "Run a workflow" CTA is
-// replaced by two giant LaneCtaCards (Ads Images + Google Play ASO) plus
-// a Saved Styles shelf. The status pill + version strip live in the
-// AppHeader now, so this page focuses purely on lane-first navigation.
+// replaced by 3 LaneCtaCards (one per platform: Meta / Google / Play)
+// plus a Saved Styles shelf. The status pill + version strip live in
+// the AppHeader now, so this page focuses purely on lane-first nav.
 //
-// Lane-card click currently fires a toast (Q-38.I = b) — the wizard
-// route ships in D1+. When it lands, swap the click handler for
-// onNav("wizard", { lane }).
+// S#44 D2 — Meta lane CTA navigates to `wizard-meta-ads` (X-5 LOCKED);
+// Google + Play CTAs still toast until their phases (E, F2) ship.
 
 import type { ReactElement } from "react"
 import type { NavParams, Page } from "@/client/navigator"
@@ -14,6 +13,7 @@ import { PolicyRulesBanner } from "@/client/components/PolicyRulesBanner"
 import {
   AdsLaneIcon,
   AsoLaneIcon,
+  GoogleAdsLaneIcon,
   LaneCtaCard,
   type LaneId,
 } from "@/client/home/LaneCtaCard"
@@ -25,10 +25,10 @@ export interface HomeProps {
 }
 
 export function Home({ onNav, showToast }: HomeProps): ReactElement {
-  const onLaneClick = (lane: LaneId): void => {
+  const onPendingLaneClick = (lane: LaneId): void => {
     showToast({
       variant: "info",
-      message: `Wizard cho lane "${lane}" sẽ ship ở D1+ bro.`,
+      message: `Wizard cho lane "${lane}" chưa ship — đang chờ phase tương ứng.`,
     })
   }
 
@@ -41,29 +41,37 @@ export function Home({ onNav, showToast }: HomeProps): ReactElement {
           Bắt đầu generate
         </h1>
         <p className="text-slate-400">
-          Chọn lane phù hợp — bộ wizard sẽ dẫn từng bước (D1+).
+          Chọn lane phù hợp — bộ wizard sẽ dẫn từng bước.
         </p>
       </section>
 
       <section
-        className="grid gap-4 md:grid-cols-2"
+        className="grid gap-4 md:grid-cols-3"
         aria-label="Lane entry points"
       >
         <LaneCtaCard
-          laneId="ads"
-          title="Ads Images"
-          subtitle="Meta + Google Ads — visual + copy variants cho ad set."
-          colorVariant="violet"
+          laneId="meta-ads"
+          title="Meta Ads"
+          subtitle="Feed + Stories + Reels — visual variants cho Meta ad set."
+          colorVariant="blue"
           Icon={AdsLaneIcon}
-          onClick={() => onLaneClick("ads")}
+          onClick={() => onNav("wizard-meta-ads")}
         />
         <LaneCtaCard
-          laneId="aso"
+          laneId="google-ads"
+          title="Google Ads"
+          subtitle="Headlines + descriptions text-only ad variants."
+          colorVariant="sky"
+          Icon={GoogleAdsLaneIcon}
+          onClick={() => onPendingLaneClick("google-ads")}
+        />
+        <LaneCtaCard
+          laneId="play-aso"
           title="Google Play ASO"
           subtitle="Phone-frame screenshots cho Play Store listing."
           colorVariant="emerald"
           Icon={AsoLaneIcon}
-          onClick={() => onLaneClick("aso")}
+          onClick={() => onPendingLaneClick("play-aso")}
         />
       </section>
 

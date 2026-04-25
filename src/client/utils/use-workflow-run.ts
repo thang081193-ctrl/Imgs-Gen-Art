@@ -22,12 +22,21 @@ export interface UseWorkflowRunOptions {
   navigate: (page: Page, params?: NavParams) => void
 }
 
+// S#44 D2 (Q-45.B LOCKED) — policy events surface alongside the raw
+// stream so the wizard can react without re-scanning `events`. Latest
+// policy_blocked / policy_warned wins; cleared on next start().
+export type PolicyRunEvent = Extract<
+  WorkflowEvent,
+  { type: "policy_blocked" } | { type: "policy_warned" }
+>
+
 export interface WorkflowRunHandle {
   runState: RunState
   batchId: string | null
   total: number
   completedCount: number
   events: WorkflowEvent[]
+  policyEvent: PolicyRunEvent | null
   start: () => void
   cancel: () => Promise<void>
 }
@@ -41,6 +50,7 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
   const [total, setTotal] = useState<number>(0)
   const [completedCount, setCompletedCount] = useState<number>(0)
   const [events, setEvents] = useState<WorkflowEvent[]>([])
+  const [policyEvent, setPolicyEvent] = useState<PolicyRunEvent | null>(null)
   const [runBody, setRunBody] = useState<unknown>(null)
 
   // Ref mirrors runState so `cancel()` sees the latest value without stale
@@ -64,6 +74,9 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
       return
     }
     setEvents((prev) => [...prev, parsed])
+    if (parsed.type === "policy_blocked" || parsed.type === "policy_warned") {
+      setPolicyEvent(parsed)
+    }
     if (parsed.type === "started") {
       setBatchId(parsed.batchId)
       setTotal(parsed.total)
@@ -121,6 +134,7 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
     setBatchId(null)
     setTotal(0)
     setCompletedCount(0)
+    setPolicyEvent(null)
     setRunBody(buildBody())
     setRunState("running")
     setRunNonce((n) => n + 1)
@@ -138,5 +152,14 @@ export function useWorkflowRun(opts: UseWorkflowRunOptions): WorkflowRunHandle {
     }
   }, [sse, batchId])
 
-  return { runState, batchId, total, completedCount, events, start, cancel }
+  return {
+    runState,
+    batchId,
+    total,
+    completedCount,
+    events,
+    policyEvent,
+    start,
+    cancel,
+  }
 }

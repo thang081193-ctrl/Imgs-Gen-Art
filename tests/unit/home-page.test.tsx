@@ -67,12 +67,13 @@ afterEach(() => {
 })
 
 describe("Home page", () => {
-  it("renders both lane cards + the saved-styles shelf with all fixtures", async () => {
+  it("renders 3 lane cards (meta / google / play) + the saved-styles shelf with all fixtures", async () => {
     stubFetch()
     render(<Home onNav={() => {}} showToast={() => {}} />)
 
-    expect(screen.getByTestId("lane-cta-ads")).toBeInTheDocument()
-    expect(screen.getByTestId("lane-cta-aso")).toBeInTheDocument()
+    expect(screen.getByTestId("lane-cta-meta-ads")).toBeInTheDocument()
+    expect(screen.getByTestId("lane-cta-google-ads")).toBeInTheDocument()
+    expect(screen.getByTestId("lane-cta-play-aso")).toBeInTheDocument()
 
     await waitFor(() => {
       // All 3 presets + 1 user style mount.
@@ -83,16 +84,27 @@ describe("Home page", () => {
     expect(screen.queryByText(/Chưa có style cá nhân/i)).not.toBeInTheDocument()
   })
 
-  it("Q-38.I — clicking a lane CTA fires a toast (no nav until D1+)", async () => {
+  it("S#44 D2 — Meta lane CTA navigates to wizard-meta-ads (no toast)", async () => {
     stubFetch()
     const onNav = vi.fn()
     const showToast = vi.fn()
     render(<Home onNav={onNav} showToast={showToast} />)
 
-    fireEvent.click(screen.getByTestId("lane-cta-ads"))
-    expect(showToast).toHaveBeenCalledTimes(1)
-    expect(showToast.mock.calls[0][0].message).toMatch(/ads/i)
-    // No nav: wizard ships D1+.
+    fireEvent.click(screen.getByTestId("lane-cta-meta-ads"))
+    expect(onNav).toHaveBeenCalledWith("wizard-meta-ads")
+    // Meta lane CTA never toasts — toast is reserved for the unshipped lanes.
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it("Google + Play lane CTAs still toast (E + F2 unshipped at D2)", async () => {
+    stubFetch()
+    const onNav = vi.fn()
+    const showToast = vi.fn()
+    render(<Home onNav={onNav} showToast={showToast} />)
+
+    fireEvent.click(screen.getByTestId("lane-cta-google-ads"))
+    fireEvent.click(screen.getByTestId("lane-cta-play-aso"))
+    expect(showToast).toHaveBeenCalledTimes(2)
     expect(onNav).not.toHaveBeenCalled()
   })
 })

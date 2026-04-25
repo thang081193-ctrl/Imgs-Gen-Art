@@ -19,6 +19,7 @@ import { Settings } from "@/client/pages/Settings"
 import { Profiles } from "@/client/pages/Profiles"
 import { ProfileEdit } from "@/client/pages/ProfileEdit"
 import { SavedStyleDetail } from "@/client/pages/SavedStyleDetail"
+import { MetaWizard } from "@/client/pages/MetaWizard"
 import { AppHeader } from "@/client/components/AppHeader"
 import { ToastHost, useToastStack } from "@/client/components/ToastHost"
 import type { NavGuard, NavParams, Navigator, Page } from "@/client/navigator"
@@ -60,6 +61,7 @@ export function App(): ReactElement {
       {page === "profiles"           && <Profiles navigator={navigator} showToast={show} />}
       {page === "profile-edit"       && <ProfileEdit navigator={navigator} showToast={show} />}
       {page === "saved-style-detail" && <SavedStyleDetail navigator={navigator} showToast={show} />}
+      {page === "wizard-meta-ads"    && <MetaWizard navigator={navigator} showToast={show} />}
       <ToastHost toasts={toasts} onDismiss={dismiss} />
     </div>
   )

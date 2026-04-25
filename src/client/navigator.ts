@@ -20,6 +20,11 @@ export type Page =
   // (preview + prompt template + lanes + usage count) for both presets
   // and user styles; "Use in wizard" disabled until D1+.
   | "saved-style-detail"
+  // S#44 D2/E/F2 — policy-aware wizard routes per lane (X-1 LOCKED).
+  // Meta ships in D2; google-ads + play-aso unlock as their phases land.
+  | "wizard-meta-ads"
+  | "wizard-google-ads"
+  | "wizard-play-aso"
 
 export interface NavParams {
   batchId?: string
