@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!--
+  Synthetic fixture mirroring the structure of Meta's text-overlay 20%
+  policy page. Real upstream HTML is volatile (Meta reflows their help
+  centre on a release-train cadence) — see HANDOFF-SESSION42 Q-42.K. The
+  scraper logic exercised here is selector + whitespace normalization +
+  SHA-256 hash; the policy text is intentionally short and deterministic.
+-->
+<html>
+<head>
+  <title>Text in Ad Images Policy</title>
+</head>
+<body>
+  <header>Header noise that should NOT enter the hash.</header>
+  <nav>Nav links also out of scope.</nav>
+  <main>
+    <h1>Text in Ad Images</h1>
+    <p>
+      Images in your ads should include little or no text. Ads with a
+      higher proportion of text to image may not reach as many people.
+      We recommend keeping text in image overlays under roughly 20% of
+      the image area.
+    </p>
+    <p>
+      This guidance applies to feed and stories ad placements on
+      Facebook and Instagram. Logos, watermarks and product labels also
+      count toward the limit when they appear in the image.
+    </p>
+  </main>
+  <footer>Footer noise — also stripped by the `main` selector.</footer>
+</body>
+</html>

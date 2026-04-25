@@ -21,6 +21,7 @@ import {
   createSavedStylesRepo,
   type SavedStylesRepo,
 } from "@/server/saved-styles/saved-styles-repo"
+import { createSettingsRepo, type SettingsRepo } from "./settings-repo"
 
 let opened: OpenedDatabase | null = null
 let _assetRepo: AssetRepo | null = null
@@ -28,6 +29,7 @@ let _batchRepo: BatchRepo | null = null
 let _profileAssetsRepo: ProfileAssetsRepo | null = null
 let _promptHistoryRepo: PromptHistoryRepo | null = null
 let _savedStylesRepo: SavedStylesRepo | null = null
+let _settingsRepo: SettingsRepo | null = null
 
 export function initAssetStore(options: OpenAssetDatabaseOptions = {}): OpenedDatabase {
   if (opened) {
@@ -39,6 +41,7 @@ export function initAssetStore(options: OpenAssetDatabaseOptions = {}): OpenedDa
   _profileAssetsRepo = createProfileAssetsRepo(opened.db)
   _promptHistoryRepo = createPromptHistoryRepo(opened.db)
   _savedStylesRepo = createSavedStylesRepo(opened.db)
+  _settingsRepo = createSettingsRepo(opened.db)
   return opened
 }
 
@@ -77,6 +80,13 @@ export function getSavedStylesRepo(): SavedStylesRepo {
   return _savedStylesRepo
 }
 
+export function getSettingsRepo(): SettingsRepo {
+  if (!_settingsRepo) {
+    throw new Error("asset-store not initialized — call initAssetStore() at boot")
+  }
+  return _settingsRepo
+}
+
 /** Test-only: drop the singleton so a new initAssetStore call can rebind. */
 export function _resetAssetStoreForTests(): void {
   if (opened) opened.db.close()
@@ -86,4 +96,5 @@ export function _resetAssetStoreForTests(): void {
   _profileAssetsRepo = null
   _promptHistoryRepo = null
   _savedStylesRepo = null
+  _settingsRepo = null
 }

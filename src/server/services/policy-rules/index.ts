@@ -12,6 +12,29 @@ export {
 } from "./loader"
 export type { PolicyRulesLoaderOptions } from "./loader"
 export {
+  ALL_POLICY_PLATFORMS,
+  POLICY_SOURCES,
+  getSourcesFor,
+} from "./sources"
+export type { PolicyScrapeSource } from "./sources"
+export {
+  DEFAULT_SCRAPED_DIR,
+  PolicyRulesScraperError,
+  SCRAPER_HOST_DELAY_MS,
+  SCRAPER_TIMEOUT_MS,
+  SCRAPER_USER_AGENT,
+  scrapeAll,
+  scrapePlatform,
+} from "./scraper"
+export type {
+  FetchFn,
+  ScrapeAllOptions,
+  ScrapeAllResult,
+  ScrapeFailure,
+  ScrapePlatformOptions,
+  ScrapeResult,
+} from "./scraper"
+export {
   PolicyRuleSchema,
   PolicyPatternSchema,
   PolicyPlatformSchema,

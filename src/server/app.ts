@@ -18,6 +18,7 @@ import { createProfilesRoute } from "./routes/profiles"
 import { createPromptAssistRoute } from "./routes/prompt-assist"
 import { createPromptHistoryRoute } from "./routes/prompt-history"
 import { createProvidersRoute } from "./routes/providers"
+import { createPolicyRulesRoute } from "./routes/policy-rules"
 import { createReplayRoute } from "./routes/replay"
 import { createSavedStylesRoute } from "./routes/saved-styles"
 import { createStubsRoute } from "./routes/stubs"
@@ -57,6 +58,7 @@ export function createApp(config: AppConfig): Hono {
   app.route("/api/tags", createTagsRoute())
   app.route("/api/saved-styles", createSavedStylesRoute())
   app.route("/api/prompt-assist", createPromptAssistRoute())
+  app.route("/api/policy-rules", createPolicyRulesRoute())
   app.route("/api/debug", createDebugRoute())
   // Workflow-runs mounted FIRST under /api/workflows/runs so its DELETE
   // /:batchId wins over the broader /api/workflows/:id/run route below.

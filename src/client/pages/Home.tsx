@@ -10,6 +10,7 @@
 import type { ReactElement } from "react"
 import type { NavParams, Page } from "@/client/navigator"
 import type { ShowToast } from "@/client/components/ToastHost"
+import { PolicyRulesBanner } from "@/client/components/PolicyRulesBanner"
 import {
   AdsLaneIcon,
   AsoLaneIcon,
@@ -33,6 +34,8 @@ export function Home({ onNav, showToast }: HomeProps): ReactElement {
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-10">
+      <PolicyRulesBanner showToast={showToast} />
+
       <section className="space-y-2 pt-2">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
           Bắt đầu generate

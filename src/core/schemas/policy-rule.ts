@@ -100,10 +100,17 @@ export const PolicyRuleSchema = z
   .strict()
 export type PolicyRule = z.infer<typeof PolicyRuleSchema>
 
+// PLAN-v3 §4.2 — Phase C2 (Session #42) added the scrape-metadata fields:
+// `sourceUrl`, `contentHash`, `contentExcerpt`. Optional so C1 fixtures
+// (which had no scraper output) still validate. `.strict()` is preserved
+// — unknown keys in scraper output throw at load time per Q-41.G.
 export const ScrapedPolicyRuleFileSchema = z
   .object({
     scrapedAt: z.string().datetime({ offset: true }),
     rules: z.array(PolicyRuleSchema),
+    sourceUrl: z.string().url().optional(),
+    contentHash: z.string().regex(/^[0-9a-f]{64}$/, "expected lower-hex SHA-256").optional(),
+    contentExcerpt: z.string().optional(),
   })
   .strict()
 export type ScrapedPolicyRuleFile = z.infer<typeof ScrapedPolicyRuleFileSchema>

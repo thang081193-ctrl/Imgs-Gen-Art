@@ -34,15 +34,30 @@ const FIXTURES: SavedStyleDto[] = [
   },
 ]
 
+// Returns a fresh Response per call (Response bodies are single-shot
+// streams — sharing one across two consumers throws "Body has already
+// been read"). Routes by URL: PolicyRulesBanner mounts on Home and
+// fetches /api/policy-rules/status alongside SavedStylesShelf.
 function stubFetch(): void {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ styles: FIXTURES }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
+    vi.fn().mockImplementation((url: string) => {
+      const body = url.includes("/api/policy-rules/status")
+        ? {
+            lastScrapedAt: new Date().toISOString(),
+            daysSince: 0,
+            stalenessThresholdDays: 14,
+            isStale: false,
+            perPlatform: [],
+          }
+        : { styles: FIXTURES }
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+    }),
   )
 }
 
