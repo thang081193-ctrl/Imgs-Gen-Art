@@ -168,29 +168,99 @@ assets + history.
 
 ---
 
-## §3 — Grok LLM prompt-suggester adapter
+## §3 — LLM prompt-suggester service
 
-### §3.1 Contract
+> **Architecture revision (S#44 mega-close, 2026-04-25 — Q-44.K):**
+> S#39 Phase B1 split the prompt-suggester into a provider-agnostic
+> seam (`services/llm/`) + a use-case layer (`services/prompt-assist/`).
+> The original §3 spec described a single `services/grok.ts` file —
+> that name no longer exists. Grok is now one impl behind
+> `LLMProvider`; adding OpenAI / Anthropic / Gemini-text = ship one
+> file each, no use-case rewrites. Policy enforcement (C1–C3 +
+> D1/E/F1) lives in its own sibling layer (`services/policy-rules/`)
+> because it has no LLM dependency and ships with a different
+> lifecycle (hand-curated + scraped JSON, not API calls).
 
-- **File:** `src/server/services/grok.ts`
-- **Env var:** `XAI_API_KEY` (never committed, in `.env`, gitignored).
-- **Model:** `grok-4-1-fast-reasoning` (locked Q-36.B, 2026-04-25).
-- **Endpoint:** `https://api.x.ai/v1/chat/completions` (OpenAI-compat).
-- **Timeout:** 30s hard per request via `AbortController` (locked
-  Q-36.H — no rate cap, local project).
-- **Retry:** 1 retry on 429 / 5xx / network error with 1s backoff.
-  Beyond that, fail fast and trigger §3.3 fallback.
-- **Logging:** log `{model, inputTokens?, outputTokens?, latencyMs,
-  outcome}` to `logs/grok.jsonl` per call. No rate cap, but logs let
-  bro inspect spend if curious.
+### §3.1 Three-layer service split
 
-### §3.2 Use-cases
+```
+src/server/services/
+├── llm/                    transport / vendor-agnostic seam
+│   ├── types.ts            LLMProvider, LLMChatRequest, LLMChatResponse
+│   ├── registry.ts         getActiveLLMProvider(), LLMProviderName union
+│   ├── grok-provider.ts    LLMProvider impl backed by xAI Grok
+│   ├── grok-config.ts      env-var read at provider construction
+│   ├── grok-fetch.ts       OpenAI-compat HTTP call
+│   ├── grok-retry.ts       1-retry-on-429/5xx with backoff
+│   ├── mime-sniff.ts       image-part MIME detection for vision input
+│   ├── errors.ts           LLMProviderError + cause chain
+│   └── index.ts            barrel — exports getActiveLLMProvider() +
+│                           LLMProvider type only
+├── prompt-assist/          use-case layer; consumes LLMProvider
+│   ├── idea-to-prompt.ts   text → prompt draft
+│   ├── reverse-from-image.ts  image → re-generatable prompt
+│   ├── text-overlay-brainstorm.ts  image+headline → 5 overlay variants
+│   ├── fallback-composer.ts  template-based idea-to-prompt floor
+│   ├── fallback-overlay.ts   template-based overlay floor
+│   ├── fallback-reverse.ts   template-based reverse floor
+│   ├── log.ts              per-call jsonl writer (logs/llm.jsonl)
+│   ├── types.ts
+│   └── index.ts            barrel
+└── policy-rules/           policy enforcement (C1–C3 + D/E/F)
+    ├── loader.ts           hand-curated + scraped merge layer
+    ├── scraper.ts          C2 source-fetch with bi-weekly freshness
+    ├── sources.ts          per-platform source URL table
+    ├── check-policy.ts     C3 aggregator (pure)
+    ├── checkers/           6 per-kind impls (text-area-ratio,
+    │                       keyword-blocklist, aspect-ratio,
+    │                       file-size-max, resolution-min, claim-regex)
+    ├── build-check-input.ts  S#44 — per-platform PolicyCheckInput
+    │                       mappers (Meta + Google Ads + Play)
+    └── index.ts            barrel
+```
+
+### §3.2 LLMProvider contract
+
+```ts
+// src/server/services/llm/types.ts
+export interface LLMProvider {
+  readonly name: string
+  readonly model: string
+  chat(req: LLMChatRequest): Promise<LLMChatResponse>
+}
+
+export interface LLMChatRequest {
+  messages: LLMMessage[]    // OpenAI-compat shape
+  maxTokens?: number
+  temperature?: number
+  signal?: AbortSignal
+}
+```
+
+- **Active provider** resolved via `getActiveLLMProvider()` (returns
+  `LLMProvider | null`; null = no provider configured → caller falls
+  back to the prompt-assist template floor).
+- **Selection** via `LLM_PROVIDER` env var (default = `grok`).
+- **Adding a vendor:** ship `services/llm/<vendor>-provider.ts`
+  implementing `LLMProvider`, register in `registry.ts`. Use cases
+  never import vendor SDKs.
+- **Per-vendor config** (Grok-specific knobs that locked at S#36):
+  - Env var: `XAI_API_KEY` (never committed, in `.env`, gitignored).
+  - Model: `grok-4-1-fast-reasoning` (Q-36.B).
+  - Endpoint: `https://api.x.ai/v1/chat/completions` (OpenAI-compat).
+  - Timeout: 30s hard per request via `AbortController` (Q-36.H).
+  - Retry: 1 retry on 429 / 5xx / network error with 1s backoff.
+- **Logging:** `{provider, model, inputTokens?, outputTokens?,
+  latencyMs, outcome}` per call to `logs/llm.jsonl` (was `grok.jsonl`
+  before S#39 — renamed for vendor-neutrality).
+
+### §3.3 Use-cases (prompt-assist layer)
 
 ```ts
 // All 3 return { prompt: string, notes?: string[], tokens?: {in,out} }
 
 reverseFromImage(imageBuffer, opts?: { lane, platform })
-  → vision input (base64 data URL), system prompt instructs Grok to
+  → vision input (base64 data URL); system prompt instructs the LLM to
     produce a re-generatable prompt describing subject, style,
     composition, palette, mood.
 
@@ -203,15 +273,27 @@ textOverlayBrainstorm(imageBuffer | description, headline?)
     tone labels (bold · playful · minimal · urgency · social-proof).
 ```
 
-### §3.3 Fallback
+Each use-case calls `getActiveLLMProvider()` lazily — null providers
+short-circuit to the template floor without burning a fetch.
 
-If Grok call fails (timeout, 500, or API key missing):
+### §3.4 Fallback (template floor)
 
-- Return `{ prompt: <template-based draft>, notes: ['Grok unavailable,
+If the LLM call fails (timeout, 5xx, API key missing) OR no provider
+is registered:
+
+- Return `{ prompt: <template-based draft>, notes: ['LLM unavailable,
   using template fallback'], fromFallback: true }`.
-- Toast on client: "Grok offline — dùng template, bạn có thể edit tay".
-- Template = existing v1 prompt-template system (don't delete v1
-  prompt builders; they become the floor).
+- Toast on client: "LLM offline — dùng template, bạn có thể edit tay".
+- Template floor lives in `services/prompt-assist/fallback-*.ts` (one
+  per use case — `fallback-composer.ts`, `fallback-overlay.ts`,
+  `fallback-reverse.ts`).
+- Don't delete v1 prompt builders; they ARE the floor.
+
+The `google-ads` workflow runner (S#44 Phase E) reuses the same
+"null provider → deterministic synth" pattern via
+`synthesizeGoogleAdsResponse` in `workflows/google-ads/prompt-composer.ts`
+— different shape (full ad-set instead of single prompt) but same
+philosophy: never block a batch on missing LLM.
 
 ---
 
