@@ -20,6 +20,7 @@ import {
 import { DeleteProfileDialog } from "@/client/components/profile-editor/DeleteProfileDialog"
 import type { ShowToast } from "@/client/components/ToastHost"
 import { formatRelative, hueFor, initialsFor } from "@/client/utils/profile-list"
+import { useActiveProfileId } from "@/client/utils/active-profile"
 
 const CATEGORY_LABEL: Record<ProfileCategory, string> = {
   utility: "Utility",
@@ -38,6 +39,17 @@ export function Profiles({ navigator, showToast }: ProfilesProps): ReactElement 
   const [refreshKey, setRefreshKey] = useState(0)
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
   const list = useProfilesList(refreshKey)
+  const [activeId, setActiveId] = useActiveProfileId()
+
+  const handleSetActive = (summary: ProfileSummaryDto): void => {
+    if (activeId === summary.id) {
+      setActiveId(null)
+      showToast({ variant: "info", message: `Cleared active profile.` })
+    } else {
+      setActiveId(summary.id)
+      showToast({ variant: "success", message: `${summary.name} is now the active profile.` })
+    }
+  }
 
   const bump = (): void => setRefreshKey((k) => k + 1)
 
@@ -150,6 +162,14 @@ export function Profiles({ navigator, showToast }: ProfilesProps): ReactElement 
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
                       <IconButton
+                        label={activeId === p.id ? "Clear active" : "Set active"}
+                        active={activeId === p.id}
+                        onClick={() => handleSetActive(p)}
+                        testId={`profile-set-active-${p.id}`}
+                      >
+                        ★
+                      </IconButton>
+                      <IconButton
                         label="Edit"
                         onClick={() => navigator.go("profile-edit", { profileId: p.id })}
                       >
@@ -235,18 +255,31 @@ function IconButton({
   label,
   onClick,
   danger,
+  active,
+  testId,
 }: {
   children: React.ReactNode
   label: string
   onClick: () => void
   danger?: boolean
+  active?: boolean
+  testId?: string
 }): ReactElement {
   const base = "h-7 w-7 rounded border text-sm leading-none"
   const palette = danger
     ? "border-red-900/40 bg-red-950/30 text-red-300 hover:bg-red-900/40"
+    : active === true
+    ? "border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30"
     : "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
   return (
-    <button type="button" title={label} aria-label={label} onClick={onClick} className={`${base} ${palette}`}>
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={`${base} ${palette}`}
+      {...(testId !== undefined ? { "data-testid": testId } : {})}
+    >
       {children}
     </button>
   )

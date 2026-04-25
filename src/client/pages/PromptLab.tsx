@@ -21,10 +21,11 @@ import type { ReactElement } from "react"
 
 import { useAsset, useProviders } from "@/client/api/hooks"
 import { DiffViewer } from "@/client/components/DiffViewer"
-import { PromptEditor, type PromptEditorState } from "@/client/components/PromptEditor"
+import { PromptEditor, type PrefillRequest, type PromptEditorState } from "@/client/components/PromptEditor"
 import { PromptHistorySidebar } from "@/client/components/PromptHistorySidebar"
 import { PromptLabPredictionStrip } from "@/client/components/PromptLabPredictionStrip"
 import { PromptLabSourceCard } from "@/client/components/PromptLabSourceCard"
+import { PromptAssistPanel } from "@/client/components/prompt-assist/PromptAssistPanel"
 import type { ShowToast } from "@/client/components/ToastHost"
 import { classifyReplayError } from "@/client/lib/replay-errors"
 import { usePromptHistory } from "@/client/utils/use-prompt-history"
@@ -54,7 +55,11 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
     addWatermark: false,
     negativePrompt: "",
   })
-  const [prefillRequest, setPrefillRequest] = useState<string | null>(null)
+  const [prefillRequest, setPrefillRequest] = useState<PrefillRequest | null>(null)
+
+  const dispatchPrefill = useCallback((text: string): void => {
+    setPrefillRequest((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
 
   const asset: AssetDto | null = assetQ.data
   const model: ModelInfo | null = useMemo(() => {
@@ -91,9 +96,12 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
     [asset, replay],
   )
 
-  const handlePickHistory = useCallback((entry: PromptHistoryDto): void => {
-    setPrefillRequest(entry.promptRaw)
-  }, [])
+  const handlePickHistory = useCallback(
+    (entry: PromptHistoryDto): void => {
+      dispatchPrefill(entry.promptRaw)
+    },
+    [dispatchPrefill],
+  )
 
   if (assetId === null) {
     // Session #32 F5 — standalone TopNav entry lands here (no seed asset).
@@ -163,6 +171,7 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
             source={asset}
             model={model}
             running={running}
+            prefillRequest={prefillRequest}
             onStateChange={setEditorState}
             onRun={handleRun}
             onCancel={() => void replay.cancel()}
@@ -188,18 +197,18 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
               }
             }}
           />
-          {prefillRequest !== null && (
-            <PrefillHint
-              text={prefillRequest}
-              onDismiss={() => setPrefillRequest(null)}
-            />
-          )}
-        </div>
-        <div className="space-y-4">
           <div>
             <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Diff</h3>
             <DiffViewer before={asset.promptRaw} after={editorState.prompt} />
           </div>
+        </div>
+        <div className="space-y-4">
+          <PromptAssistPanel
+            onUsePrompt={dispatchPrefill}
+            onTerminalError={(message) =>
+              showToast({ variant: "danger", message })
+            }
+          />
           <PromptHistorySidebar
             history={history.data}
             loading={history.loading}
@@ -209,32 +218,6 @@ export function PromptLab({ navigator, showToast }: PromptLabProps): ReactElemen
         </div>
       </div>
     </main>
-  )
-}
-
-function PrefillHint({
-  text,
-  onDismiss,
-}: {
-  text: string
-  onDismiss: () => void
-}): ReactElement {
-  return (
-    <div className="rounded-md border border-sky-900/60 bg-sky-950/30 p-2 text-xs text-sky-200 flex items-start gap-2">
-      <span className="font-mono text-[10px] uppercase mt-0.5">prefill</span>
-      <span className="flex-1">
-        Copy this into the editor above to reuse:
-        <br />
-        <span className="text-sky-100">{text}</span>
-      </span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="rounded bg-sky-900/60 px-1.5 py-0.5 text-[11px] text-sky-200 hover:bg-sky-900"
-      >
-        Dismiss
-      </button>
-    </div>
   )
 }
 

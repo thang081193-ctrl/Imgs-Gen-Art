@@ -27,10 +27,16 @@ export interface PromptEditorState {
   negativePrompt: string
 }
 
+export interface PrefillRequest {
+  text: string
+  nonce: number
+}
+
 export interface PromptEditorProps {
   source: AssetDto
   model: ModelInfo | null
   running: boolean
+  prefillRequest?: PrefillRequest | null
   onStateChange: (state: PromptEditorState) => void
   onRun: (override: OverridePayload) => void
   onCancel: () => void
@@ -41,6 +47,7 @@ export function PromptEditor({
   source,
   model,
   running,
+  prefillRequest,
   onStateChange,
   onRun,
   onCancel,
@@ -59,6 +66,12 @@ export function PromptEditor({
     setAddWatermark(false)
     setNegativePrompt("")
   }, [source.id, source.promptRaw])
+
+  // Apply external prefill (history pick / prompt-assist "Use this prompt").
+  // Keyed on nonce so re-applying the same text retriggers (Q-40.D).
+  useEffect(() => {
+    if (prefillRequest) setPrompt(prefillRequest.text)
+  }, [prefillRequest?.nonce, prefillRequest?.text])
 
   useEffect(() => {
     onStateChange({ prompt, addWatermark, negativePrompt })
