@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS assets (
   tags TEXT,                            -- JSON array (v1: simple scan filter; v1.1+: index strategy)
   notes TEXT,
   replayed_from TEXT,
+  lane TEXT NOT NULL DEFAULT 'legacy',  -- Session #37 PLAN-v3 §1.3 — gallery lane filter; v1 rows default 'legacy'
 
   created_at TEXT NOT NULL,
 
@@ -60,6 +61,8 @@ CREATE INDEX idx_assets_created ON assets(created_at DESC);
 -- Session #35 F1: indexes the self-FK subquery used to populate
 -- replayDescendantCount on AssetDto (single lookup per list row).
 CREATE INDEX idx_assets_replayed_from ON assets(replayed_from);
+-- Session #37 PLAN-v3 §1.3 — Gallery lane filter pill row.
+CREATE INDEX idx_assets_lane ON assets(lane);
 
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY,
@@ -73,7 +76,8 @@ CREATE TABLE IF NOT EXISTS batches (
   completed_at TEXT,
   aborted_at TEXT,                      -- v2.2: NEW
   replay_of_batch_id TEXT,              -- Phase 5 Step 1 — source batch of a replay run
-  replay_of_asset_id TEXT               -- Phase 5 Step 1 — source asset that triggered the replay
+  replay_of_asset_id TEXT,              -- Phase 5 Step 1 — source asset that triggered the replay
+  policy_decision_json TEXT             -- Session #37 (Q-37.I) — PLAN-v3 §4.3 audit blob; nullable until Phase C3 enforcement lands
 );
 
 CREATE INDEX IF NOT EXISTS idx_batches_replay_of_batch ON batches(replay_of_batch_id);
@@ -114,3 +118,35 @@ CREATE INDEX IF NOT EXISTS idx_prompt_history_asset ON prompt_history(asset_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_history_profile ON prompt_history(profile_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_history_created ON prompt_history(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prompt_history_pending ON prompt_history(status) WHERE status != 'complete';
+
+-- Session #37 PLAN-v3 §6 — Saved Styles first-class entity.
+-- Stores both `preset-legacy` rows (3 seeded at boot — artwork/ad/style) and
+-- user-created rows. `prompt_template` is a {{placeholder}}-templated string
+-- the wizard expands at gen time. `lanes_json` is a JSON array tagging
+-- compatible lanes ("ads.meta", "ads.google-ads", "aso.play"). preview_asset_id
+-- nullable: a fresh user style has no thumbnail until first gen.
+CREATE TABLE IF NOT EXISTS saved_styles (
+  id               TEXT PRIMARY KEY,
+  slug             TEXT UNIQUE NOT NULL,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  kind             TEXT NOT NULL,        -- 'preset-legacy' | 'user'
+  prompt_template  TEXT NOT NULL,
+  preview_asset_id TEXT,
+  lanes_json       TEXT NOT NULL,        -- JSON array
+  usage_count      INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL,
+  FOREIGN KEY (preview_asset_id) REFERENCES assets(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_styles_kind ON saved_styles(kind);
+CREATE INDEX IF NOT EXISTS idx_saved_styles_slug ON saved_styles(slug);
+
+-- Session #37 PLAN-v3 §4.3 — generic key-value store. First key seeded:
+-- policy_rules.lastScrapedAt = '1970-01-01T00:00:00Z' to force the bi-weekly
+-- re-scrape banner on first boot post-migration.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

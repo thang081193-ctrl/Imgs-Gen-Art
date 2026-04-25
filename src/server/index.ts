@@ -8,8 +8,9 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createLogger } from "@/core/shared/logger"
-import { initAssetStore } from "@/server/asset-store/context"
+import { getSavedStylesRepo, initAssetStore } from "@/server/asset-store/context"
 import { initHealthCache } from "@/server/health"
+import { seedPresetsIfNeeded } from "@/server/saved-styles/seed-presets"
 import { preloadAllTemplates } from "@/server/templates"
 import { createApp } from "./app"
 
@@ -35,6 +36,21 @@ function boot(): void {
   }
 
   initHealthCache()
+
+  try {
+    const seedResult = seedPresetsIfNeeded(getSavedStylesRepo())
+    if (seedResult.inserted.length > 0) {
+      logger.info("saved-styles: seeded legacy presets", {
+        inserted: seedResult.inserted,
+        skipped: seedResult.skipped,
+      })
+    }
+  } catch (err) {
+    logger.error("saved-styles preset seed failed", {
+      message: err instanceof Error ? err.message : String(err),
+    })
+    process.exit(1)
+  }
 
   try {
     preloadAllTemplates()

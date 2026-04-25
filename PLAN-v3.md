@@ -290,6 +290,10 @@ policy-rules/
 
 ### §4.3 Bi-weekly ping + audit trail
 
+(Q-37.I — `policy_decision_json` lives on `batches`, not `assets` or a
+fictional `history` table. One preflight per gen run = one batch row =
+one audit blob; avoids duplicate JSON across N assets per batch.)
+
 **Bi-weekly scrape ping (locked Q-36.C refined):**
 
 - Server tracks `policy_rules.lastScrapedAt` in `settings` table
@@ -316,7 +320,8 @@ policy-rules/
 
 **Audit trail:**
 
-- `history.policy_decision_json TEXT NULL` — new column, add in A1.
+- `batches.policy_decision_json TEXT NULL` — new column, added in A1
+  (Q-37.I locked 2026-04-25 — batch-level audit, not per-asset).
 - Blob shape:
 
 ```json
@@ -389,8 +394,8 @@ CREATE TABLE saved_styles (
   preview_asset_id TEXT,                -- FK assets.id, nullable
   lanes_json     TEXT NOT NULL,         -- JSON array, e.g. ["ads.meta","ads.google-ads"]
   usage_count    INTEGER NOT NULL DEFAULT 0,
-  created_at     INTEGER NOT NULL,
-  updated_at     INTEGER NOT NULL,
+  created_at     TEXT NOT NULL,         -- Q-37.J: TEXT ISO (matches assets/batches)
+  updated_at     TEXT NOT NULL,         -- Q-37.J: TEXT ISO
   FOREIGN KEY (preview_asset_id) REFERENCES assets(id) ON DELETE SET NULL
 );
 
@@ -399,7 +404,9 @@ CREATE INDEX idx_saved_styles_kind ON saved_styles(kind);
 
 ### §6.2 One-time migration (ships A1)
 
-File: `src/server/migrations/020_saved_styles.ts`.
+File: `scripts/migrations/2026-04-25-saved-styles.sql` (Q-37.H — corrected
+from earlier numbered-TS spec to dated-SQL pattern that matches the four
+existing migrations under `scripts/migrations/`).
 
 Steps:
 
@@ -412,7 +419,7 @@ Steps:
      - Artwork → `["ads.meta","ads.google-ads"]`
      - Ad → `["ads.meta","ads.google-ads"]`
      - Style → `["ads.meta","ads.google-ads","aso.play"]`
-3. Add `history.policy_decision_json TEXT NULL` if not exists.
+3. Add `batches.policy_decision_json TEXT NULL` if not exists (Q-37.I).
 4. Add `assets.lane TEXT DEFAULT 'legacy' NOT NULL` if not exists.
 5. Create `settings` table (key-value) if not exists; seed
    `policy_rules.lastScrapedAt = '1970-01-01T00:00:00Z'` to force
@@ -524,6 +531,16 @@ All Qs locked unless marked otherwise. Dates in ISO.
 | Q-36.F | Policy layering: scraper as base + hand-curated overrides for extra restrictions.   |
 | Q-36.G | Phase A split: A1 backend (saved_styles + migrations) → A2 frontend.                |
 | Q-36.H | Grok cost guardrail: **no rate cap**. 30s per-request timeout only. Local project.  |
+
+### From Session #37 pre-align (locked 2026-04-25)
+
+| Q      | Decision                                                                            |
+|--------|-------------------------------------------------------------------------------------|
+| Q-37.A | Migration filename: `2026-04-25-saved-styles.sql` (sort-after `prompt-history`).    |
+| Q-37.D | Preset `prompt_template` = thin pointer-doc string in A1; full expansion in D1.     |
+| Q-37.H | §6.2 spec corrected: `scripts/migrations/<date>-saved-styles.sql` (not numbered TS). |
+| Q-37.I | `policy_decision_json` lives on `batches` (per-batch audit), not `assets`/`history`. |
+| Q-37.J | `saved_styles.created_at`/`updated_at` use TEXT ISO (matches assets/batches/etc), not INTEGER from PLAN draft. |
 
 ---
 
