@@ -107,9 +107,22 @@ function buildTestRun(opts?: { assetsDir?: string }) {
   const { db } = openAssetDatabase({ path: ":memory:" })
   const assetRepo = createAssetRepo(db)
   const batchRepo = createBatchRepo(db)
+  // Phase D1 (Session #44) — stub `checkPolicy` to a clean decision so
+  // these runner-mechanic tests stay focused on concept/image/complete
+  // ordering. Policy branches are exercised in
+  // `tests/unit/ad-production-run-policy.test.ts`.
+  const cleanCheckPolicy = () => ({
+    decidedAt: "2026-04-22T10:00:00.000Z",
+    ok: true,
+    violations: [],
+  })
   const run = createAdProductionRun(
     (_params) => ({ assetRepo, batchRepo, provider: mockProvider }),
-    { now: fixedClock(), ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}) },
+    {
+      now: fixedClock(),
+      checkPolicy: cleanCheckPolicy,
+      ...(opts?.assetsDir ? { assetsDir: opts.assetsDir } : {}),
+    },
   )
   return { run, db, assetRepo, batchRepo }
 }

@@ -55,6 +55,8 @@ function colorFor(type: WorkflowEvent["type"]): string {
     case "error":             return "text-red-400"
     case "aborted":           return "text-yellow-400"
     case "complete":          return "text-green-400"
+    case "policy_blocked":    return "text-rose-400"
+    case "policy_warned":     return "text-amber-400"
   }
 }
 
@@ -74,5 +76,13 @@ function summarize(ev: WorkflowEvent): string {
       return `${ev.completedCount}/${ev.totalCount} completed before cancel`
     case "complete":
       return `${ev.assets.length} asset(s) saved · batchId=${ev.batchId}`
+    case "policy_blocked":
+      return `blocked · ${ev.decision.violations.length} violation(s) · batchId=${ev.batchId}`
+    case "policy_warned": {
+      const unresolved = ev.decision.violations.filter(
+        (v) => v.details?.["overridden"] !== true,
+      ).length
+      return `warned · ${unresolved} unresolved violation(s) · batchId=${ev.batchId}`
+    }
   }
 }

@@ -75,6 +75,9 @@ export function createWorkflowsRoute(): Hono<WorkflowsEnv> {
         ...(body.language !== undefined ? { language: body.language } : {}),
         input: body.input,
         batchId,
+        ...(body.policyOverrides !== undefined
+          ? { policyOverrides: body.policyOverrides }
+          : {}),
       },
       { controller },
     )

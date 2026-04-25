@@ -21,6 +21,7 @@ import type {
   LanguageCode,
   ModelInfo,
 } from "@/core/model-registry/types"
+import type { PolicyOverride } from "@/core/schemas/policy-decision"
 import { getModel } from "@/core/model-registry/models"
 import type { AppProfile } from "@/core/schemas/app-profile"
 import { loadProfile } from "@/server/profile-repo/loader"
@@ -36,6 +37,10 @@ export interface PreconditionParams {
   aspectRatio: AspectRatio
   language?: LanguageCode
   input: unknown
+  // Phase D1 (Session #44) — Q-44.C: surfaced from POST body, threaded
+  // through to runner via WorkflowRunParams. No precondition-level
+  // validation needed (Zod already vetted shape at the route layer).
+  policyOverrides?: PolicyOverride[]
 }
 
 export interface PreconditionDeps {

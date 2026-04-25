@@ -51,6 +51,9 @@ export async function* dispatch(
       input: pre.parsedInput,
       abortSignal: controller.signal,
       batchId: params.batchId,
+      ...(params.policyOverrides !== undefined
+        ? { policyOverrides: params.policyOverrides }
+        : {}),
     }
 
     // Post-abort grace window: after controller.signal fires, give the

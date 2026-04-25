@@ -57,6 +57,34 @@
       },
       "lastReviewedAt": "2026-04-25",
       "source": "hand-curated"
+    },
+    {
+      "id": "meta-ads-claims-miracle-001",
+      "platform": "meta",
+      "category": "claims",
+      "description": "Phase D1 (Session #44) integration seed — block 'miracle' as a stand-in for Meta's prohibited-claims list. Bro replaces with researched keyword bag during dogfood.",
+      "severity": "block",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["miracle"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "meta-ads-claims-unbeatable-001",
+      "platform": "meta",
+      "category": "claims",
+      "description": "Phase D1 (Session #44) integration seed — warn on superlative 'unbeatable' (overrideable). Bro replaces with researched warning list during dogfood.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["unbeatable"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
     }
   ]
 }

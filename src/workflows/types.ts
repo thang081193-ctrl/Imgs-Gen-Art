@@ -17,6 +17,7 @@ import type {
   LanguageCode,
 } from "@/core/model-registry/types"
 import type { AppProfile } from "@/core/schemas/app-profile"
+import type { PolicyOverride } from "@/core/schemas/policy-decision"
 
 export type {
   Concept,
@@ -39,6 +40,9 @@ export interface WorkflowRunParams {
   input: unknown
   abortSignal: AbortSignal
   batchId: string
+  // Phase D1 (Session #44) — X-3 LOCKED: shared optional override list
+  // across all 4 workflows. Runners that don't enforce policy ignore it.
+  policyOverrides?: PolicyOverride[]
 }
 
 export interface WorkflowDefinition {

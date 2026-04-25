@@ -13,6 +13,7 @@ import {
   AspectRatioSchema,
   LanguageCodeSchema,
 } from "@/core/model-registry/types"
+import { PolicyOverrideSchema } from "@/core/schemas/policy-decision"
 
 export const WorkflowRunBodySchema = z.object({
   profileId: z.string().min(1),
@@ -21,6 +22,9 @@ export const WorkflowRunBodySchema = z.object({
   aspectRatio: AspectRatioSchema,
   language: LanguageCodeSchema.optional(),
   input: z.unknown(),
+  // Phase D1 (Session #44) — Q-44.C LOCKED: optional override list
+  // surfaced through to the runner via WorkflowRunParams.
+  policyOverrides: z.array(PolicyOverrideSchema).optional(),
 })
 
 export type WorkflowRunBody = z.infer<typeof WorkflowRunBodySchema>

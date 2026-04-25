@@ -33,6 +33,9 @@ export default defineConfig({
       ["tests/integration/workflows-full.test.ts", "forks"],
       ["tests/integration/workflows-routes.test.ts", "forks"],
       ["tests/integration/workflows-cancel.test.ts", "forks"],
+      // S#44 D1 — same data/assets + data/profiles cleanup race as the
+      // workflows-full suite. Serialize via singleFork.
+      ["tests/integration/ad-production-policy.test.ts", "forks"],
     ],
     poolOptions: {
       forks: { singleFork: true },

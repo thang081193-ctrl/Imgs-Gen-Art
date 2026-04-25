@@ -61,3 +61,9 @@ export type {
 export { checkPolicy } from "./check-policy"
 export type { CheckPolicyOptions } from "./check-policy"
 export type { PolicyCheckInput, PolicyChecker } from "./checkers"
+export {
+  buildGoogleAdsCheckInput,
+  buildMetaCheckInput,
+  buildPlayCheckInput,
+} from "./build-check-input"
+export type { BuildMetaCheckInputArgs } from "./build-check-input"
