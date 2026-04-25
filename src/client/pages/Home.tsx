@@ -3,8 +3,8 @@
 // plus a Saved Styles shelf. The status pill + version strip live in
 // the AppHeader now, so this page focuses purely on lane-first nav.
 //
-// S#44 D2 — Meta lane CTA navigates to `wizard-meta-ads` (X-5 LOCKED);
-// Google + Play CTAs still toast until their phases (E, F2) ship.
+// S#44 D2 → F2 — All 3 lane CTAs (Meta/Google/Play) now navigate to
+// their wizards. The legacy toast handler from D2 is retired with F2.
 
 import type { ReactElement } from "react"
 import type { NavParams, Page } from "@/client/navigator"
@@ -15,7 +15,6 @@ import {
   AsoLaneIcon,
   GoogleAdsLaneIcon,
   LaneCtaCard,
-  type LaneId,
 } from "@/client/home/LaneCtaCard"
 import { SavedStylesShelf } from "@/client/home/SavedStylesShelf"
 
@@ -25,13 +24,6 @@ export interface HomeProps {
 }
 
 export function Home({ onNav, showToast }: HomeProps): ReactElement {
-  const onPendingLaneClick = (lane: LaneId): void => {
-    showToast({
-      variant: "info",
-      message: `Wizard cho lane "${lane}" chưa ship — đang chờ phase tương ứng.`,
-    })
-  }
-
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-10">
       <PolicyRulesBanner showToast={showToast} />
@@ -71,7 +63,7 @@ export function Home({ onNav, showToast }: HomeProps): ReactElement {
           subtitle="Phone-frame screenshots cho Play Store listing."
           colorVariant="emerald"
           Icon={AsoLaneIcon}
-          onClick={() => onPendingLaneClick("play-aso")}
+          onClick={() => onNav("wizard-play-aso")}
         />
       </section>
 

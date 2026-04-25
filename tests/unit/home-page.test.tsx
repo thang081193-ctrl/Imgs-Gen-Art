@@ -96,17 +96,16 @@ describe("Home page", () => {
     expect(showToast).not.toHaveBeenCalled()
   })
 
-  it("Google CTA navigates (E shipped); Play CTA still toasts (F2 unshipped)", async () => {
+  it("S#44 mega-close — all 3 CTAs navigate to their wizards (no toasts)", async () => {
     stubFetch()
     const onNav = vi.fn()
     const showToast = vi.fn()
     render(<Home onNav={onNav} showToast={showToast} />)
 
     fireEvent.click(screen.getByTestId("lane-cta-google-ads"))
-    expect(onNav).toHaveBeenCalledWith("wizard-google-ads")
-    expect(showToast).not.toHaveBeenCalled()
-
     fireEvent.click(screen.getByTestId("lane-cta-play-aso"))
-    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(onNav).toHaveBeenCalledWith("wizard-google-ads")
+    expect(onNav).toHaveBeenCalledWith("wizard-play-aso")
+    expect(showToast).not.toHaveBeenCalled()
   })
 })
