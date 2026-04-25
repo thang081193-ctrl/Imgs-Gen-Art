@@ -6,6 +6,10 @@
 
 import type Database from "better-sqlite3"
 import { asWorkflowId } from "@/core/design/types"
+import {
+  PolicyDecisionSchema,
+  type PolicyDecision,
+} from "@/core/schemas/policy-decision"
 import type {
   BatchCreateInput,
   BatchInternal,
@@ -25,6 +29,7 @@ interface BatchRow {
   aborted_at: string | null
   replay_of_batch_id: string | null
   replay_of_asset_id: string | null
+  policy_decision_json: string | null
 }
 
 function rowToBatch(row: BatchRow): BatchInternal {
@@ -41,6 +46,7 @@ function rowToBatch(row: BatchRow): BatchInternal {
     abortedAt: row.aborted_at,
     replayOfBatchId: row.replay_of_batch_id,
     replayOfAssetId: row.replay_of_asset_id,
+    policyDecisionJson: row.policy_decision_json,
   }
 }
 
@@ -83,6 +89,9 @@ export function createBatchRepo(db: Database.Database) {
          completed_at = COALESCE(?, completed_at),
          aborted_at = COALESCE(?, aborted_at)
      WHERE id = ?`,
+  )
+  const updatePolicyDecisionStmt = db.prepare(
+    `UPDATE batches SET policy_decision_json = ? WHERE id = ?`,
   )
 
   return {
@@ -129,6 +138,30 @@ export function createBatchRepo(db: Database.Database) {
       )
       if (result.changes === 0) {
         throw new Error(`batch-repo.updateStatus: unknown batch id '${batchId}'`)
+      }
+      const row = findByIdStmt.get(batchId) as BatchRow
+      return rowToBatch(row)
+    },
+
+    /**
+     * Phase C3 (Session #43) — write the audit-blob `policy_decision_json`
+     * column. Validates `decision` against PolicyDecisionSchema before
+     * serialization so a malformed object can't pollute the audit
+     * column. Throws if id unknown.
+     */
+    updatePolicyDecision(
+      batchId: string,
+      decision: PolicyDecision,
+    ): BatchInternal {
+      const validated = PolicyDecisionSchema.parse(decision)
+      const result = updatePolicyDecisionStmt.run(
+        JSON.stringify(validated),
+        batchId,
+      )
+      if (result.changes === 0) {
+        throw new Error(
+          `batch-repo.updatePolicyDecision: unknown batch id '${batchId}'`,
+        )
       }
       const row = findByIdStmt.get(batchId) as BatchRow
       return rowToBatch(row)

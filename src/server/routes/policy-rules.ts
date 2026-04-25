@@ -14,6 +14,7 @@ import { Hono } from "hono"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
+import type { PolicyDecision } from "@/core/schemas/policy-decision"
 import { ScrapedPolicyRuleFileSchema } from "@/core/schemas/policy-rule"
 import type { PolicyPlatform } from "@/core/schemas/policy-rule"
 import { getSettingsRepo } from "@/server/asset-store"
@@ -21,12 +22,16 @@ import { validateBody } from "@/server/middleware/validator"
 import {
   ALL_POLICY_PLATFORMS,
   DEFAULT_POLICY_RULES_DIR,
+  checkPolicy,
   refreshPolicyRules,
   scrapeAll,
+  type PolicyCheckInput,
   type ScrapeAllResult,
 } from "@/server/services/policy-rules"
 import {
+  PreflightPolicyRulesBodySchema,
   RescrapePolicyRulesBodySchema,
+  type PreflightPolicyRulesBody,
   type RescrapePolicyRulesBody,
 } from "./policy-rules.body"
 
@@ -123,7 +128,7 @@ function computeDaysSince(iso: string | null, now: Date): number | null {
 }
 
 type PolicyRulesEnv = {
-  Variables: { validatedBody: RescrapePolicyRulesBody }
+  Variables: { validatedBody: RescrapePolicyRulesBody | PreflightPolicyRulesBody }
 }
 
 export interface RescrapeFn {
@@ -132,15 +137,27 @@ export interface RescrapeFn {
   ): Promise<ScrapeAllResult>
 }
 
+export interface PreflightFn {
+  (input: PolicyCheckInput, body: PreflightPolicyRulesBody): PolicyDecision
+}
+
 export interface CreatePolicyRulesRouteOptions {
   /** Override scraper for tests — defaults to the real `scrapeAll`. */
   rescrape?: RescrapeFn
   /** Override status reader for tests. */
   readStatus?: () => PolicyRulesStatus
+  /** Override checkPolicy for tests — defaults to real aggregator. */
+  preflight?: PreflightFn
 }
 
 const defaultRescrape: RescrapeFn = (body) =>
   scrapeAll(body.platforms ? { platforms: body.platforms } : {})
+
+const defaultPreflight: PreflightFn = (input, body) => {
+  const opts: Parameters<typeof checkPolicy>[1] = {}
+  if (body.overrides !== undefined) opts.overrides = body.overrides
+  return checkPolicy(input, opts)
+}
 
 export function createPolicyRulesRoute(
   options: CreatePolicyRulesRouteOptions = {},
@@ -148,6 +165,7 @@ export function createPolicyRulesRoute(
   const route = new Hono<PolicyRulesEnv>()
   const rescrape = options.rescrape ?? defaultRescrape
   const readStatus = options.readStatus ?? (() => readPolicyRulesStatus())
+  const preflight = options.preflight ?? defaultPreflight
 
   route.get("/status", (c) => c.json(readStatus()))
 
@@ -169,6 +187,28 @@ export function createPolicyRulesRoute(
         refreshPolicyRules()
       }
       return c.json(result)
+    },
+  )
+
+  route.post(
+    "/preflight",
+    validateBody(PreflightPolicyRulesBodySchema),
+    (c) => {
+      const body = c.get("validatedBody") as PreflightPolicyRulesBody
+      // PolicyCheckInput is a strict subset of the body — overrides are
+      // a separate concern routed through CheckPolicyOptions. Build the
+      // input by omitting undefined keys so exactOptionalPropertyTypes
+      // is satisfied (Q-43.F: missing asset-* fields = "skip the
+      // checker", not "evaluate as undefined").
+      const input: PolicyCheckInput = { platform: body.platform }
+      if (body.prompt !== undefined) input.prompt = body.prompt
+      if (body.copyTexts !== undefined) input.copyTexts = body.copyTexts
+      if (body.assetWidth !== undefined) input.assetWidth = body.assetWidth
+      if (body.assetHeight !== undefined) input.assetHeight = body.assetHeight
+      if (body.assetFileSizeBytes !== undefined) input.assetFileSizeBytes = body.assetFileSizeBytes
+      if (body.assetAspectRatio !== undefined) input.assetAspectRatio = body.assetAspectRatio
+      const decision = preflight(input, body)
+      return c.json(decision)
     },
   )
 

@@ -107,6 +107,10 @@ export interface BatchInternal {
   abortedAt: string | null
   replayOfBatchId: string | null
   replayOfAssetId: string | null
+  // Phase C3 (Session #43) — `policy_decision_json` audit blob serialized
+  // as the JSON string straight from the column. Consumers that need the
+  // structured shape `JSON.parse` + validate via PolicyDecisionSchema.
+  policyDecisionJson: string | null
 }
 
 export interface BatchCreateInput {

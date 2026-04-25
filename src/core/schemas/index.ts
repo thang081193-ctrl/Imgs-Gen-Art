@@ -1,4 +1,5 @@
 export * from "./app-profile"
+export * from "./policy-decision"
 export * from "./policy-rule"
 export * from "./replay-payload"
 export * from "./vertex-service-account"

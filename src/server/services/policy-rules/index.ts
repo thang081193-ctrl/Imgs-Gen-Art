@@ -48,3 +48,16 @@ export type {
   PolicySeverity,
   PolicySource,
 } from "@/core/schemas/policy-rule"
+export {
+  PolicyDecisionSchema,
+  PolicyOverrideSchema,
+  PolicyViolationSchema,
+} from "@/core/schemas/policy-decision"
+export type {
+  PolicyDecision,
+  PolicyOverride,
+  PolicyViolation,
+} from "@/core/schemas/policy-decision"
+export { checkPolicy } from "./check-policy"
+export type { CheckPolicyOptions } from "./check-policy"
+export type { PolicyCheckInput, PolicyChecker } from "./checkers"

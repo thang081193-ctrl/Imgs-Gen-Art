@@ -1,6 +1,6 @@
 // Session #42 Phase C2 — client hooks for /api/policy-rules/*.
 //
-// Two hooks powering the Home freshness banner:
+// Three hooks (S#42 + S#43):
 //   - usePolicyRulesStatus()  — GET /status, returns {data, error,
 //     loading, refetch}. `refetch()` is exposed (vs the stock useFetch
 //     pattern in client/api/hooks.ts) so the banner can re-pull after
@@ -8,6 +8,11 @@
 //   - useRescrapePolicyRules() — state-machine hook mirroring
 //     prompt-assist-hooks.ts (Q-40.I): submit() returns Promise +
 //     drives state. Consumer renders inline spinner + toast + reset.
+//   - usePolicyPreflight()    — Phase C3 (S#43). State-machine over
+//     POST /preflight. Wizard preflight badge calls submit(input) →
+//     PolicyDecision; on `ok=false` it raises the override dialog.
+//     Mirrors useRescrapePolicyRules so consumers share one mental
+//     model.
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
@@ -140,4 +145,98 @@ export function useRescrapePolicyRules(): RescrapeHandle {
   }, [])
 
   return { state, result, error, submit, reset }
+}
+
+// Phase C3 (Session #43) — preflight hook.
+//
+// PolicyDecision shape mirrors `core/schemas/policy-decision.ts`. Kept
+// inline (vs imported) so this client file stays free of server-side
+// imports and bundles cleanly.
+
+export type PolicySeverity = "warning" | "block"
+
+export interface PolicyViolation {
+  ruleId: string
+  severity: PolicySeverity
+  kind: string
+  message: string
+  details?: Record<string, unknown>
+}
+
+export interface PolicyOverride {
+  ruleId: string
+  reason: string
+  decidedBy?: string
+  decidedAt?: string
+}
+
+export interface PolicyDecision {
+  decidedAt: string
+  ruleSetVersion?: string
+  ok: boolean
+  violations: PolicyViolation[]
+  overrides?: PolicyOverride[]
+}
+
+export interface PolicyPreflightInput {
+  platform: PolicyPlatform
+  prompt?: string
+  copyTexts?: string[]
+  assetWidth?: number
+  assetHeight?: number
+  assetFileSizeBytes?: number
+  assetAspectRatio?: string
+  overrides?: PolicyOverride[]
+}
+
+export type PreflightState = "idle" | "submitting" | "done" | "error"
+
+export interface PreflightHandle {
+  state: PreflightState
+  decision: PolicyDecision | null
+  error: Error | null
+  submit: (input: PolicyPreflightInput) => Promise<PolicyDecision>
+  reset: () => void
+}
+
+export function usePolicyPreflight(): PreflightHandle {
+  const [state, setState] = useState<PreflightState>("idle")
+  const [decision, setDecision] = useState<PolicyDecision | null>(null)
+  const [error, setError] = useState<Error | null>(null)
+
+  const submit = useCallback(
+    async (input: PolicyPreflightInput): Promise<PolicyDecision> => {
+      setState("submitting")
+      setDecision(null)
+      setError(null)
+      try {
+        const out = await apiPost<PolicyDecision>(
+          "/api/policy-rules/preflight",
+          input,
+        )
+        setDecision(out)
+        setState("done")
+        return out
+      } catch (err) {
+        const e =
+          err instanceof ApiError
+            ? new Error(err.message)
+            : err instanceof Error
+              ? err
+              : new Error(String(err))
+        setError(e)
+        setState("error")
+        throw e
+      }
+    },
+    [],
+  )
+
+  const reset = useCallback(() => {
+    setState("idle")
+    setDecision(null)
+    setError(null)
+  }, [])
+
+  return { state, decision, error, submit, reset }
 }
