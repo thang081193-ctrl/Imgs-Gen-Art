@@ -1,0 +1,48 @@
+{
+  "rules": [
+    {
+      "id": "google-ads-keyword-blocklist-001",
+      "platform": "google-ads",
+      "category": "prohibited-content",
+      "description": "stub - replace with researched rule (C2). Google Ads disapproves creatives invoking dangerous-products keywords (counterfeit, recreational drugs, weapons).",
+      "severity": "block",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["counterfeit", "recreational drug", "automatic weapon"],
+        "caseInsensitive": true
+      },
+      "sourceUrl": "https://support.google.com/adspolicy/answer/6008942",
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "google-ads-responsive-display-filesize-001",
+      "platform": "google-ads",
+      "format": "responsive-display",
+      "category": "file-size",
+      "description": "stub - replace with researched rule (C2). Responsive display image assets are documented at 5 MB max.",
+      "severity": "block",
+      "pattern": {
+        "kind": "file-size-max",
+        "maxBytes": 5242880
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "google-ads-responsive-display-resolution-001",
+      "platform": "google-ads",
+      "format": "responsive-display",
+      "category": "resolution",
+      "description": "stub - replace with researched rule (C2). Responsive display landscape image asset minimum is 600x314 (1.91:1).",
+      "severity": "warning",
+      "pattern": {
+        "kind": "resolution-min",
+        "minWidth": 600,
+        "minHeight": 314
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    }
+  ]
+}

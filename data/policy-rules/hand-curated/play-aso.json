@@ -1,0 +1,63 @@
+{
+  "rules": [
+    {
+      "id": "play-screenshot-aspect-001",
+      "platform": "play",
+      "format": "phone-screenshot",
+      "category": "aspect-ratio",
+      "description": "stub - replace with researched rule (C2). Phone screenshots accept 16:9 landscape and 9:16 portrait (Console enforces ratio bounds).",
+      "severity": "warning",
+      "pattern": {
+        "kind": "aspect-ratio",
+        "allowed": ["9:16", "16:9"]
+      },
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "play-screenshot-resolution-001",
+      "platform": "play",
+      "format": "phone-screenshot",
+      "category": "resolution",
+      "description": "stub - replace with researched rule (C2). Phone screenshots require 320-3840 px on each side; floor matters most for sharpness.",
+      "severity": "block",
+      "pattern": {
+        "kind": "resolution-min",
+        "minWidth": 320,
+        "minHeight": 320
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "play-listing-superlatives-001",
+      "platform": "play",
+      "format": "store-listing",
+      "category": "metadata-quality",
+      "description": "stub - replace with researched rule (C2). Play Store rejects superlative/ranking claims without verification (e.g. 'best', '#1', 'top-rated') in app titles or short descriptions.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "keyword-blocklist",
+        "keywords": ["best app", "#1 app", "top-rated app"],
+        "caseInsensitive": true
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "play-feature-graphic-filesize-001",
+      "platform": "play",
+      "format": "feature-graphic",
+      "category": "file-size",
+      "description": "stub - replace with researched rule (C2). Feature graphic upload cap (15 MB common ceiling).",
+      "severity": "block",
+      "pattern": {
+        "kind": "file-size-max",
+        "maxBytes": 15728640
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    }
+  ]
+}

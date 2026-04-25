@@ -1,0 +1,62 @@
+{
+  "rules": [
+    {
+      "id": "meta-ads-text-density-001",
+      "platform": "meta",
+      "format": "feed",
+      "category": "text-density",
+      "description": "stub - replace with researched rule (C2). Feed creatives historically discouraged >20% text overlay; modern Meta delivery may de-prioritise text-heavy ads.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "text-area-ratio",
+        "maxRatio": 0.2
+      },
+      "sourceUrl": "https://www.facebook.com/business/help/980593475366490",
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "meta-ads-claim-superlatives-001",
+      "platform": "meta",
+      "category": "prohibited-claims",
+      "description": "stub - replace with researched rule (C2). Block superlative health/wealth claims that Meta routinely rejects (e.g. 'guaranteed', 'miracle', 'cure').",
+      "severity": "block",
+      "pattern": {
+        "kind": "claim-regex",
+        "pattern": "\\b(guaranteed|miracle cure|100% effective|lose \\d+ ?lbs? in)\\b",
+        "flags": "i"
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "meta-ads-feed-aspect-001",
+      "platform": "meta",
+      "format": "feed",
+      "category": "aspect-ratio",
+      "description": "stub - replace with researched rule (C2). Feed/Stories accept 1:1, 4:5, 9:16; everything else letterboxes or rejects.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "aspect-ratio",
+        "allowed": ["1:1", "4:5", "9:16"]
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    },
+    {
+      "id": "meta-ads-reels-resolution-001",
+      "platform": "meta",
+      "format": "reels",
+      "category": "resolution",
+      "description": "stub - replace with researched rule (C2). Reels recommend ~1080x1920 minimum to avoid soft-uprez on delivery.",
+      "severity": "warning",
+      "pattern": {
+        "kind": "resolution-min",
+        "minWidth": 1080,
+        "minHeight": 1920
+      },
+      "lastReviewedAt": "2026-04-25",
+      "source": "hand-curated"
+    }
+  ]
+}

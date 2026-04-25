@@ -16,6 +16,11 @@ dist/
 # Static extracted data (Phase 2) — committed so fresh clones boot.
 !/data/templates/
 
+# Policy rules (PLAN-v3 §4 / Phase C1) — hand-curated seed + scraped layer
+# committed so fresh clones boot. The merged cache is a derived artefact.
+!/data/policy-rules/
+/data/policy-rules/merged.cache.json
+
 # Service accounts (never commit) — anchored: top-level keys/ only, do not match src/server/keys/
 /keys/
 
