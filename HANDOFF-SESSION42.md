@@ -186,7 +186,7 @@ All source files ≤ 250 soft cap. Heaviest = `scraper.ts` (~180).
   prints at the time bro fires). Pin the exact resolved version after
   install. No transitive runtime concerns (cheerio is server-only).
 - *Recommend:* approve dep + pin to latest 1.x stable.
-- **STATUS: PRE-FILLED — bro confirm.**
+- **STATUS: LOCKED 2026-04-25 — bro approved cheerio dep.**
 
 **Q-42.B — Source URLs (1 per platform v2)**
 - *Pre-filled:*
@@ -200,8 +200,9 @@ All source files ≤ 250 soft cap. Heaviest = `scraper.ts` (~180).
   parsing complexity + 3× the failure surface; defer to D-phase if a
   specific platform's rule lives across pages.
 - *Recommend:* 1/platform v2; expand only when bro hits a missing rule.
-- **STATUS: PRE-FILLED — bro confirm + sanity-check URLs (Meta in
-  particular tends to redirect; bro paste the canonical URL if known).**
+- **STATUS: LOCKED 2026-04-25 — 3 pre-filled URLs accepted. Em sẽ
+  sanity-check Meta redirect khi fire (capture canonical URL into
+  fixture if it 30x).**
 
 **Q-42.C — Content selector per platform**
 - *Pre-filled:* fixture-driven. After bro confirms URLs at S#42 start,
@@ -238,7 +239,14 @@ All source files ≤ 250 soft cap. Heaviest = `scraper.ts` (~180).
   cleanup anyway.
 - *Recommend:* ping mode for v2; revisit in D/E/F when bro is
   closer to the lanes that actually consume the rules.
-- **STATUS: PRE-FILLED — bro confirm.**
+- **STATUS: LOCKED 2026-04-25 — bro chose ping after LOC tradeoff
+  walk-through. Reasoning: structured parsers ~3× LOC (3 platform-
+  specific parsers + id-stabilizer + pattern-kind dispatcher = ~700
+  LOC vs ~260 LOC ping); brittle when platforms reflow HTML;
+  auto-extracted rules ~50% noise → bro reviews anyway. Hand-curated
+  stays canonical; scraper's job is freshness alert. Upgrade path =
+  "ping + targeted parser for a single section bro frequently misses"
+  if needed in C3+ dogfood, NOT all-in structured.**
 
 **Q-42.F — UA + rate limit**
 - *Pre-filled:* UA `ImagesGenArt/0.1 policy-scraper
