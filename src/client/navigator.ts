@@ -16,6 +16,10 @@ export type Page =
   | "prompt-lab"
   | "profiles"
   | "profile-edit"
+  // S#38 Q-38.J — Home shelf clicks navigate here. Read-only detail
+  // (preview + prompt template + lanes + usage count) for both presets
+  // and user styles; "Use in wizard" disabled until D1+.
+  | "saved-style-detail"
 
 export interface NavParams {
   batchId?: string
@@ -29,6 +33,8 @@ export interface NavParams {
   // Gallery filter entry (Q-29.E family): Profiles.tsx delete dialog uses
   // this to deep-link "View in Gallery →" when PROFILE_HAS_ASSETS fires.
   profileIds?: string[]
+  // S#38 — saved-style-detail page navigation target.
+  savedStyleId?: string
 }
 
 export type NavGuard = () => boolean

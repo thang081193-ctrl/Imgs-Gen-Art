@@ -132,6 +132,12 @@ export function createAssetRepo(db: Database.Database) {
     `SELECT COUNT(*) AS count FROM assets WHERE profile_id = ?`,
   )
   const deleteByIdStmt = db.prepare(`DELETE FROM assets WHERE id = ?`)
+  // S#38 Q-38.C — AppHeader version strip needs the most-recent gen
+  // timestamp ("last gen 5m ago"). Indexed via idx_assets_created so the
+  // single-row read is O(log n).
+  const findMostRecentCreatedAtStmt = db.prepare(
+    `SELECT created_at FROM assets ORDER BY created_at DESC LIMIT 1`,
+  )
 
   return {
     insert(input: AssetInsertInput): AssetInternal {
@@ -187,6 +193,11 @@ export function createAssetRepo(db: Database.Database) {
 
     deleteById(id: string): boolean {
       return deleteByIdStmt.run(id).changes > 0
+    },
+
+    findMostRecentCreatedAt(): string | null {
+      const row = findMostRecentCreatedAtStmt.get() as { created_at: string } | undefined
+      return row?.created_at ?? null
     },
 
     list(filter: AssetListFilter): AssetInternal[] {

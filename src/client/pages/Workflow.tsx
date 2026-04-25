@@ -25,7 +25,7 @@ import { RunStatusBar } from "@/client/components/RunStatusBar"
 import { TopLevelSelectors } from "@/client/components/TopLevelSelectors"
 import { WorkflowPicker } from "@/client/components/WorkflowPicker"
 import type { ShowToast } from "@/client/components/ToastHost"
-import { WORKFLOW_FORMS } from "@/client/workflows"
+import { RETIRED_WORKFLOW_IDS, WORKFLOW_FORMS } from "@/client/workflows"
 import type { NavParams, Navigator, Page } from "@/client/navigator"
 
 export interface WorkflowPageProps {
@@ -50,7 +50,12 @@ export function Workflow({ navigator, showToast }: WorkflowPageProps): ReactElem
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false)
 
   const profileQ = useProfile(profileId)
-  const workflows = workflowsQ.data?.workflows ?? []
+  // S#38 §6.3 — drop client-retired workflows from the picker even
+  // though /api/workflows still returns them (server keeps the route
+  // for backward-compat replay of legacy ASO assets in Gallery).
+  const workflows = (workflowsQ.data?.workflows ?? []).filter(
+    (w) => !RETIRED_WORKFLOW_IDS.includes(w.id),
+  )
   const profiles = profilesQ.data?.profiles ?? []
   const providers = providersQ.data?.providers ?? []
   const models = providersQ.data?.models ?? []
@@ -231,7 +236,19 @@ function WorkflowFormSlot({
   onNav: (p: Page, params?: NavParams) => void
   showToast: ShowToast
 }): ReactElement {
-  const Form = WORKFLOW_FORMS[workflowId].Component
+  // S#38 §6.3 — WORKFLOW_FORMS is now Partial<Record<…>>; a missing
+  // entry (e.g. retired aso-screenshots) means the picker should never
+  // have surfaced it. Defensive null-check here surfaces a tidy notice
+  // instead of crashing if the filter ever drifts.
+  const descriptor = WORKFLOW_FORMS[workflowId]
+  if (!descriptor) {
+    return (
+      <div className="rounded-md border border-amber-900/60 bg-amber-950/40 p-3 text-sm text-amber-300">
+        Workflow <code>{workflowId}</code> đã được retire khỏi client. Asset cũ vẫn xem được trong Gallery.
+      </div>
+    )
+  }
+  const Form = descriptor.Component
   return (
     <Form
       model={model}

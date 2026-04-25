@@ -1,96 +1,75 @@
-// Landing page. Fetches /api/health on mount, renders status badge + CTAs
-// linking to Workflow + Gallery pages. Phase 5 CMS will extend with more
-// primary-nav hero sections.
+// S#38 PLAN-v3 §1 — Home rewrite. The old single "Run a workflow" CTA is
+// replaced by two giant LaneCtaCards (Ads Images + Google Play ASO) plus
+// a Saved Styles shelf. The status pill + version strip live in the
+// AppHeader now, so this page focuses purely on lane-first navigation.
+//
+// Lane-card click currently fires a toast (Q-38.I = b) — the wizard
+// route ships in D1+. When it lands, swap the click handler for
+// onNav("wizard", { lane }).
 
 import type { ReactElement } from "react"
-import { useApiHealth, type ApiState, type HealthData } from "@/client/api/hooks"
 import type { NavParams, Page } from "@/client/navigator"
+import type { ShowToast } from "@/client/components/ToastHost"
+import {
+  AdsLaneIcon,
+  AsoLaneIcon,
+  LaneCtaCard,
+  type LaneId,
+} from "@/client/home/LaneCtaCard"
+import { SavedStylesShelf } from "@/client/home/SavedStylesShelf"
 
 export interface HomeProps {
   onNav: (page: Page, params?: NavParams) => void
+  showToast: ShowToast
 }
 
-export function Home({ onNav }: HomeProps): ReactElement {
-  const health = useApiHealth()
+export function Home({ onNav, showToast }: HomeProps): ReactElement {
+  const onLaneClick = (lane: LaneId): void => {
+    showToast({
+      variant: "info",
+      message: `Wizard cho lane "${lane}" sẽ ship ở D1+ bro.`,
+    })
+  }
 
   return (
-    <main className="flex flex-col items-center justify-center p-8 min-h-[calc(100vh-60px)]">
-      <div className="max-w-2xl w-full space-y-6">
-        <h1 className="text-6xl tracking-tight text-slate-100 leading-none">
-          <span className="font-normal">Images</span>{" "}
-          <span className="font-light italic text-slate-400">Gen</span>{" "}
-          <span className="font-black bg-gradient-to-br from-sky-400 via-indigo-500 to-violet-600 bg-clip-text text-transparent">
-            Art
-          </span>
+    <main className="mx-auto max-w-6xl p-6 space-y-10">
+      <section className="space-y-2 pt-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
+          Bắt đầu generate
         </h1>
-        <p className="text-slate-400 text-lg">
-          Local artwork generation platform — Phase 3 scaffold
+        <p className="text-slate-400">
+          Chọn lane phù hợp — bộ wizard sẽ dẫn từng bước (D1+).
         </p>
-        <HealthBadge health={health} />
-        <div className="flex gap-3 pt-4">
-          <button
-            type="button"
-            onClick={() => onNav("workflow")}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-          >
-            Run a workflow →
-          </button>
-          <button
-            type="button"
-            onClick={() => onNav("gallery")}
-            className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
-          >
-            Open Gallery
-          </button>
-        </div>
-        <p className="text-xs text-slate-500 pt-8">
-          Client: <code className="text-slate-400">localhost:5173</code> ·
-          Server: <code className="text-slate-400">127.0.0.1:5174</code>
-        </p>
-      </div>
+      </section>
+
+      <section
+        className="grid gap-4 md:grid-cols-2"
+        aria-label="Lane entry points"
+      >
+        <LaneCtaCard
+          laneId="ads"
+          title="Ads Images"
+          subtitle="Meta + Google Ads — visual + copy variants cho ad set."
+          colorVariant="violet"
+          Icon={AdsLaneIcon}
+          onClick={() => onLaneClick("ads")}
+        />
+        <LaneCtaCard
+          laneId="aso"
+          title="Google Play ASO"
+          subtitle="Phone-frame screenshots cho Play Store listing."
+          colorVariant="emerald"
+          Icon={AsoLaneIcon}
+          onClick={() => onLaneClick("aso")}
+        />
+      </section>
+
+      <SavedStylesShelf onNav={onNav} />
+
+      <p className="text-xs text-slate-600 pt-4">
+        Client: <code className="text-slate-500">localhost:5173</code> · Server:{" "}
+        <code className="text-slate-500">127.0.0.1:5174</code>
+      </p>
     </main>
   )
-}
-
-function HealthBadge({ health }: { health: ApiState<HealthData> }): ReactElement {
-  if (health.loading) {
-    return (
-      <div className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300">
-        <span className="h-2 w-2 rounded-full bg-slate-500 animate-pulse" />
-        Connecting to server…
-      </div>
-    )
-  }
-
-  if (health.error !== null) {
-    return (
-      <div className="inline-flex items-center gap-2 rounded-md bg-red-950 px-3 py-2 text-sm text-red-300">
-        <span className="h-2 w-2 rounded-full bg-red-500" />
-        Server unreachable — {health.error.message}
-      </div>
-    )
-  }
-
-  const data = health.data
-  if (data === null) return <span />
-
-  return (
-    <div className="inline-flex items-center gap-3 rounded-md bg-green-950 px-3 py-2 text-sm text-green-300">
-      <span className="h-2 w-2 rounded-full bg-green-500" />
-      <span>Server ok</span>
-      <span className="text-green-500/70">·</span>
-      <span className="font-mono text-green-200">v{data.version}</span>
-      <span className="text-green-500/70">·</span>
-      <span className="text-green-200/70">uptime {formatUptime(data.uptimeMs)}</span>
-    </div>
-  )
-}
-
-function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ${s % 60}s`
-  const h = Math.floor(m / 60)
-  return `${h}h ${m % 60}m`
 }

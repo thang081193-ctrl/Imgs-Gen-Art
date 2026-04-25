@@ -9,6 +9,7 @@ import { apiDelete, apiGet, apiPost, apiPostMultipart } from "./client"
 import type { KeySlotDto, VertexSlotDto } from "@/core/dto/key-dto"
 import type { ProfileDto, ProfileSummaryDto } from "@/core/dto/profile-dto"
 import type { AssetDto, ReplayClass } from "@/core/dto/asset-dto"
+import type { SavedStyleDto } from "@/core/dto/saved-style-dto"
 import type { DatePreset, TagMatchMode } from "@/core/schemas/asset-list-filter"
 import type {
   ModelInfo,
@@ -26,6 +27,10 @@ export interface HealthData {
   status: "ok"
   version: string
   uptimeMs: number
+  // S#38 Q-38.C — ISO timestamp of the most recent assets row, or null
+  // when no gen has happened yet. Drives AppHeader version strip
+  // "last gen {rel time}".
+  lastGenAt: string | null
 }
 
 export interface ApiState<T> {
@@ -305,4 +310,23 @@ export async function deleteKey(slotId: string): Promise<SlotDeletedResponse | n
 
 export function testKey(slotId: string): Promise<SlotTestResponse> {
   return apiPost<SlotTestResponse>(`/api/keys/${slotId}/test`, {})
+}
+
+// S#38 Phase A2 — Saved Styles list for the Home shelf + detail page.
+// `lane` accepts the dotted prefix forms `ads`, `aso`, `ads.meta`, etc.
+// (see PLAN-v3 §1.2). `kind` filters preset-vs-user.
+export interface SavedStylesResponse {
+  styles: SavedStyleDto[]
+}
+
+export function useSavedStyles(opts: { lane?: string; kind?: "preset-legacy" | "user" } = {}): ApiState<SavedStylesResponse> {
+  const params = new URLSearchParams()
+  if (opts.lane) params.set("lane", opts.lane)
+  if (opts.kind) params.set("kind", opts.kind)
+  const qs = params.toString()
+  return useFetch<SavedStylesResponse>(`/api/saved-styles${qs ? `?${qs}` : ""}`)
+}
+
+export function useSavedStyle(id: string | null): ApiState<SavedStyleDto> {
+  return useFetch<SavedStyleDto>(id !== null ? `/api/saved-styles/${id}` : null)
 }

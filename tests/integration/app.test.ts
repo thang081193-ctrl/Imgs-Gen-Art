@@ -13,7 +13,7 @@ function fetchApp(path: string, init?: RequestInit): Promise<Response> {
 }
 
 describe("GET /api/health", () => {
-  it("returns { status, version, uptimeMs } with 200 + JSON", async () => {
+  it("returns { status, version, uptimeMs, lastGenAt } with 200 + JSON", async () => {
     const res = await fetchApp("/api/health")
     expect(res.status).toBe(200)
     expect(res.headers.get("Content-Type") ?? "").toContain("application/json")
@@ -22,6 +22,10 @@ describe("GET /api/health", () => {
       status: "ok",
       version: TEST_VERSION,
       uptimeMs: expect.any(Number),
+      // S#38 Q-38.C — null because this test mounts createApp without
+      // initAssetStore; the readLastGenAt() helper swallows the
+      // "not initialized" error and returns null.
+      lastGenAt: null,
     })
     expect(body.uptimeMs).toBeGreaterThanOrEqual(0)
   })
